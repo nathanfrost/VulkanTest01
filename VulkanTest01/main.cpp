@@ -9,6 +9,7 @@
 #include<stdexcept>
 #include<functional>
 #include<vector>
+#include<assert.h>
 
 #include"VDeleter.h"
 
@@ -64,7 +65,8 @@ private:
     const int kWidth = 800; 
     const int kHeight = 600;
 
-    const std::vector<const char*> validationLayers = {
+    const std::vector<const char*> validationLayers = 
+    {
         "VK_LAYER_LUNARG_standard_validation"
     };
 
@@ -100,11 +102,13 @@ private:
         const char** glfwExtensions;
         glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-        for (unsigned int i = 0; i < glfwExtensionCount; i++) {
+        for (unsigned int i = 0; i < glfwExtensionCount; i++) 
+        {
             extensions.push_back(glfwExtensions[i]);
         }
 
-        if (enableValidationLayers) {
+        if (enableValidationLayers) 
+        {
             extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
         }
 
@@ -153,15 +157,20 @@ private:
     bool checkValidationLayerSupport()
     {
         uint32_t layerCount;
-        vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+        {
+            const VkResult enumerateInstanceLayerPropertiesResult = vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
+            assert(enumerateInstanceLayerPropertiesResult == VK_SUCCESS);
+        }
 
         std::vector<VkLayerProperties> availableLayers(layerCount);
-        vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+        {
+            const VkResult enumerateInstanceLayerPropertiesResult = vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+            assert( enumerateInstanceLayerPropertiesResult == VK_SUCCESS);
+        }
 
         for (const char* layerName : validationLayers)
         {
             bool layerFound = false;
-
             for (const auto& layerProperties : availableLayers)
             {
                 if (strcmp(layerName, layerProperties.layerName) == 0)
@@ -186,10 +195,10 @@ private:
 
         VkDebugReportCallbackCreateInfoEXT createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-        createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+        createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;//which events trigger the callback
         createInfo.pfnCallback = debugCallback;
 
-        if (CreateDebugReportCallbackEXT(instance, &createInfo, nullptr, &callback) != VK_SUCCESS)//NOTE: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
+        if (CreateDebugReportCallbackEXT(instance, &createInfo, nullptr, &callback) != VK_SUCCESS)///@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
         {
             throw std::runtime_error("failed to set up debug callback!");
         }
