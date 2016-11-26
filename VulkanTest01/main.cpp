@@ -65,7 +65,7 @@ private:
     const int kWidth = 800; 
     const int kHeight = 600;
 
-    const std::vector<const char*> validationLayers = 
+    const std::vector<const char*> m_validationLayers = 
     {
         "VK_LAYER_LUNARG_standard_validation"
     };
@@ -86,7 +86,7 @@ private:
         takes values set by glfwWindowHint()
         width and height may vary as they're soft constraints
         */
-        window = glfwCreateWindow(
+        m_window = glfwCreateWindow(
             kWidth,
             kHeight,
             "Vulkan window",
@@ -140,15 +140,15 @@ private:
 
         if (enableValidationLayers)
         {
-            createInfo.enabledLayerCount = validationLayers.size();
-            createInfo.ppEnabledLayerNames = validationLayers.data();
+            createInfo.enabledLayerCount = m_validationLayers.size();
+            createInfo.ppEnabledLayerNames = m_validationLayers.data();
         }
         else
         {
             createInfo.enabledLayerCount = 0;
         }
 
-        if (vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) 
+        if (vkCreateInstance(&createInfo, nullptr, &m_instance) != VK_SUCCESS) 
         {
             throw std::runtime_error("failed to create instance!");
         }
@@ -168,7 +168,7 @@ private:
             assert( enumerateInstanceLayerPropertiesResult == VK_SUCCESS);
         }
 
-        for (const char* layerName : validationLayers)
+        for (const char* layerName : m_validationLayers)
         {
             bool layerFound = false;
             for (const auto& layerProperties : availableLayers)
@@ -198,7 +198,7 @@ private:
         createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;//which events trigger the callback
         createInfo.pfnCallback = debugCallback;
 
-        if (CreateDebugReportCallbackEXT(instance, &createInfo, nullptr, &callback) != VK_SUCCESS)///@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
+        if (CreateDebugReportCallbackEXT(m_instance, &createInfo, nullptr, &callback) != VK_SUCCESS)///@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
         {
             throw std::runtime_error("failed to set up debug callback!");
         }
@@ -212,16 +212,16 @@ private:
 
     void mainLoop() 
     {
-        while (!glfwWindowShouldClose(window)) 
+        while (!glfwWindowShouldClose(m_window)) 
         {
             glfwPollEvents();
         }
     }
 
 
-    GLFWwindow* window;
-    VDeleter<VkInstance> instance{ vkDestroyInstance };
-    VDeleter<VkDebugReportCallbackEXT> callback{ instance, DestroyDebugReportCallbackEXT };
+    GLFWwindow* m_window;
+    VDeleter<VkInstance> m_instance{ vkDestroyInstance };
+    VDeleter<VkDebugReportCallbackEXT> callback{ m_instance, DestroyDebugReportCallbackEXT };
 };
 
 int main() 
