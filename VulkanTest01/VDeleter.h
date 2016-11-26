@@ -17,6 +17,11 @@ public:
         this->deleter = [&device, deletef](T obj) { deletef(device, obj, nullptr); };
     }
 
+    T* replace() {
+        cleanup();
+        return &object;
+    }
+
     ~VDeleter() {
         cleanup();
     }

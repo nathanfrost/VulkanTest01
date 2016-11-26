@@ -109,7 +109,7 @@ private:
 
         if (enableValidationLayers) 
         {
-            extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+            extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);//VulkanSDK\VERSION_NUMBER\Config\vk_layer_settings.txt sets many options about layer strictness (warning,performance,error) and action taken (callback, log, breakpoint, Visual Studio output, nothing), as well as dump behavior (level of detail, output to file vs stdout, I/O flush behavior)
         }
 
         return extensions;
@@ -198,9 +198,39 @@ private:
         createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;//which events trigger the callback
         createInfo.pfnCallback = debugCallback;
 
-        if (CreateDebugReportCallbackEXT(m_instance, &createInfo, nullptr, &m_callback) != VK_SUCCESS)///@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
+        if (CreateDebugReportCallbackEXT(m_instance, &createInfo, nullptr, m_callback.replace()) != VK_SUCCESS)///@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
         {
             throw std::runtime_error("failed to set up debug callback!");
+        }
+    }
+
+    bool isDeviceSuitable(VkPhysicalDevice device) 
+    {
+        return true;
+    }
+
+    void pickPhysicalDevice()
+    {
+        uint32_t deviceCount = 0;
+        vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr);
+        if (deviceCount == 0) {
+            throw std::runtime_error("failed to find GPUs with Vulkan support!");
+        }
+
+        std::vector<VkPhysicalDevice> devices(deviceCount);
+        vkEnumeratePhysicalDevices(m_instance, &deviceCount, devices.data());
+        for (const auto& device : devices) 
+        {
+            if (isDeviceSuitable(device)) 
+            {
+                m_physicalDevice = device;
+                break;
+            }
+        }
+
+        if (m_physicalDevice == VK_NULL_HANDLE) 
+        {
+            throw std::runtime_error("failed to find a suitable GPU!");
         }
     }
 
@@ -208,6 +238,7 @@ private:
     {
         createInstance();
         setupDebugCallback();
+        pickPhysicalDevice();
     }
 
     void mainLoop() 
@@ -222,6 +253,7 @@ private:
     GLFWwindow* m_window;
     VDeleter<VkInstance> m_instance{ vkDestroyInstance };
     VDeleter<VkDebugReportCallbackEXT> m_callback{ m_instance, DestroyDebugReportCallbackEXT };
+    VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
 };
 
 int main() 
