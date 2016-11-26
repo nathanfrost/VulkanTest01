@@ -198,7 +198,7 @@ private:
         createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;//which events trigger the callback
         createInfo.pfnCallback = debugCallback;
 
-        if (CreateDebugReportCallbackEXT(m_instance, &createInfo, nullptr, &callback) != VK_SUCCESS)///@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
+        if (CreateDebugReportCallbackEXT(m_instance, &createInfo, nullptr, &m_callback) != VK_SUCCESS)///@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
         {
             throw std::runtime_error("failed to set up debug callback!");
         }
@@ -221,7 +221,7 @@ private:
 
     GLFWwindow* m_window;
     VDeleter<VkInstance> m_instance{ vkDestroyInstance };
-    VDeleter<VkDebugReportCallbackEXT> callback{ m_instance, DestroyDebugReportCallbackEXT };
+    VDeleter<VkDebugReportCallbackEXT> m_callback{ m_instance, DestroyDebugReportCallbackEXT };
 };
 
 int main() 
