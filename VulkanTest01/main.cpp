@@ -10,6 +10,7 @@
 #include<functional>
 #include<vector>
 #include<assert.h>
+#include<set>
 
 #include"VDeleter.h"
 
@@ -204,12 +205,14 @@ private:
         }
     }
 
-    struct QueueFamilyIndices {
+    struct QueueFamilyIndices 
+    {
         int graphicsFamily = -1;
+        int presentFamily = -1;
 
         bool isComplete() 
         {
-            return graphicsFamily >= 0;
+            return graphicsFamily >= 0 && presentFamily >= 0;
         }
     };
 
@@ -228,12 +231,20 @@ private:
         {
             if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) 
             {
-                indices.graphicsFamily = i;//found an acceptable queue
+                indices.graphicsFamily = i;//queue supports rendering functionality
+            }
+
+            //TODO NTF: add logic to explicitly prefer a physical device that supports drawing and presentation in the same queue for improved performance rather than use presentFamily and graphicsFamily as separate queues
+            VkBool32 presentSupport = false;
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &presentSupport);
+            if (queueFamily.queueCount > 0 && presentSupport)
+            {
+                indices.presentFamily = i;//queue supports present functionality
             }
 
             if (indices.isComplete()) 
             {
-                break;//TODO NTF: weird; this break seems to be able to go under the above if statement at present...not sure why the tutorial puts it here
+                break;
             }
 
             i++;
@@ -284,19 +295,25 @@ private:
     {
         QueueFamilyIndices indices = findQueueFamilies(m_physicalDevice);
 
-        VkDeviceQueueCreateInfo queueCreateInfo = {};
-        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-        queueCreateInfo.queueFamilyIndex = indices.graphicsFamily;
-        queueCreateInfo.queueCount = 1;//only need one, since we can submit multiple command buffers to this single queue all at once with low overhead
+        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+        std::set<int> uniqueQueueFamilies = { indices.graphicsFamily, indices.presentFamily };
 
         const float queuePriority = 1.0f;
-        queueCreateInfo.pQueuePriorities = &queuePriority;//each queue can be prioritized against other queues; here we have only one
+        for (int queueFamily : uniqueQueueFamilies) 
+        {
+            VkDeviceQueueCreateInfo queueCreateInfo = {};
+            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queueCreateInfo.queueFamilyIndex = queueFamily;
+            queueCreateInfo.queueCount = 1;
+            queueCreateInfo.pQueuePriorities = &queuePriority;
+            queueCreateInfos.push_back(queueCreateInfo);
+        }
 
         VkPhysicalDeviceFeatures deviceFeatures = {};
         VkDeviceCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        createInfo.pQueueCreateInfos = &queueCreateInfo;
-        createInfo.queueCreateInfoCount = 1;
+        createInfo.pQueueCreateInfos = queueCreateInfos.data();
+        createInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
         createInfo.pEnabledFeatures = &deviceFeatures;
         createInfo.enabledExtensionCount = 0;
 
@@ -316,14 +333,24 @@ private:
         }
 
         vkGetDeviceQueue(m_device, indices.graphicsFamily, 0, &m_graphicsQueue);
+        vkGetDeviceQueue(m_device, indices.presentFamily, 0, &m_presentQueue);
     }
 
     void initVulkan() 
     {
         createInstance();
         setupDebugCallback();
+        createSurface();//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
         pickPhysicalDevice();
         createLogicalDevice();
+    }
+
+    void createSurface() 
+    {
+        if (glfwCreateWindowSurface(m_instance, m_window, nullptr, m_surface.replace()) != VK_SUCCESS)//cross-platform window creation
+        {
+            throw std::runtime_error("failed to create window surface!");
+        }
     }
 
     void mainLoop() 
@@ -338,9 +365,11 @@ private:
     GLFWwindow* m_window;
     VDeleter<VkInstance> m_instance{ vkDestroyInstance };
     VDeleter<VkDebugReportCallbackEXT> m_callback{ m_instance, DestroyDebugReportCallbackEXT };
+    VDeleter<VkSurfaceKHR> m_surface{ m_instance, vkDestroySurfaceKHR };
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;//doesn't need to be deleted, since physical devices can't be created or destroyed by software
     VDeleter<VkDevice> m_device{ vkDestroyDevice };//interface to the physical device; must be destroyed before the physical device (C++ guarantees order of destruction in reverse definition order)
     VkQueue m_graphicsQueue;//queues are implicitly cleaned up with the logical device; no need to delete
+    VkQueue m_presentQueue;//queues are implicitly cleaned up with the logical device; no need to delete
 };
 
 int main() 
