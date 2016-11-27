@@ -253,6 +253,28 @@ private:
         return indices;
     }
 
+    bool checkDeviceExtensionSupport(VkPhysicalDevice device) 
+    {
+        uint32_t extensionCount;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+
+        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+        const std::vector<const char*> deviceExtensions = 
+        {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
+        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+
+        for (const auto& extension : availableExtensions) 
+        {
+            requiredExtensions.erase(extension.extensionName);
+        }
+
+        return requiredExtensions.empty();
+    }
+
     bool isDeviceSuitable(VkPhysicalDevice device) 
     {        
         VkPhysicalDeviceProperties deviceProperties;
@@ -263,7 +285,7 @@ private:
                                     deviceFeatures.geometryShader;
 
         QueueFamilyIndices indices = findQueueFamilies(device);
-        return gpuSuitable && indices.isComplete();
+        return gpuSuitable && indices.isComplete() && checkDeviceExtensionSupport(device);
     }
 
     void pickPhysicalDevice()
