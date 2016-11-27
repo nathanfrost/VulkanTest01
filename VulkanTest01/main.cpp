@@ -204,15 +204,55 @@ private:
         }
     }
 
-    bool isDeviceSuitable(VkPhysicalDevice device) 
+    struct QueueFamilyIndices {
+        int graphicsFamily = -1;
+
+        bool isComplete() 
+        {
+            return graphicsFamily >= 0;
+        }
+    };
+
+    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) 
     {
+        QueueFamilyIndices indices;
+
+        uint32_t queueFamilyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+        int i = 0;
+        for (const auto& queueFamily : queueFamilies) 
+        {
+            if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) 
+            {
+                indices.graphicsFamily = i;//found an acceptable queue
+            }
+
+            if (indices.isComplete()) 
+            {
+                break;//TODO NTF: weird; this break seems to be able to go under the above if statement at present...not sure why the tutorial puts it here
+            }
+
+            i++;
+        }
+
+        return indices;
+    }
+
+    bool isDeviceSuitable(VkPhysicalDevice device) 
+    {        
         VkPhysicalDeviceProperties deviceProperties;
         VkPhysicalDeviceFeatures deviceFeatures;
         vkGetPhysicalDeviceProperties(device, &deviceProperties);
         vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+        const bool gpuSuitable =    deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && //dedicated GPU, not integrated
+                                    deviceFeatures.geometryShader;
 
-        return  deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && //dedicated GPU, not integrated
-                deviceFeatures.geometryShader;
+        QueueFamilyIndices indices = findQueueFamilies(device);
+        return gpuSuitable && indices.isComplete();
     }
 
     void pickPhysicalDevice()
@@ -240,11 +280,50 @@ private:
         }
     }
 
+    void createLogicalDevice() 
+    {
+        QueueFamilyIndices indices = findQueueFamilies(m_physicalDevice);
+
+        VkDeviceQueueCreateInfo queueCreateInfo = {};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = indices.graphicsFamily;
+        queueCreateInfo.queueCount = 1;//only need one, since we can submit multiple command buffers to this single queue all at once with low overhead
+
+        const float queuePriority = 1.0f;
+        queueCreateInfo.pQueuePriorities = &queuePriority;//each queue can be prioritized against other queues; here we have only one
+
+        VkPhysicalDeviceFeatures deviceFeatures = {};
+        VkDeviceCreateInfo createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        createInfo.pQueueCreateInfos = &queueCreateInfo;
+        createInfo.queueCreateInfoCount = 1;
+        createInfo.pEnabledFeatures = &deviceFeatures;
+        createInfo.enabledExtensionCount = 0;
+
+        if (enableValidationLayers) 
+        {
+            createInfo.enabledLayerCount = m_validationLayers.size();
+            createInfo.ppEnabledLayerNames = m_validationLayers.data();
+        }
+        else 
+        {
+            createInfo.enabledLayerCount = 0;
+        }
+
+        if (vkCreateDevice(m_physicalDevice, &createInfo, nullptr, m_device.replace()) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to create logical device!");
+        }
+
+        vkGetDeviceQueue(m_device, indices.graphicsFamily, 0, &m_graphicsQueue);
+    }
+
     void initVulkan() 
     {
         createInstance();
         setupDebugCallback();
         pickPhysicalDevice();
+        createLogicalDevice();
     }
 
     void mainLoop() 
@@ -259,7 +338,9 @@ private:
     GLFWwindow* m_window;
     VDeleter<VkInstance> m_instance{ vkDestroyInstance };
     VDeleter<VkDebugReportCallbackEXT> m_callback{ m_instance, DestroyDebugReportCallbackEXT };
-    VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;
+    VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;//doesn't need to be deleted, since physical devices can't be created or destroyed by software
+    VDeleter<VkDevice> m_device{ vkDestroyDevice };//interface to the physical device; must be destroyed before the physical device (C++ guarantees order of destruction in reverse definition order)
+    VkQueue m_graphicsQueue;//queues are implicitly cleaned up with the logical device; no need to delete
 };
 
 int main() 
