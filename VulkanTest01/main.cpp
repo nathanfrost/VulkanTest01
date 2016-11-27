@@ -205,6 +205,38 @@ private:
         }
     }
 
+    struct SwapChainSupportDetails 
+    {
+        VkSurfaceCapabilitiesKHR capabilities;
+        std::vector<VkSurfaceFormatKHR> formats;
+        std::vector<VkPresentModeKHR> presentModes;
+    };
+
+    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) 
+    {
+        SwapChainSupportDetails details;
+
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &details.capabilities);
+
+        uint32_t formatCount;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, nullptr);
+        if (formatCount != 0) 
+        {
+            details.formats.resize(formatCount);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, details.formats.data());
+        }
+
+        uint32_t presentModeCount;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, nullptr);
+        if (presentModeCount != 0) 
+        {
+            details.presentModes.resize(presentModeCount);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, details.presentModes.data());
+        }
+
+        return details;
+    }
+
     struct QueueFamilyIndices 
     {
         int graphicsFamily = -1;
@@ -285,7 +317,15 @@ private:
                                     deviceFeatures.geometryShader;
 
         QueueFamilyIndices indices = findQueueFamilies(device);
-        return gpuSuitable && indices.isComplete() && checkDeviceExtensionSupport(device);
+        
+        bool swapChainAdequate = false;
+        const bool extensionsSupported = checkDeviceExtensionSupport(device);
+        if (extensionsSupported) 
+        {
+            SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+            swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
+        }
+        return gpuSuitable && indices.isComplete() && extensionsSupported && swapChainAdequate;
     }
 
     void pickPhysicalDevice()
