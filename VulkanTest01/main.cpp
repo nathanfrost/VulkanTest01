@@ -11,6 +11,7 @@
 #include<vector>
 #include<assert.h>
 #include<set>
+#include<algorithm>
 
 #include"VDeleter.h"
 
@@ -63,8 +64,8 @@ public:
     }
 
 private:
-    const int kWidth = 800; 
-    const int kHeight = 600;
+    const uint32_t kWidth = 800; 
+    const uint32_t kHeight = 600;
 
     const std::vector<const char*> m_validationLayers = 
     {
@@ -149,7 +150,7 @@ private:
             createInfo.enabledLayerCount = 0;
         }
 
-        if (vkCreateInstance(&createInfo, nullptr, &m_instance) != VK_SUCCESS) 
+        if (vkCreateInstance(&createInfo, nullptr, m_instance.replace()) != VK_SUCCESS) 
         {
             throw std::runtime_error("failed to create instance!");
         }
@@ -285,6 +286,116 @@ private:
         return indices;
     }
 
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) 
+    {
+        if (availableFormats.size() == 1 && availableFormats[0].format == VK_FORMAT_UNDEFINED) 
+        {
+            //all formats are supported, so return whatever we want
+            return{ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
+        }
+
+        //there are some format limitations; see if we can find the desired format
+        for (const auto& availableFormat : availableFormats) 
+        {
+            if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) 
+            {
+                return availableFormat;
+            }
+        }
+
+        return availableFormats[0];//couldn't find the desired format
+    }
+
+    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> availablePresentModes) 
+    {
+        for (const auto& availablePresentMode : availablePresentModes) 
+        {
+            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) //instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones
+            {
+                return availablePresentMode;
+            }
+        }
+
+        return VK_PRESENT_MODE_FIFO_KHR;// display takes an image from the front of the queue on a vertical blank and the program inserts rendered images at the back of the queue. If the queue is full then the program has to wait
+        /* could also return: 
+            * VK_PRESENT_MODE_FIFO_RELAXED_KHR: This mode only differs from VK_PRESENT_MODE_FIFO_KHR if the application is late and the queue was 
+                                                empty at the last vertical blank. Instead of waiting for the next vertical blank, the image is 
+                                                transferred right away when it finally arrives. This may result in visible tearing.
+            * VK_PRESENT_MODE_IMMEDIATE_KHR: Images submitted by your application are transferred to the screen right away, which may result in tearing.
+        */
+    }
+
+    ///choose the resolution of the render target based on surface capabilities and window resolution
+    VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) 
+    {
+        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()) 
+        {
+            return capabilities.currentExtent;
+        }
+        else 
+        {
+            VkExtent2D actualExtent = { kWidth, kHeight };
+
+            actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
+            actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
+
+            return actualExtent;
+        }
+    }
+
+    void createSwapChain() 
+    {
+        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_physicalDevice);
+
+        VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+        VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+        VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+
+        //implement triple-buffering by allowing one more buffer than the minimum image count required by the swap chain
+        uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+        if (swapChainSupport.capabilities.maxImageCount > 0 && //0 means max image count is unlimited
+            imageCount > swapChainSupport.capabilities.maxImageCount) 
+        {
+            imageCount = swapChainSupport.capabilities.maxImageCount;
+        }
+
+        VkSwapchainCreateInfoKHR createInfo = {};
+        createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+        createInfo.surface = m_surface;
+        createInfo.minImageCount = imageCount;
+        createInfo.imageFormat = surfaceFormat.format;
+        createInfo.imageColorSpace = surfaceFormat.colorSpace;
+        createInfo.imageExtent = extent;
+        createInfo.imageArrayLayers = 1;//1 for regular rendering; 2 for stereoscopic
+        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;//color attachment, since this is a render target
+
+        QueueFamilyIndices indices = findQueueFamilies(m_physicalDevice);
+        uint32_t queueFamilyIndices[] = { (uint32_t)indices.graphicsFamily, (uint32_t)indices.presentFamily };
+        if (indices.graphicsFamily != indices.presentFamily) 
+        {
+            createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;//Images can be used across multiple queue families without explicit ownership transfers.
+            createInfo.queueFamilyIndexCount = 2;
+            createInfo.pQueueFamilyIndices = queueFamilyIndices;
+        }
+        else 
+        {
+            createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;//image is owned by one queue family at a time and ownership must be explicitly transfered before using it in another queue family. This option offers the best performance.
+            createInfo.queueFamilyIndexCount = 0; // Optional
+            createInfo.pQueueFamilyIndices = nullptr; // Optional
+        }
+
+        createInfo.preTransform = swapChainSupport.capabilities.currentTransform;//no transform.  If swapChainSupport.capabilities.supportedTransforms allow it, transforms like 90 degree rotations or horizontal-flips can be done
+        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;//ignore alpha, since this is a final render target and we won't be blending it with other render targets
+        createInfo.presentMode = presentMode;
+        createInfo.clipped = VK_TRUE;//don't render pixels obscured by another window in front of our render target
+        createInfo.oldSwapchain = VK_NULL_HANDLE;//assume we only need one swap chain (although it's possible for swap chains to get invalidated and need to be recreated by events like resizing the window)  TODO: understand more
+
+        if (vkCreateSwapchainKHR(m_device, &createInfo, nullptr, swapChain.replace()) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to create swap chain!");
+        }
+    }
+
     bool checkDeviceExtensionSupport(VkPhysicalDevice device) 
     {
         uint32_t extensionCount;
@@ -293,11 +404,7 @@ private:
         std::vector<VkExtensionProperties> availableExtensions(extensionCount);
         vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
 
-        const std::vector<const char*> deviceExtensions = 
-        {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME
-        };
-        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
+        std::set<std::string> requiredExtensions(m_deviceExtensions.begin(), m_deviceExtensions.end());
 
         for (const auto& extension : availableExtensions) 
         {
@@ -377,7 +484,8 @@ private:
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
         createInfo.pEnabledFeatures = &deviceFeatures;
-        createInfo.enabledExtensionCount = 0;
+        createInfo.enabledExtensionCount = m_deviceExtensions.size();//require swapchain extension
+        createInfo.ppEnabledExtensionNames = m_deviceExtensions.data();//require swapchain extension
 
         if (enableValidationLayers) 
         {
@@ -405,6 +513,7 @@ private:
         createSurface();//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
         pickPhysicalDevice();
         createLogicalDevice();
+        createSwapChain();
     }
 
     void createSurface() 
@@ -430,8 +539,14 @@ private:
     VDeleter<VkSurfaceKHR> m_surface{ m_instance, vkDestroySurfaceKHR };
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;//doesn't need to be deleted, since physical devices can't be created or destroyed by software
     VDeleter<VkDevice> m_device{ vkDestroyDevice };//interface to the physical device; must be destroyed before the physical device (C++ guarantees order of destruction in reverse definition order)
+    VDeleter<VkSwapchainKHR> swapChain{ m_device, vkDestroySwapchainKHR };//must be destroyed before the logical device (C++ guarantees order of destruction in reverse definition order)
     VkQueue m_graphicsQueue;//queues are implicitly cleaned up with the logical device; no need to delete
     VkQueue m_presentQueue;//queues are implicitly cleaned up with the logical device; no need to delete
+    const std::vector<const char*> m_deviceExtensions =
+    {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
+
 };
 
 int main() 
