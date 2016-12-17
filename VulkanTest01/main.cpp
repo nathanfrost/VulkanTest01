@@ -390,7 +390,7 @@ private:
         createInfo.clipped = VK_TRUE;//don't render pixels obscured by another window in front of our render target
         createInfo.oldSwapchain = VK_NULL_HANDLE;//assume we only need one swap chain (although it's possible for swap chains to get invalidated and need to be recreated by events like resizing the window)  TODO: understand more
 
-        if (vkCreateSwapchainKHR(m_device, &createInfo, nullptr, swapChain.replace()) != VK_SUCCESS) 
+        if (vkCreateSwapchainKHR(m_device, &createInfo, nullptr, m_swapChain.replace()) != VK_SUCCESS) 
         {
             throw std::runtime_error("failed to create swap chain!");
         }
@@ -539,7 +539,7 @@ private:
     VDeleter<VkSurfaceKHR> m_surface{ m_instance, vkDestroySurfaceKHR };
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;//doesn't need to be deleted, since physical devices can't be created or destroyed by software
     VDeleter<VkDevice> m_device{ vkDestroyDevice };//interface to the physical device; must be destroyed before the physical device (C++ guarantees order of destruction in reverse definition order)
-    VDeleter<VkSwapchainKHR> swapChain{ m_device, vkDestroySwapchainKHR };//must be destroyed before the logical device (C++ guarantees order of destruction in reverse definition order)
+    VDeleter<VkSwapchainKHR> m_swapChain{ m_device, vkDestroySwapchainKHR };//must be destroyed before the logical device (C++ guarantees order of destruction in reverse definition order)
     VkQueue m_graphicsQueue;//queues are implicitly cleaned up with the logical device; no need to delete
     VkQueue m_presentQueue;//queues are implicitly cleaned up with the logical device; no need to delete
     const std::vector<const char*> m_deviceExtensions =
