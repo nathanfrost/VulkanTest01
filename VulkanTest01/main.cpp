@@ -804,6 +804,34 @@ private:
         createImageViews();
         createRenderPass();
         createGraphicsPipeline();
+        createFramebuffers();
+    }
+
+    void createFramebuffers() 
+    {
+        m_swapChainFramebuffers.resize(m_swapChainImageViews.size(), VDeleter<VkFramebuffer>{m_device, vkDestroyFramebuffer});
+
+        for (size_t i = 0; i < m_swapChainImageViews.size(); i++)
+        {
+            VkImageView attachments[] =
+            {
+                m_swapChainImageViews[i]
+            };
+
+            VkFramebufferCreateInfo framebufferInfo = {};
+            framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+            framebufferInfo.renderPass = m_renderPass;
+            framebufferInfo.attachmentCount = 1;
+            framebufferInfo.pAttachments = attachments;
+            framebufferInfo.width = m_swapChainExtent.width;
+            framebufferInfo.height = m_swapChainExtent.height;
+            framebufferInfo.layers = 1;//number of image arrays -- each swap chain image in pAttachments is a single image
+
+            if (vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, m_swapChainFramebuffers[i].replace()) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to create framebuffer!");
+            }
+        }
     }
 
     void createSurface() 
@@ -840,6 +868,7 @@ private:
     VkFormat m_swapChainImageFormat;
     VkExtent2D m_swapChainExtent;
     std::vector<VDeleter<VkImageView>> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
+    std::vector<VDeleter<VkFramebuffer>> m_swapChainFramebuffers;
     VDeleter<VkRenderPass> m_renderPass{ m_device, vkDestroyRenderPass };
     VDeleter<VkPipelineLayout> m_pipelineLayout{ m_device, vkDestroyPipelineLayout };
     VDeleter<VkPipeline> m_graphicsPipeline{ m_device, vkDestroyPipeline };
