@@ -1,6 +1,6 @@
 //originally from https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Base_code
 //TODO: Next:
-//https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Validation_layers
+//https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -760,7 +760,7 @@ private:
         VkAttachmentDescription colorAttachment = {};
         colorAttachment.format = m_swapChainImageFormat;
         colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;                    //no MSAA
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;               //clear to a constant value @todo NTF: what value?; other options are VK_ATTACHMENT_LOAD_OP_LOAD: Preserve the existing contents of the attachment and VK_ATTACHMENT_LOAD_OP_DONT_CARE: Existing contents are undefined; we don't care about them
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;               //clear to a constant value defined in VkRenderPassBeginInfo; other options are VK_ATTACHMENT_LOAD_OP_LOAD: Preserve the existing contents of the attachment and VK_ATTACHMENT_LOAD_OP_DONT_CARE: Existing contents are undefined; we don't care about them
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;             //store buffer in memory for later; other option is VK_ATTACHMENT_STORE_OP_DONT_CARE: Contents of the framebuffer will be undefined after the rendering operation
         colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;    //not doing anything with stencil buffer
         colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;  //not doing anything with stencil buffer
@@ -793,6 +793,56 @@ private:
         }
     }
 
+    void createCommandBuffers() 
+    {
+        m_commandBuffers.resize(m_swapChainFramebuffers.size());
+
+        VkCommandBufferAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = m_commandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;//primary can submit to execution queue, but not be submitted to other command buffers; secondary can't be submitted to execution queue but can be submitted to other command buffers (for example, to factor out common sequences of commands)
+        allocInfo.commandBufferCount = (uint32_t)m_commandBuffers.size();
+
+        if (vkAllocateCommandBuffers(m_device, &allocInfo, m_commandBuffers.data()) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to allocate command buffers!");
+        }
+
+        for (size_t i = 0; i < m_commandBuffers.size(); i++) 
+        {
+            VkCommandBufferBeginInfo beginInfo = {};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+            beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT; /* options: * VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded right after executing it once
+                                                                                        * VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: This is a secondary command buffer that will be entirely within a single render pass.
+                                                                                        * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also already pending execution. */
+            beginInfo.pInheritanceInfo = nullptr; //specifies what state a secondary buffer should inherit from the primary buffer
+            vkBeginCommandBuffer(m_commandBuffers[i], &beginInfo);  //implicitly resets the command buffer (you can't append commands to an existing buffer)
+
+            VkRenderPassBeginInfo renderPassInfo = {};
+            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderPassInfo.renderPass = m_renderPass;
+            renderPassInfo.framebuffer = m_swapChainFramebuffers[i];
+
+            //any pixels outside of the area defined here have undefined values; we don't want that
+            renderPassInfo.renderArea.offset = { 0, 0 };
+            renderPassInfo.renderArea.extent = m_swapChainExtent;
+
+            VkClearValue clearColor = { 0.0f, 0.0f, 0.0f, 1.0f };
+            renderPassInfo.clearValueCount = 1;
+            renderPassInfo.pClearValues = &clearColor;
+
+            vkCmdBeginRenderPass(m_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
+            vkCmdBindPipeline(m_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
+            vkCmdDraw(m_commandBuffers[i], 3, 1, 0, 0);//draw triangle!  It has 3 verts, one instance, and we should start with the zeroth vert and instance
+            vkCmdEndRenderPass(m_commandBuffers[i]);
+
+            if (vkEndCommandBuffer(m_commandBuffers[i]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to record command buffer!");
+            }
+        }
+    }
+
     void initVulkan() 
     {
         createInstance();
@@ -805,6 +855,23 @@ private:
         createRenderPass();
         createGraphicsPipeline();
         createFramebuffers();
+        createCommandPool();
+        createCommandBuffers();
+    }
+
+    void createCommandPool() 
+    {
+        QueueFamilyIndices queueFamilyIndices = findQueueFamilies(m_physicalDevice);
+
+        VkCommandPoolCreateInfo poolInfo = {};
+        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily;
+        poolInfo.flags = 0; //options:  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new commands very often(may change memory allocation behavior)
+                            //          VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : Allow command buffers to be rerecorded individually, without this flag they all have to be reset together
+        if (vkCreateCommandPool(m_device, &poolInfo, nullptr, m_commandPool.replace()) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create command pool!");
+        }
     }
 
     void createFramebuffers() 
@@ -872,6 +939,8 @@ private:
     VDeleter<VkRenderPass> m_renderPass{ m_device, vkDestroyRenderPass };
     VDeleter<VkPipelineLayout> m_pipelineLayout{ m_device, vkDestroyPipelineLayout };
     VDeleter<VkPipeline> m_graphicsPipeline{ m_device, vkDestroyPipeline };
+    VDeleter<VkCommandPool> m_commandPool{ m_device, vkDestroyCommandPool };
+    std::vector<VkCommandBuffer> m_commandBuffers;//automatically freed when command pool is destroyed
 };
 
 int main() 
