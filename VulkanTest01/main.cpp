@@ -780,12 +780,33 @@ private:
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorAttachmentRef;
 
+
+        /*  The operations right before and right after this subpass also count as implicit "subpasses".  There are two 
+            built-in dependencies that take care of the transition at the start of the render pass and at the end of 
+            the render pass, but the former does not occur at the right time. It assumes that the transition occurs at the 
+            start of the pipeline, but we haven't acquired the image yet at that point! There are two ways to deal with 
+            this problem. We could change the waitStages for the m_imageAvailableSemaphore to VK_PIPELINE_STAGE_TOP_OF_PIPELINE_BIT 
+            to ensure that the render passes don't begin until the image is available, or we can make the render pass 
+            wait for the VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT stage; we'll do the latter to illustrate subpasses */
+        VkSubpassDependency dependency = {};
+        dependency.srcSubpass = VK_SUBPASS_EXTERNAL;//implicit subpass before or after the render pass depending on whether it is specified in srcSubpass or dstSubpass
+        dependency.dstSubpass = 0;//must always be higher than srcSubpass to prevent cycles in dependency graph
+        dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.srcAccessMask = 0;
+        //The operations that should wait on this are in the color attachment stage and involve the reading and writing of 
+        //the color attachment.  These settings will prevent the transition from happening until it's actually necessary 
+        //(and allowed): when we want to start writing colors to it
+        dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
         VkRenderPassCreateInfo renderPassInfo = {};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = 1;
         renderPassInfo.pAttachments = &colorAttachment;
         renderPassInfo.subpassCount = 1;
         renderPassInfo.pSubpasses = &subpass;
+        renderPassInfo.dependencyCount = 1;
+        renderPassInfo.pDependencies = &dependency;
 
         if (vkCreateRenderPass(m_device, &renderPassInfo, nullptr, m_renderPass.replace()) != VK_SUCCESS) 
         {
@@ -857,6 +878,7 @@ private:
         createFramebuffers();
         createCommandPool();
         createCommandBuffers();
+        createSemaphores();
     }
 
     void createCommandPool() 
@@ -909,12 +931,78 @@ private:
         }
     }
     
+    void createSemaphores()
+    {
+        VkSemaphoreCreateInfo semaphoreInfo = {};
+        semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+        if (vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, m_imageAvailableSemaphore.replace()) != VK_SUCCESS ||
+            vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, m_renderFinishedSemaphore.replace()) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create semaphores!");
+        }
+    }
+
+    void drawFrame() 
+    {
+        uint32_t imageIndex;
+        vkAcquireNextImageKHR(m_device, m_swapChain, std::numeric_limits<uint64_t>::max(), m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+
+        VkSubmitInfo submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+        //theoretically the implementation can already start executing our vertex shader and such while the image is not
+        //available yet. Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores
+        VkSemaphore waitSemaphores[] = { m_imageAvailableSemaphore };
+        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = waitSemaphores;
+        submitInfo.pWaitDstStageMask = waitStages;
+
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &m_commandBuffers[imageIndex];
+
+        //signal these semaphores once the command buffer(s) have finished execution
+        VkSemaphore signalSemaphores[] = { m_renderFinishedSemaphore };
+        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.pSignalSemaphores = signalSemaphores;
+
+        if (vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to submit draw command buffer!");
+        }
+
+        VkPresentInfoKHR presentInfo = {};
+        presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+
+        presentInfo.waitSemaphoreCount = 1;
+        presentInfo.pWaitSemaphores = signalSemaphores;
+
+        VkSwapchainKHR swapChains[] = { m_swapChain };
+        presentInfo.swapchainCount = 1;
+        presentInfo.pSwapchains = swapChains;
+        presentInfo.pResults = nullptr; // allows you to specify an array of VkResult values to check for every individual swap chain if presentation was successful
+
+        presentInfo.pImageIndices = &imageIndex;
+
+        vkQueuePresentKHR(m_presentQueue, &presentInfo);
+    }
+
     void mainLoop() 
     {
         while (!glfwWindowShouldClose(m_window)) 
         {
             glfwPollEvents();
+            drawFrame();
         }
+
+        //wait for the logical device to finish operations before exiting mainLoop and destroying the window
+        vkDeviceWaitIdle(m_device);
+        glfwDestroyWindow(m_window);
+
+        int i;
+        printf("Enter a character and press ENTER to exit");
+        scanf("%i", &i);
     }
 
 
@@ -941,6 +1029,11 @@ private:
     VDeleter<VkPipeline> m_graphicsPipeline{ m_device, vkDestroyPipeline };
     VDeleter<VkCommandPool> m_commandPool{ m_device, vkDestroyCommandPool };
     std::vector<VkCommandBuffer> m_commandBuffers;//automatically freed when command pool is destroyed
+
+    /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 
+        used to synchronize operations within or across command queues */
+    VDeleter<VkSemaphore> m_imageAvailableSemaphore{ m_device, vkDestroySemaphore };
+    VDeleter<VkSemaphore> m_renderFinishedSemaphore{ m_device, vkDestroySemaphore };
 };
 
 int main() 
