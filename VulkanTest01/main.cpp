@@ -81,6 +81,10 @@ public:
         initVulkan();
         mainLoop();
         cleanup();
+
+        int i;
+        printf("Enter a character and press ENTER to exit\n");
+        scanf("%i", &i);
     }
 
 private:
@@ -795,6 +799,9 @@ private:
         {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
+
+        vkDestroyShaderModule(m_device, fragShaderModule, nullptr);
+        vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
     }
 
     VkShaderModule createShaderModule(const std::vector<char>& code)
