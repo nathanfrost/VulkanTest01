@@ -80,6 +80,7 @@ public:
         initWindow();
         initVulkan();
         mainLoop();
+        cleanup();
     }
 
 private:
@@ -169,7 +170,7 @@ private:
             createInfo.enabledLayerCount = 0;
         }
 
-        if (vkCreateInstance(&createInfo, nullptr, m_instance.replace()) != VK_SUCCESS) 
+        if (vkCreateInstance(&createInfo, nullptr, &m_instance) != VK_SUCCESS) 
         {
             throw std::runtime_error("failed to create instance!");
         }
@@ -219,7 +220,7 @@ private:
         createInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;//which events trigger the callback
         createInfo.pfnCallback = debugCallback;
 
-        if (CreateDebugReportCallbackEXT(m_instance, &createInfo, nullptr, m_callback.replace()) != VK_SUCCESS)///@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
+        if (CreateDebugReportCallbackEXT(m_instance, &createInfo, nullptr, &m_callback) != VK_SUCCESS)///@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
         {
             throw std::runtime_error("failed to set up debug callback!");
         }
@@ -409,7 +410,7 @@ private:
         createInfo.clipped = VK_TRUE;//don't render pixels obscured by another window in front of our render target
         createInfo.oldSwapchain = VK_NULL_HANDLE;//assume we only need one swap chain (although it's possible for swap chains to get invalidated and need to be recreated by events like resizing the window)  TODO: understand more
 
-        if (vkCreateSwapchainKHR(m_device, &createInfo, nullptr, m_swapChain.replace()) != VK_SUCCESS) 
+        if (vkCreateSwapchainKHR(m_device, &createInfo, nullptr, &m_swapChain) != VK_SUCCESS) 
         {
             throw std::runtime_error("failed to create swap chain!");
         }
@@ -423,9 +424,63 @@ private:
         m_swapChainExtent = extent;
     }
 
+    void recreateSwapChain() 
+    {
+        vkDeviceWaitIdle(m_device);
+
+        cleanupSwapChain();
+
+        createSwapChain();
+        createImageViews();
+        createRenderPass();
+        createGraphicsPipeline();
+        createFramebuffers();
+        createCommandBuffers();
+    }
+
+    void cleanupSwapChain() 
+    {
+        for (size_t i = 0; i < m_swapChainFramebuffers.size(); i++) 
+        {
+            vkDestroyFramebuffer(m_device, m_swapChainFramebuffers[i], nullptr);
+        }
+
+        vkFreeCommandBuffers(m_device, m_commandPool, static_cast<uint32_t>(m_commandBuffers.size()), m_commandBuffers.data());
+
+        vkDestroyPipeline(m_device, m_graphicsPipeline, nullptr);
+        vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
+        vkDestroyRenderPass(m_device, m_renderPass, nullptr);
+
+        for (size_t i = 0; i < m_swapChainImageViews.size(); i++)
+        {
+            vkDestroyImageView(m_device, m_swapChainImageViews[i], nullptr);
+        }
+
+        vkDestroySwapchainKHR(m_device, m_swapChain, nullptr);
+    }
+
+    void cleanup() 
+    {
+        cleanupSwapChain();
+
+        vkDestroySemaphore(m_device, m_renderFinishedSemaphore, nullptr);
+        vkDestroySemaphore(m_device, m_imageAvailableSemaphore, nullptr);
+
+        vkDestroyCommandPool(m_device, m_commandPool, nullptr);
+
+        vkDestroyDevice(m_device, nullptr);
+        DestroyDebugReportCallbackEXT(m_instance, m_callback, nullptr);
+        vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
+        vkDestroyInstance(m_instance, nullptr);
+
+        glfwDestroyWindow(m_window);
+
+        glfwTerminate();
+    }
+
     void createImageViews()
     {
-        m_swapChainImageViews.resize(m_swapChainImages.size(), VDeleter<VkImageView>{m_device, vkDestroyImageView});
+        m_swapChainImageViews.resize(m_swapChainImages.size());
         for (uint32_t i = 0; i < m_swapChainImages.size(); i++) 
         {
             VkImageViewCreateInfo createInfo = {};
@@ -445,7 +500,7 @@ private:
             createInfo.subresourceRange.baseArrayLayer = 0;
             createInfo.subresourceRange.layerCount = 1;
 
-            if (vkCreateImageView(m_device, &createInfo, nullptr, m_swapChainImageViews[i].replace()) != VK_SUCCESS)
+            if (vkCreateImageView(m_device, &createInfo, nullptr, &m_swapChainImageViews[i]) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to create image views!");
             }
@@ -553,7 +608,7 @@ private:
             createInfo.enabledLayerCount = 0;
         }
 
-        if (vkCreateDevice(m_physicalDevice, &createInfo, nullptr, m_device.replace()) != VK_SUCCESS) 
+        if (vkCreateDevice(m_physicalDevice, &createInfo, nullptr, &m_device) != VK_SUCCESS) 
         {
             throw std::runtime_error("failed to create logical device!");
         }
@@ -568,10 +623,10 @@ private:
         auto fragShaderCode = readFile("shaders/frag.spv");
 
         //create wrappers around SPIR-V bytecodes
-        VDeleter<VkShaderModule> vertShaderModule{ m_device, vkDestroyShaderModule };
-        VDeleter<VkShaderModule> fragShaderModule{ m_device, vkDestroyShaderModule };
-        createShaderModule(vertShaderCode, vertShaderModule);
-        createShaderModule(fragShaderCode, fragShaderModule);
+        VkShaderModule vertShaderModule;
+        VkShaderModule fragShaderModule;
+        vertShaderModule = createShaderModule(vertShaderCode);
+        fragShaderModule = createShaderModule(fragShaderCode);
 
         //vertex shader creation
         VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
@@ -716,7 +771,7 @@ private:
         pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
         pipelineLayoutInfo.pPushConstantRanges = 0; // Optional
 
-        if (vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr,m_pipelineLayout.replace()) != VK_SUCCESS) 
+        if (vkCreatePipelineLayout(m_device, &pipelineLayoutInfo, nullptr,&m_pipelineLayout) != VK_SUCCESS) 
         {
             throw std::runtime_error("failed to create pipeline layout!");
         }
@@ -736,23 +791,26 @@ private:
         pipelineInfo.subpass = 0;
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 
-        if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, m_graphicsPipeline.replace()) != VK_SUCCESS) 
+        if (vkCreateGraphicsPipelines(m_device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_graphicsPipeline) != VK_SUCCESS) 
         {
             throw std::runtime_error("failed to create graphics pipeline!");
         }
     }
 
-    void createShaderModule(const std::vector<char>& code, VDeleter<VkShaderModule>& shaderModule)
+    VkShaderModule createShaderModule(const std::vector<char>& code)
     {
         VkShaderModuleCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
         createInfo.codeSize = code.size();
         createInfo.pCode = (uint32_t*)code.data();
 
-        if (vkCreateShaderModule(m_device, &createInfo, nullptr, shaderModule.replace()) != VK_SUCCESS)
+        VkShaderModule shaderModule;
+        if (vkCreateShaderModule(m_device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create shader module!");
         }
+
+        return shaderModule;
     }
 
     void createRenderPass()
@@ -808,7 +866,7 @@ private:
         renderPassInfo.dependencyCount = 1;
         renderPassInfo.pDependencies = &dependency;
 
-        if (vkCreateRenderPass(m_device, &renderPassInfo, nullptr, m_renderPass.replace()) != VK_SUCCESS) 
+        if (vkCreateRenderPass(m_device, &renderPassInfo, nullptr, &m_renderPass) != VK_SUCCESS) 
         {
             throw std::runtime_error("failed to create render pass!");
         }
@@ -890,7 +948,7 @@ private:
         poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily;
         poolInfo.flags = 0; //options:  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new commands very often(may change memory allocation behavior)
                             //          VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : Allow command buffers to be rerecorded individually, without this flag they all have to be reset together
-        if (vkCreateCommandPool(m_device, &poolInfo, nullptr, m_commandPool.replace()) != VK_SUCCESS)
+        if (vkCreateCommandPool(m_device, &poolInfo, nullptr, &m_commandPool) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create command pool!");
         }
@@ -898,7 +956,7 @@ private:
 
     void createFramebuffers() 
     {
-        m_swapChainFramebuffers.resize(m_swapChainImageViews.size(), VDeleter<VkFramebuffer>{m_device, vkDestroyFramebuffer});
+        m_swapChainFramebuffers.resize(m_swapChainImageViews.size());
 
         for (size_t i = 0; i < m_swapChainImageViews.size(); i++)
         {
@@ -916,7 +974,7 @@ private:
             framebufferInfo.height = m_swapChainExtent.height;
             framebufferInfo.layers = 1;//number of image arrays -- each swap chain image in pAttachments is a single image
 
-            if (vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, m_swapChainFramebuffers[i].replace()) != VK_SUCCESS)
+            if (vkCreateFramebuffer(m_device, &framebufferInfo, nullptr, &m_swapChainFramebuffers[i]) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to create framebuffer!");
             }
@@ -925,7 +983,7 @@ private:
 
     void createSurface() 
     {
-        if (glfwCreateWindowSurface(m_instance, m_window, nullptr, m_surface.replace()) != VK_SUCCESS)//cross-platform window creation
+        if (glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface) != VK_SUCCESS)//cross-platform window creation
         {
             throw std::runtime_error("failed to create window surface!");
         }
@@ -936,8 +994,8 @@ private:
         VkSemaphoreCreateInfo semaphoreInfo = {};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-        if (vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, m_imageAvailableSemaphore.replace()) != VK_SUCCESS ||
-            vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, m_renderFinishedSemaphore.replace()) != VK_SUCCESS)
+        if (vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_imageAvailableSemaphore) != VK_SUCCESS ||
+            vkCreateSemaphore(m_device, &semaphoreInfo, nullptr, &m_renderFinishedSemaphore) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create semaphores!");
         }
@@ -998,21 +1056,16 @@ private:
 
         //wait for the logical device to finish operations before exiting mainLoop and destroying the window
         vkDeviceWaitIdle(m_device);
-        glfwDestroyWindow(m_window);
-
-        int i;
-        printf("Enter a character and press ENTER to exit");
-        scanf("%i", &i);
     }
 
 
     GLFWwindow* m_window;
-    VDeleter<VkInstance> m_instance{ vkDestroyInstance };
-    VDeleter<VkDebugReportCallbackEXT> m_callback{ m_instance, DestroyDebugReportCallbackEXT };
-    VDeleter<VkSurfaceKHR> m_surface{ m_instance, vkDestroySurfaceKHR };
+    VkInstance m_instance;
+    VkDebugReportCallbackEXT m_callback;
+    VkSurfaceKHR m_surface;
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;//doesn't need to be deleted, since physical devices can't be created or destroyed by software
-    VDeleter<VkDevice> m_device{ vkDestroyDevice };//interface to the physical device; must be destroyed before the physical device (C++ guarantees order of destruction in reverse definition order)
-    VDeleter<VkSwapchainKHR> m_swapChain{ m_device, vkDestroySwapchainKHR };//must be destroyed before the logical device (C++ guarantees order of destruction in reverse definition order)
+    VkDevice m_device;//interface to the physical device; must be destroyed before the physical device
+    VkSwapchainKHR m_swapChain;//must be destroyed before the logical device
     VkQueue m_graphicsQueue;//queues are implicitly cleaned up with the logical device; no need to delete
     VkQueue m_presentQueue;//queues are implicitly cleaned up with the logical device; no need to delete
     const std::vector<const char*> m_deviceExtensions =
@@ -1022,18 +1075,18 @@ private:
     std::vector<VkImage> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html
     VkFormat m_swapChainImageFormat;
     VkExtent2D m_swapChainExtent;
-    std::vector<VDeleter<VkImageView>> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
-    std::vector<VDeleter<VkFramebuffer>> m_swapChainFramebuffers;
-    VDeleter<VkRenderPass> m_renderPass{ m_device, vkDestroyRenderPass };
-    VDeleter<VkPipelineLayout> m_pipelineLayout{ m_device, vkDestroyPipelineLayout };
-    VDeleter<VkPipeline> m_graphicsPipeline{ m_device, vkDestroyPipeline };
-    VDeleter<VkCommandPool> m_commandPool{ m_device, vkDestroyCommandPool };
+    std::vector<VkImageView> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
+    std::vector<VkFramebuffer> m_swapChainFramebuffers;
+    VkRenderPass m_renderPass;
+    VkPipelineLayout m_pipelineLayout;
+    VkPipeline m_graphicsPipeline;
+    VkCommandPool m_commandPool;
     std::vector<VkCommandBuffer> m_commandBuffers;//automatically freed when command pool is destroyed
 
     /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 
         used to synchronize operations within or across command queues */
-    VDeleter<VkSemaphore> m_imageAvailableSemaphore{ m_device, vkDestroySemaphore };
-    VDeleter<VkSemaphore> m_renderFinishedSemaphore{ m_device, vkDestroySemaphore };
+    VkSemaphore m_imageAvailableSemaphore;
+    VkSemaphore m_renderFinishedSemaphore;
 };
 
 int main() 
