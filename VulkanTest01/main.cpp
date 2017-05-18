@@ -17,6 +17,10 @@
 #include"VDeleter.h"
 
 
+//don't complain about scanf being unsafe
+#pragma warning(disable : 4996)
+
+
 static std::vector<char> readFile(const std::string& filename) 
 {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -49,7 +53,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 
     return VK_FALSE;
 }
-
 
 VkResult CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) 
 {
@@ -102,12 +105,21 @@ private:
     const bool enableValidationLayers = true;
 #endif
 
+    //Viewport and scissor rectangle size is specified during graphics pipeline creation, so the pipeline also needs to 
+    //be rebuilt when the window is resized. It is possible to avoid this by using dynamic state for the viewports and scissor rectangles.
+    static void onWindowResized(GLFWwindow* window, int width, int height)
+    {
+        if (width == 0 || height == 0) return;//handle the case where the window was minimized
+
+        HelloTriangleApplication* app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+        app->recreateSwapChain();
+    }
+
     void initWindow() 
     {
         glfwInit();
 
         glfwWindowHint(GLFW_CLIENT_API/**<hard constrain API...*/, GLFW_NO_API/**<...to Vulkan, which does not use an API*/);
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
         /*
         takes values set by glfwWindowHint()
         width and height may vary as they're soft constraints
@@ -118,6 +130,9 @@ private:
             "Vulkan window",
             nullptr/*windowed mode, not full-screen monitor*/,
             nullptr/*no sharing objects with another window; that's OpenGL, not Vulkan anyway*/);
+
+        glfwSetWindowUserPointer(m_window, this);
+        glfwSetWindowSizeCallback(m_window, HelloTriangleApplication::onWindowResized);
     }
 
     std::vector<const char*> getRequiredExtensions() 
@@ -358,7 +373,10 @@ private:
         }
         else 
         {
-            VkExtent2D actualExtent = { kWidth, kHeight };
+            int width, height;
+            glfwGetWindowSize(m_window, &width, &height);
+
+            VkExtent2D actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
 
             actualExtent.width = std::max(capabilities.minImageExtent.width, std::min(capabilities.maxImageExtent.width, actualExtent.width));
             actualExtent.height = std::max(capabilities.minImageExtent.height, std::min(capabilities.maxImageExtent.height, actualExtent.height));
@@ -392,6 +410,7 @@ private:
         createInfo.imageExtent = extent;
         createInfo.imageArrayLayers = 1;//1 for regular rendering; 2 for stereoscopic
         createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;//color attachment, since this is a render target
+        //if you pass the previous swap chain to createInfo.oldSwapChain, then that swap chain will be destroyed once it is finished with its work
 
         QueueFamilyIndices indices = findQueueFamilies(m_physicalDevice);
         uint32_t queueFamilyIndices[] = { (uint32_t)indices.graphicsFamily, (uint32_t)indices.presentFamily };
@@ -449,6 +468,7 @@ private:
             vkDestroyFramebuffer(m_device, m_swapChainFramebuffers[i], nullptr);
         }
 
+        //return command buffers to the pool from whence they came
         vkFreeCommandBuffers(m_device, m_commandPool, static_cast<uint32_t>(m_commandBuffers.size()), m_commandBuffers.data());
 
         vkDestroyPipeline(m_device, m_graphicsPipeline, nullptr);
@@ -1112,3 +1132,4 @@ int main()
 
     return EXIT_SUCCESS;
 }
+
