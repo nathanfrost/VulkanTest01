@@ -1002,40 +1002,46 @@ private:
         }
     }
 
-    void createVertexBuffer()
+    void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
     {
         VkBufferCreateInfo bufferInfo = {};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = sizeof(s_vertices[0]) * s_vertices.size();
-        bufferInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;//specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers
+        bufferInfo.size = size;
+        bufferInfo.usage = usage;
         bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        if (vkCreateBuffer(m_device, &bufferInfo, nullptr, &m_vertexBuffer) != VK_SUCCESS) 
+        if (vkCreateBuffer(m_device, &bufferInfo, nullptr, &buffer) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create vertex buffer!");
         }
 
         VkMemoryRequirements memRequirements;
-        vkGetBufferMemoryRequirements(m_device, m_vertexBuffer, &memRequirements);
+        vkGetBufferMemoryRequirements(m_device, buffer, &memRequirements);
 
         VkMemoryAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = findMemoryType(
-            memRequirements.memoryTypeBits, 
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT/*writable from the CPU*/ | 
-            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT/*memory will have i/o coherency. If not set, application may need to use vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges to flush/invalidate host cache*/);
+        allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits,properties);
 
-        if (vkAllocateMemory(m_device, &allocInfo, nullptr, &m_vertexBufferMemory) != VK_SUCCESS) 
+        if (vkAllocateMemory(m_device, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to allocate vertex buffer memory!");
         }
 
-        vkBindBufferMemory(m_device, m_vertexBuffer, m_vertexBufferMemory, 0);
+        vkBindBufferMemory(m_device, buffer, bufferMemory, 0);
+    }
 
+    void createVertexBuffer()
+    {
+        VkDeviceSize bufferSize = sizeof(s_vertices[0]) * s_vertices.size();
+        createBuffer(   bufferSize, 
+                        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, //specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers
+                        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT/*writable from the CPU*/ | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT/*memory will have i/o coherency. If not set, application may need to use vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges to flush/invalidate host cache*/,
+                        m_vertexBuffer, 
+                        m_vertexBufferMemory);
         void* data;
-        vkMapMemory(m_device, m_vertexBufferMemory, 0, bufferInfo.size, 0, &data);
-        memcpy(data, s_vertices.data(), (size_t)bufferInfo.size);
+        vkMapMemory(m_device, m_vertexBufferMemory, 0, bufferSize, 0, &data);
+        memcpy(data, s_vertices.data(), (size_t)bufferSize);
         vkUnmapMemory(m_device, m_vertexBufferMemory);
     }
 
