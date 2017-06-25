@@ -13,7 +13,12 @@
 #include<assert.h>
 #include<set>
 #include<algorithm>
+
+#define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <chrono>
 #include <array>
 
 #include"VDeleter.h"
@@ -109,6 +114,12 @@ struct Vertex
 
         return attributeDescriptions;
     }
+};
+
+struct UniformBufferObject {
+    glm::mat4 model;
+    glm::mat4 view;
+    glm::mat4 proj;
 };
 
 const std::vector<Vertex> s_vertices = 
@@ -534,6 +545,11 @@ private:
     void cleanup() 
     {
         cleanupSwapChain();
+        
+        vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
+        vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
+        vkDestroyBuffer(m_device, m_uniformBuffer, nullptr);
+        vkFreeMemory(m_device, m_uniformBufferMemory, nullptr);
 
         vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
         vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
@@ -695,6 +711,26 @@ private:
         vkGetDeviceQueue(m_device, indices.presentFamily, 0, &m_presentQueue);
     }
 
+    void createDescriptorSetLayout() 
+    {
+        VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+        uboLayoutBinding.binding = 0;
+        uboLayoutBinding.descriptorCount = 1;
+        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBinding.pImmutableSamplers = nullptr;
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &uboLayoutBinding;
+
+        if (vkCreateDescriptorSetLayout(m_device, &layoutInfo, nullptr, &m_descriptorSetLayout) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to create descriptor set layout!");
+        }
+    }
+
     void createGraphicsPipeline() 
     {
         auto vertShaderCode = readFile("shaders/vert.spv");
@@ -771,7 +807,7 @@ private:
         
         //standard backface culling
         rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;    
-        rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
         //no depth biasing (for example, might be used to help with peter-panning issues in projected shadows)
         rasterizer.depthBiasEnable = VK_FALSE;
@@ -847,8 +883,8 @@ private:
         //allows setting of uniform values across all shaders, like local-to-world matrix for vertex shader and texture samplers for fragment shader
         VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 0; // Optional
-        pipelineLayoutInfo.pSetLayouts = nullptr; // Optional
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = &m_descriptorSetLayout;
         pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
         pipelineLayoutInfo.pPushConstantRanges = 0; // Optional
 
@@ -1002,6 +1038,10 @@ private:
             vkCmdBindVertexBuffers(m_commandBuffers[i], 0, 1, vertexBuffers, offsets);
             vkCmdBindIndexBuffer(m_commandBuffers[i], m_indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
+            //note that with shader lines like the following, multiple descriptors can be passed such that per-object descriptors and shared descriptors can be passed in separate descriptor sets, so shared descriptors can be bound only once
+            //layout(set = 0, binding = 0) uniform UniformBufferObject { ... }
+            vkCmdBindDescriptorSets(m_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, m_pipelineLayout, 0, 1, &m_descriptorSet, 0, nullptr);
+
             vkCmdDrawIndexed(m_commandBuffers[i], static_cast<uint32_t>(s_indices.size()), 1, 0, 0, 0);
             vkCmdEndRenderPass(m_commandBuffers[i]);
 
@@ -1010,6 +1050,65 @@ private:
                 throw std::runtime_error("failed to record command buffer!");
             }
         }
+    }
+
+    void createUniformBuffer() 
+    {
+        VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+        createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, m_uniformBuffer, m_uniformBufferMemory);
+    }
+
+    void createDescriptorPool() 
+    {
+        VkDescriptorPoolSize poolSize = {};
+        poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSize.descriptorCount = 1;
+
+        VkDescriptorPoolCreateInfo poolInfo = {};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.poolSizeCount = 1;//number of elements in pPoolSizes
+        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.maxSets = 1;//max number of descriptor sets that can be allocated from the pool
+
+        if (vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to create descriptor pool!");
+        }
+    }
+
+    void createDescriptorSet() 
+    {
+        VkDescriptorSetLayout layouts[] = { m_descriptorSetLayout };
+        VkDescriptorSetAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = m_descriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = layouts;
+
+        if (vkAllocateDescriptorSets(m_device, &allocInfo, &m_descriptorSet) != VK_SUCCESS) 
+        {
+            throw std::runtime_error("failed to allocate descriptor set!");
+        }
+
+        VkDescriptorBufferInfo bufferInfo = {};
+        bufferInfo.buffer = m_uniformBuffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(UniformBufferObject);
+
+        VkWriteDescriptorSet descriptorWrite = {};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = m_descriptorSet;
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;//descriptor is not an array
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+
+        //one of the following three must be non-null
+        descriptorWrite.pBufferInfo = &bufferInfo;//if buffer data
+        descriptorWrite.pImageInfo = nullptr; //if image data
+        descriptorWrite.pTexelBufferView = nullptr; //if render view
+
+        vkUpdateDescriptorSets(m_device, 1, &descriptorWrite/*write to descriptor set*/, 0/*copy descriptor sets from one to another*/, nullptr);
     }
 
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
@@ -1165,11 +1264,15 @@ private:
         createSwapChain();
         createImageViews();
         createRenderPass();
+        createDescriptorSetLayout();
         createGraphicsPipeline();
         createFramebuffers();
         createCommandPool();
         createVertexBuffer();
         createIndexBuffer();
+        createUniformBuffer();
+        createDescriptorPool();
+        createDescriptorSet();
         createCommandBuffers();
         createSemaphores();
     }
@@ -1234,6 +1337,27 @@ private:
         {
             throw std::runtime_error("failed to create semaphores!");
         }
+    }
+
+    ///@todo: use push constants instead, since it's more efficient
+    void updateUniformBuffer() 
+    {
+        static auto startTime = std::chrono::high_resolution_clock::now();
+
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0f;
+
+        UniformBufferObject ubo = {};
+        ubo.model = glm::rotate(glm::mat4(), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.proj = glm::perspective(glm::radians(45.0f), m_swapChainExtent.width / (float)m_swapChainExtent.height, 0.1f, 10.0f);
+        ubo.proj[1][1] *= -1;//OpenGL's clipspace y-axis points in opposite direction of Vulkan's y-axis; doing this requires counterclockwise vertex winding
+
+        //don't use staging buffer, since the uniform buffer will be copied every frame, which means the staging overhead would probably degrade perf
+        void* data;
+        vkMapMemory(m_device, m_uniformBufferMemory, 0, sizeof(ubo), 0, &data);
+        memcpy(data, &ubo, sizeof(ubo));
+        vkUnmapMemory(m_device, m_uniformBufferMemory);
     }
 
     void drawFrame() 
@@ -1307,6 +1431,8 @@ private:
         while (!glfwWindowShouldClose(m_window)) 
         {
             glfwPollEvents();
+
+            updateUniformBuffer();
             drawFrame();
         }
 
@@ -1334,6 +1460,7 @@ private:
     std::vector<VkImageView> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
     std::vector<VkFramebuffer> m_swapChainFramebuffers;
     VkRenderPass m_renderPass;
+    VkDescriptorSetLayout m_descriptorSetLayout;
     VkPipelineLayout m_pipelineLayout;
     VkPipeline m_graphicsPipeline;
     VkCommandPool m_commandPool;
@@ -1341,7 +1468,11 @@ private:
     VkDeviceMemory m_vertexBufferMemory;
     VkBuffer m_indexBuffer;
     VkDeviceMemory m_indexBufferMemory;
-    std::vector<VkCommandBuffer> m_commandBuffers;//automatically freed when command pool is destroyed
+    VkBuffer m_uniformBuffer;
+    VkDeviceMemory m_uniformBufferMemory;
+    VkDescriptorPool m_descriptorPool;
+    VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed
+    std::vector<VkCommandBuffer> m_commandBuffers;//automatically freed when VkCommandPool is destroyed
 
     /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 
         used to synchronize operations within or across command queues */
