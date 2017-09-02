@@ -736,7 +736,7 @@ private:
         samplerLayoutBinding.binding = 1;
         samplerLayoutBinding.descriptorCount = 1;
         samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerLayoutBinding.pImmutableSamplers = nullptr;
+        samplerLayoutBinding.pImmutableSamplers = nullptr;///@todo: consider using this; immutable samplers compile sampler into shader, reducing latency in shader (on AMD the Scalar Arithmetic Logic Unit [SALU] is often underutilized, and is used to construct immutable samplers)
         samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
         std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
@@ -1046,7 +1046,7 @@ private:
 
     void createCommandBuffers() 
     {
-        m_commandBuffers.resize(m_swapChainFramebuffers.size());
+        m_commandBuffers.resize(m_swapChainFramebuffers.size());//bake one command buffer for every image in the swapchain so Vulkan can blast through them
 
         VkCommandBufferAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;//only value allowed
@@ -1126,6 +1126,7 @@ private:
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());//number of elements in pPoolSizes
         poolInfo.pPoolSizes = poolSizes.data();
         poolInfo.maxSets = 1;//max number of descriptor sets that can be allocated from the pool
+        poolInfo.flags = 0;//if you allocate and free descriptors, don't use VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT here because that's abdicating memory allocation to the driver.  Instead use vkResetDescriptorPool() because it amounts to changing an offset for (de)allocation
 
         if (vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS)
         {
@@ -1338,6 +1339,7 @@ private:
         allocInfo.commandPool = m_commandPool;
         allocInfo.commandBufferCount = 1;
 
+        ///@todo: pretty sure I should be using a pool of commmand buffers here
         VkCommandBuffer commandBuffer;
         vkAllocateCommandBuffers(m_device, &allocInfo, &commandBuffer);
 
@@ -1362,6 +1364,7 @@ private:
         vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
         vkQueueWaitIdle(m_graphicsQueue);//could use a fence, which would allow you to schedule multiple transfers simultaneously and wait for all of them complete, instead of executing one at a time
 
+        ///@todo: pretty sure I should be using a pool of commmand buffers here
         vkFreeCommandBuffers(m_device, m_commandPool, 1, &commandBuffer);
     }
 
@@ -1825,7 +1828,7 @@ private:
     void drawFrame() 
     {
         uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(m_device, m_swapChain, std::numeric_limits<uint64_t>::max(), m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(m_device, m_swapChain, std::numeric_limits<uint64_t>::max(), m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);//place the vkAcquireNextImageKHR() call as late as possible in the frame because this call can block according to the Vulkan spec.  Also note the spec allows the Acquire to return Image indexes in random order, so an application cannot assume round-robin order even with FIFO mode and a 2-deep swap chain
         if (result == VK_ERROR_OUT_OF_DATE_KHR) 
         {
             //swap chain can no longer be used for rendering
