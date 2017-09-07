@@ -1126,7 +1126,8 @@ private:
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());//number of elements in pPoolSizes
         poolInfo.pPoolSizes = poolSizes.data();
         poolInfo.maxSets = 1;//max number of descriptor sets that can be allocated from the pool
-        poolInfo.flags = 0;//if you allocate and free descriptors, don't use VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT here because that's abdicating memory allocation to the driver.  Instead use vkResetDescriptorPool() because it amounts to changing an offset for (de)allocation
+        poolInfo.flags = 0;//if you allocate and free descriptors, don't use VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT here because that's abdicating memory allocation to the driver.  Instead use vkResetDescriptorPool() because it amounts to changing an offset for (de)allocation
+
 
         if (vkCreateDescriptorPool(m_device, &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS)
         {
@@ -1725,8 +1726,8 @@ private:
 
         vkCmdPipelineBarrier(
             commandBuffer,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, //perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, //perform destination operation immediately (and not at some later stage, like the vertex shader or fragment shader
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, //perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader)
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, //perform destination operation immediately (and not at some later stage, like the vertex shader or fragment shader) -- this defines the smallest possible stage range, which means maximum performance (this call causes no additional waiting)
             0,
             0, nullptr,
             0, nullptr,
@@ -1765,7 +1766,7 @@ private:
             std::array<VkImageView, 2> attachments = 
             {
                 m_swapChainImageViews[i],
-                m_depthImageView
+                m_depthImageView    //only need one depth buffer, since there's only one frame being actively rendered to at any given time
             };
 
             VkFramebufferCreateInfo framebufferInfo = {};
