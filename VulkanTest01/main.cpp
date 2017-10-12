@@ -202,8 +202,8 @@ private:
 
         glfwWindowHint(GLFW_CLIENT_API/**<hard constrain API...*/, GLFW_NO_API/**<...to Vulkan, which does not use an API*/);
         /*
-        takes values set by glfwWindowHint()
-        width and height may vary as they're soft constraints
+            takes values set by glfwWindowHint()
+            width and height may vary as they're soft constraints
         */
         m_window = glfwCreateWindow(
             kWidth,
