@@ -181,9 +181,9 @@ private:
     };
 
 #ifdef NDEBUG
-    const bool enableValidationLayers = false;
+    const bool s_enableValidationLayers = false;
 #else
-    const bool enableValidationLayers = true;
+    const bool s_enableValidationLayers = true;
 #endif
 
     //Viewport and scissor rectangle size is specified during graphics pipeline creation, so the pipeline also needs to 
@@ -229,7 +229,7 @@ private:
             extensions.push_back(glfwExtensions[i]);
         }
 
-        if (enableValidationLayers) 
+        if (s_enableValidationLayers) 
         {
             extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);//VulkanSDK\VERSION_NUMBER\Config\vk_layer_settings.txt sets many options about layer strictness (warning,performance,error) and action taken (callback, log, breakpoint, Visual Studio output, nothing), as well as dump behavior (level of detail, output to file vs stdout, I/O flush behavior)
         }
@@ -239,7 +239,7 @@ private:
 
     void createInstance()
     {
-        if (enableValidationLayers && !checkValidationLayerSupport()) 
+        if (s_enableValidationLayers && !checkValidationLayerSupport()) 
         {
             throw std::runtime_error("validation layers requested, but not available!");
         }
@@ -260,7 +260,7 @@ private:
         createInfo.enabledExtensionCount = extensions.size();
         createInfo.ppEnabledExtensionNames = extensions.data();
 
-        if (enableValidationLayers)
+        if (s_enableValidationLayers)
         {
             createInfo.enabledLayerCount = m_validationLayers.size();
             createInfo.ppEnabledLayerNames = m_validationLayers.data();
@@ -283,7 +283,7 @@ private:
             const VkResult enumerateInstanceLayerPropertiesResult = vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
             assert(enumerateInstanceLayerPropertiesResult == VK_SUCCESS);
         }
-
+        
         std::vector<VkLayerProperties> availableLayers(layerCount);
         {
             const VkResult enumerateInstanceLayerPropertiesResult = vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
@@ -313,7 +313,7 @@ private:
 
     void setupDebugCallback() 
     {
-        if (!enableValidationLayers) return;
+        if (!s_enableValidationLayers) return;
 
         VkDebugReportCallbackCreateInfoEXT createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
@@ -704,7 +704,7 @@ private:
         createInfo.enabledExtensionCount = m_deviceExtensions.size();//require swapchain extension
         createInfo.ppEnabledExtensionNames = m_deviceExtensions.data();//require swapchain extension
 
-        if (enableValidationLayers) 
+        if (s_enableValidationLayers) 
         {
             createInfo.enabledLayerCount = m_validationLayers.size();
             createInfo.ppEnabledLayerNames = m_validationLayers.data();
