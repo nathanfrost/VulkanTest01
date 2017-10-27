@@ -257,12 +257,12 @@ private:
         createInfo.pApplicationInfo = &appInfo;
 
         auto extensions = getRequiredExtensions();
-        createInfo.enabledExtensionCount = extensions.size();
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
 
         if (s_enableValidationLayers)
         {
-            createInfo.enabledLayerCount = m_validationLayers.size();
+            createInfo.enabledLayerCount = static_cast<uint32_t>(m_validationLayers.size());
             createInfo.ppEnabledLayerNames = m_validationLayers.data();
         }
         else
@@ -701,12 +701,12 @@ private:
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
         createInfo.pEnabledFeatures = &deviceFeatures;
-        createInfo.enabledExtensionCount = m_deviceExtensions.size();//require swapchain extension
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(m_deviceExtensions.size());//require swapchain extension
         createInfo.ppEnabledExtensionNames = m_deviceExtensions.data();//require swapchain extension
 
         if (s_enableValidationLayers) 
         {
-            createInfo.enabledLayerCount = m_validationLayers.size();
+            createInfo.enabledLayerCount = static_cast<uint32_t>(m_validationLayers.size());
             createInfo.ppEnabledLayerNames = m_validationLayers.data();
         }
         else 
