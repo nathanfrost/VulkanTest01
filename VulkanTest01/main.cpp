@@ -36,6 +36,12 @@
 //don't complain about scanf being unsafe
 #pragma warning(disable : 4996)
 
+#define NTF_API_DUMP_VALIDATION_LAYER_ON 0
+#ifdef NDEBUG
+#define NTF_VALIDATION_LAYERS_ON 1
+#else
+#define NTF_VALIDATION_LAYERS_ON 1
+#endif//#ifdef NDEBUG
 
 const std::string MODEL_PATH = "models/chalet.obj";
 const std::string TEXTURE_PATH = "textures/chalet.jpg";
@@ -69,7 +75,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     const char* msg,
     void* userData) {
 
-    std::cerr << "validation layer: " << msg << std::endl;
+    std::cerr << std::endl << "validation layer: " << msg << std::endl;
 
     return VK_FALSE;
 }
@@ -178,13 +184,16 @@ private:
     const std::vector<const char*> m_validationLayers = 
     {
         "VK_LAYER_LUNARG_standard_validation"
+#if NTF_API_DUMP_VALIDATION_LAYER_ON
+        ,"VK_LAYER_LUNARG_api_dump"///<this produces "file not found" after outputting to (I believe) stdout for a short while; seems like it overruns Windows 7's file descriptor or something.  Weirdly, running from Visual Studio 2015 does not seem to have this problem, but then I'm limited to 9999 lines of the command prompt VS2015 uses for output.  Not ideal
+#endif//NTF_API_DUMP_VALIDATION_LAYER_ON
     };
 
-#ifdef NDEBUG
-    const bool s_enableValidationLayers = false;
-#else
+#if NTF_VALIDATION_LAYERS_ON
     const bool s_enableValidationLayers = true;
-#endif
+#else
+    const bool s_enableValidationLayers = false;
+#endif//#if NTF_VALIDATION_LAYERS_ON
 
     //Viewport and scissor rectangle size is specified during graphics pipeline creation, so the pipeline also needs to 
     //be rebuilt when the window is resized. It is possible to avoid this by using dynamic state for the viewports and scissor rectangles.
@@ -696,6 +705,8 @@ private:
         }
 
         VkPhysicalDeviceFeatures deviceFeatures = {};
+        deviceFeatures.samplerAnisotropy = true;
+
         VkDeviceCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
@@ -1699,7 +1710,7 @@ private:
             barrier.srcAccessMask = 0;
             barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;//specifies write access to an image or buffer in a clear or copy operation.
 
-            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;//perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader)
             destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         }
         else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) 
@@ -1726,8 +1737,8 @@ private:
 
         vkCmdPipelineBarrier(
             commandBuffer,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, //perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader)
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, //perform destination operation immediately (and not at some later stage, like the vertex shader or fragment shader) -- this defines the smallest possible stage range, which means maximum performance (this call causes no additional waiting)
+            sourceStage, 
+            destinationStage, 
             0,
             0, nullptr,
             0, nullptr,

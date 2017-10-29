@@ -1,3 +1,5 @@
+//verified against x86_debug_api_dump0.txt
+
 //BEG_SUMMARY
 INIT:
 
@@ -5,7 +7,7 @@ device
 validation layers and callback
 extensions
 windows surface, 
-swapchains and swapchain VkImageViews (one per framebuffer) and swapChain VkFramebuffer's
+swapchains and swapchain VkImageViews (one per framebuffer) and swapChain VkFramebuffer's with associated renderpass/subpass
 descriptors
 descriptor sets
 descriptor set layouts

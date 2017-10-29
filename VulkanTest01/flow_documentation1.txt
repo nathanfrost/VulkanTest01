@@ -1,0 +1,212 @@
+//BEG_SUMMARY
+INIT:
+
+device
+validation layers and callback
+extensions
+windows surface, 
+swapchains and swapchain VkImageViews (one per framebuffer) and swapChain VkFramebuffer's with associated renderpass/subpass
+descriptors
+descriptor sets
+descriptor set layouts
+fragment and vertex shader modules
+command pools (one for uniform buffers, one for combined image sampler) and command buffers (one per framebuffer)
+images and imageViews for both color and depth
+image and imageview for texture, texture sampler, 
+semaphores (one for imageAvailable and one for renderFinished)
+graphics pipeline
+
+
+MAIN_LOOP:
+
+vkMapMemory(UniformBufferObject) for model/view/projection matrices 
+vkAcquireNextImageKHR() -- recreate swapchain if necessary
+
+vkQueueSubmit()
+	renderPass with VkSubpassDependency srcSubPass=VK_SUBPASS_EXTERNAL and dstStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+	attachments: color, depth, vertex buffer, index buffer, image sampler, vertex shader, fragment shader, textureImageView
+
+vkQueuePresentKHR(VkSwapchainKHR)
+vkQueueWaitIdle(VkQueue m_presentQueue)
+//END_SUMMARY
+
+
+DETAILS:
+
+vkMapMemory(UniformBufferObject) for model/view/projection matrices 
+vkAcquireNextImageKHR() -- recreate swapchain if necessary
+wait on VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT VkSemaphore and signal m_renderFinishedSemaphore VkSemaphore on completion
+vkQueueSubmit()
+	//one command buffer per swapchain framebuffer
+	VK_COMMAND_BUFFER_LEVEL_PRIMARY	//primary can submit to execution queue, but not be submitted to other command buffers
+	VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT	//The command buffer can be resubmitted while it is also already pending execution
+	vkCreateFramebuffer
+		vkCreateRenderPass
+			colorAttachment
+				VK_SAMPLE_COUNT_1_BIT
+				VK_ATTACHMENT_LOAD_OP_CLEAR
+				VK_ATTACHMENT_STORE_OP_STORE
+				stencilOps=VK_ATTACHMENT_LOAD_OP_DONT_CARE,VK_ATTACHMENT_STORE_OP_DONT_CARE
+				initialLayout=VK_IMAGE_LAYOUT_UNDEFINED
+				finalLayout=VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+			depthAttachment
+				VK_SAMPLE_COUNT_1_BIT
+				VK_ATTACHMENT_LOAD_OP_CLEAR
+				VK_ATTACHMENT_STORE_OP_DONT_CARE
+				stencilOps=VK_ATTACHMENT_LOAD_OP_DONT_CARE,VK_ATTACHMENT_STORE_OP_DONT_CARE
+				initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+				finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+				image
+					VK_IMAGE_TILING_OPTIMAL
+					VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+					VK_IMAGE_LAYOUT_PREINITIALIZED	//seems bogus -- shouldn't this be DONTCARE?
+					VK_SAMPLE_COUNT_1_BIT
+					VK_SHARING_MODE_EXCLUSIVE
+					vkAllocateMemory//memory manager instead
+					vkBindImageMemory
+					vkCreateImageView
+					VK_IMAGE_LAYOUT_UNDEFINED to VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+					vkCmdPipelineBarrier
+						vkBeginCommandBuffer
+							barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | 
+							srcAccessMask = 0
+							dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+							sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+							destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT														
+						vkEndCommandBuffer(commandBuffer);
+						vkQueueSubmit(m_graphicsQueue)
+						vkQueueWaitIdle(m_graphicsQueue)
+						vkFreeCommandBuffers(m_device)//pretty sure this should be pooled
+			VkSubpassDependency
+				srcSubpass=VK_SUBPASS_EXTERNAL,dstSubpass=0
+				srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, srcAccessMask=0
+				dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+				dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT			
+			vkCmdBeginRenderPass
+			vkCmdBindPipeline
+				VK_SHADER_STAGE_VERTEX_BIT/VkShaderModule vertShaderModule
+				VK_SHADER_STAGE_FRAGMENT_BIT/VkShaderModule fragShaderModule
+				multisampling.alphaToCoverageEnable = VK_FALSE;
+				multisampling.alphaToOneEnable = VK_FALSE;
+				VkPipelineDepthStencilStateCreateInfo
+				VkPipelineColorBlendAttachmentState
+				VkPipelineColorBlendStateCreateInfo
+				VkPipelineLayoutCreateInfo	
+				vkCreateGraphicsPipelines
+			vkCmdBindVertexBuffers
+				staging
+					VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					VK_SHARING_MODE_EXCLUSIVE
+					vkBindBufferMemory
+					vkMapMemory/memcpy/vkUnmapMemory
+				final vertexBuffer
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+					VK_SHARING_MODE_EXCLUSIVE
+					vkBindBufferMemory
+					vkBeginCommandBuffer
+					vkCmdCopyBuffer
+					vkQueueSubmit(m_graphicsQueue)
+					vkQueueWaitIdle(m_graphicsQueue)
+					vkFreeCommandBuffers(m_device)//pretty sure this should be pooled			
+			vkCmdBindIndexBuffer
+				staging
+					VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					VK_SHARING_MODE_EXCLUSIVE
+					vkBindBufferMemory
+					vkMapMemory/memcpy/vkUnmapMemory			
+				final index buffer
+					VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+					VK_SHARING_MODE_EXCLUSIVE		
+					vkBeginCommandBuffer
+					vkCmdCopyBuffer
+					vkQueueSubmit(m_graphicsQueue)
+					vkQueueWaitIdle(m_graphicsQueue)
+					vkFreeCommandBuffers(m_device)//pretty sure this should be pooled			
+			vkCmdBindDescriptorSets	//VK_PIPELINE_BIND_POINT_GRAPHICS -- bind command buffer to pipeline and descriptorset
+				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER/VK_SHADER_STAGE_VERTEX_BIT	//descriptor set layout
+					VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT							//uniform buffer
+					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+					VK_SHARING_MODE_EXCLUSIVE
+					vkCreateBuffer
+					vkGetBufferMemoryRequirements
+					vkAllocateMemory///@todo: don't use vkAllocateMemory for individual buffers; instead use a custom allocator that splits up a single allocation among many different objects by using offset parameters (VulkanMemoryAllocator is an open source example).   We could also store multiple buffers, like the vertex and index buffer, into a single VkBuffer for cache.  It is even possible to reuse the same chunk of memory for multiple resources if they are not used during the same render operations, provided that their data is refreshed, of course. This is known as aliasing and some Vulkan functions have explicit flags to specify that you want to do this
+					vkBindBufferMemory()
+				VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER/VK_SHADER_STAGE_FRAGMENT_BIT/m_textureImageView/m_textureSampler	//descriptor set layout
+					staging	//VkImageView m_textureImageView
+						VK_BUFFER_USAGE_TRANSFER_SRC_BIT
+						VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+						VK_SHARING_MODE_EXCLUSIVE
+						vkAllocateMemory///@todo: don't use vkAllocateMemory for individual buffers; instead use a custom allocator that splits up a single allocation among many different objects by using offset parameters (VulkanMemoryAllocator is an open source example).   We could also store multiple buffers, like the vertex and index buffer, into a single VkBuffer for cache.  It is even possible to reuse the same chunk of memory for multiple resources if they are not used during the same render operations, provided that their data is refreshed, of course. This is known as aliasing and some Vulkan functions have explicit flags to specify that you want to do this
+						vkBindBufferMemory()
+						vkMapMemory/memcpy/vkUnmapMemory
+						VK_IMAGE_TILING_OPTIMAL	//VkImage m_textureImage
+						VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+						VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+						VK_IMAGE_LAYOUT_PREINITIALIZED	//seems bogus -- shouldn't this be DONTCARE?
+						VK_SAMPLE_COUNT_1_BIT
+						VK_SHARING_MODE_EXCLUSIVE
+						vkAllocateMemory//memory manager instead
+						vkBindImageMemory
+						vkBeginCommandBuffer
+							VK_IMAGE_LAYOUT_UNDEFINED to VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+							VK_IMAGE_ASPECT_COLOR_BIT
+							vkCmdPipelineBarrier()
+								srcAccessMask = 0
+								dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT
+								sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+								destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT							
+						vkEndCommandBuffer(commandBuffer);
+						vkQueueSubmit(m_graphicsQueue)
+						vkQueueWaitIdle(m_graphicsQueue)
+						vkFreeCommandBuffers(m_device)//pretty sure this should be pooled
+						vkBeginCommandBuffer
+							vkCmdCopyBufferToImage
+						vkEndCommandBuffer(commandBuffer);
+						vkQueueSubmit(m_graphicsQueue)
+						vkQueueWaitIdle(m_graphicsQueue)
+						vkFreeCommandBuffers(m_device)//pretty sure this should be pooled
+						vkBeginCommandBuffer
+							VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL to VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+							VK_IMAGE_ASPECT_COLOR_BIT
+							vkCmdPipelineBarrier
+								srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT
+								dstAccessMask = VK_ACCESS_SHADER_READ_BIT
+								sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT
+								destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT							
+						vkEndCommandBuffer(commandBuffer);						
+						vkCreateImageView //for VkImage texture image view
+					VkDescriptorImageInfo::imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					vkBeginCommandBuffer(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT)
+					VK_SHARING_MODE_EXCLUSIVE
+					memoryTypeIndex = 0x9
+					vkBindBufferMemory
+					Barrier
+						VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
+						VK_IMAGE_ASPECT_COLOR_BIT
+						VK_ACCESS_TRANSFER_WRITE_BIT
+						sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+						destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+						vkCmdPipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT)//perform operations immediately
+					vkEndCommandBuffer(commandBuffer);
+					vkQueueSubmit(m_graphicsQueue)
+					vkQueueWaitIdle(m_graphicsQueue)
+					vkFreeCommandBuffers(m_device)//pretty sure this should be pooled
+			vkCmdDrawIndexed
+		vkCmdEndRenderPass
+	vkEndCommandBuffer
+vkQueuePresentKHR(VkSwapchainKHR)
+	swapChainSupport.capabilities.minImageCount + 1 or swapChainSupport.capabilities.maxImageCount
+	VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR	//no alpha blending
+	VK_PRESENT_MODE_MAILBOX_KHR			//instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones
+	VK_FORMAT_B8G8R8A8_UNORM
+	VK_COLOR_SPACE_SRGB_NONLINEAR_KHR
+	VK_SHARING_MODE_EXCLUSIVE			//image is owned by one queue family at a time and ownership must be explicitly transfered before using it in another queue family. This option offers the best performance.
+	VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR
+vkQueueWaitIdle(VkQueue m_presentQueue)
