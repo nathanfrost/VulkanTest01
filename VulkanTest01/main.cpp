@@ -14,12 +14,8 @@
 #include<set>
 #include <unordered_map>
 #include<algorithm>
-
-#define STB_IMAGE_IMPLEMENTATION
-#include"stb_image.h"
-
-#define TINYOBJLOADER_IMPLEMENTATION
-#include"tiny_obj_loader.h"
+#include <chrono>
+#include <array>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -27,11 +23,14 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 
-#include <chrono>
-#include <array>
+#define STB_IMAGE_IMPLEMENTATION
+#include"stb_image.h"
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include"tiny_obj_loader.h"
 
 #include"VDeleter.h"
-
+#include"stdArrayUtility.h"
 
 //don't complain about scanf being unsafe
 #pragma warning(disable : 4996)
@@ -45,6 +44,7 @@
 
 const std::string MODEL_PATH = "models/chalet.obj";
 const std::string TEXTURE_PATH = "textures/chalet.jpg";
+#define NTF_DEVICE_EXTENSIONS_NUM 1
 
 
 static std::vector<char> readFile(const std::string& filename) 
@@ -632,20 +632,42 @@ private:
 
     bool checkDeviceExtensionSupport(VkPhysicalDevice device) 
     {
-        uint32_t extensionCount;
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+        uint32_t supportedExtensionCount;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &supportedExtensionCount, nullptr);
 
-        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
-
-        std::set<std::string> requiredExtensions(m_deviceExtensions.begin(), m_deviceExtensions.end());
-
-        for (const auto& extension : availableExtensions) 
+        const size_t maxExtensionCount=256;
+        if (supportedExtensionCount > maxExtensionCount)
         {
-            requiredExtensions.erase(extension.extensionName);
+            return false;
+        }
+        std::array<VkExtensionProperties, maxExtensionCount> supportedExtensions;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &supportedExtensionCount, supportedExtensions.data());
+
+        const char*const extensionSupportedSymbol = 0;
+        std::array<const char*, NTF_DEVICE_EXTENSIONS_NUM> requiredExtensions = m_deviceExtensions;
+        const size_t requiredExtensionsSize = requiredExtensions.size();
+        for (size_t supportedExtensionsIndex = 0; supportedExtensionsIndex < supportedExtensionCount; ++supportedExtensionsIndex)
+        {
+            for (size_t requiredExtensionsIndex = 0; requiredExtensionsIndex < requiredExtensionsSize; ++requiredExtensionsIndex)
+            {
+                const char*const requiredExtensionName = requiredExtensions[requiredExtensionsIndex];
+                if (requiredExtensionName != extensionSupportedSymbol &&
+                    strcmp(requiredExtensionName, supportedExtensions[supportedExtensionsIndex].extensionName) == 0)
+                {
+                    requiredExtensions[requiredExtensionsIndex] = extensionSupportedSymbol;
+                    break;
+                }
+            }
         }
 
-        return requiredExtensions.empty();
+        for (size_t requiredExtensionsIndex = 0; requiredExtensionsIndex < requiredExtensionsSize; ++requiredExtensionsIndex)
+        {
+            if (requiredExtensions[requiredExtensionsIndex] != extensionSupportedSymbol)
+            {
+                return false;//a required supportedExtension was not supported
+            }
+        }
+        return true;//all required extensions are supported
     }
 
     bool isDeviceSuitable(VkPhysicalDevice device) 
@@ -1934,7 +1956,7 @@ private:
     VkSwapchainKHR m_swapChain;//must be destroyed before the logical device
     VkQueue m_graphicsQueue;//queues are implicitly cleaned up with the logical device; no need to delete
     VkQueue m_presentQueue;//queues are implicitly cleaned up with the logical device; no need to delete
-    const std::vector<const char*> m_deviceExtensions =
+    const std::array<const char*, NTF_DEVICE_EXTENSIONS_NUM> m_deviceExtensions =
     {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
@@ -1976,6 +1998,8 @@ private:
 int main() 
 {
     HelloTriangleApplication app;
+
+
 
     try 
     {
