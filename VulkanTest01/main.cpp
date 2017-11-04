@@ -80,7 +80,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
     return VK_FALSE;
 }
 
-VkResult CreateDebugReportCallbackEXT(VkInstance instance, const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugReportCallbackEXT* pCallback) 
+VkResult CreateDebugReportCallbackEXT(
+	VkInstance instance, 
+	const VkDebugReportCallbackCreateInfoEXT* pCreateInfo, 
+	const VkAllocationCallbacks* pAllocator, 
+	VkDebugReportCallbackEXT* pCallback) 
 {
     auto func = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT");
     if (func != nullptr) 
@@ -163,10 +167,12 @@ struct UniformBufferObject {
     glm::mat4 proj;
 };
 
-class HelloTriangleApplication {
+class HelloTriangleApplication 
+{
 public:
 
-    void run() {
+    void run() 
+	{
         initWindow();
         initVulkan();
         mainLoop();
@@ -199,7 +205,10 @@ private:
     //be rebuilt when the window is resized. It is possible to avoid this by using dynamic state for the viewports and scissor rectangles.
     static void onWindowResized(GLFWwindow* window, int width, int height)
     {
-        if (width == 0 || height == 0) return;//handle the case where the window was minimized
+        if (width == 0 || height == 0) 
+		{
+			return;//handle the case where the window was minimized
+		}
 
         HelloTriangleApplication* app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
         app->recreateSwapChain();
@@ -210,10 +219,7 @@ private:
         glfwInit();
 
         glfwWindowHint(GLFW_CLIENT_API/**<hard constrain API...*/, GLFW_NO_API/**<...to Vulkan, which does not use an API*/);
-        /*
-            takes values set by glfwWindowHint()
-            width and height may vary as they're soft constraints
-        */
+        //takes values set by glfwWindowHint() -- width and height may vary as they're soft constraints
         m_window = glfwCreateWindow(
             kWidth,
             kHeight,
@@ -665,7 +671,8 @@ private:
     {
         uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr);
-        if (deviceCount == 0) {
+        if (deviceCount == 0) 
+        {
             throw std::runtime_error("failed to find GPUs with Vulkan support!");
         }
 
@@ -1499,7 +1506,7 @@ private:
     VkFormat findDepthFormat() 
     {
         return findSupportedFormat(
-        { VK_FORMAT_D32_SFLOAT/**<*32bit depth*/, VK_FORMAT_D32_SFLOAT_S8_UINT/**<*32bit depth, 8bit stencil*/, VK_FORMAT_D24_UNORM_S8_UINT/**<*24bit depth, 8bit stencil*/ },
+        {   VK_FORMAT_D32_SFLOAT/**<*32bit depth*/, VK_FORMAT_D32_SFLOAT_S8_UINT/**<*32bit depth, 8bit stencil*/, VK_FORMAT_D24_UNORM_S8_UINT/**<*24bit depth, 8bit stencil*/ },
             VK_IMAGE_TILING_OPTIMAL,
             VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
     }
