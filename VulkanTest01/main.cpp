@@ -11,7 +11,6 @@
 #include<functional>
 #include<vector>
 #include<assert.h>
-#include<set>
 #include <unordered_map>
 #include<algorithm>
 #include <chrono>
@@ -42,11 +41,12 @@
 #define NTF_VALIDATION_LAYERS_ON 1
 #endif//#ifdef NDEBUG
 
-const std::string MODEL_PATH = "models/chalet.obj";
-const std::string TEXTURE_PATH = "textures/chalet.jpg";
+const char*const sk_ModelPath = "models/chalet.obj";
+const char*const sk_texturePath = "textures/chalet.jpg";
 #define NTF_DEVICE_EXTENSIONS_NUM 1
 
 
+///@todo: replace with proper allocation strategy for streaming
 static std::vector<char> readFile(const std::string& filename) 
 {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -187,7 +187,13 @@ private:
     const uint32_t kWidth = 800; 
     const uint32_t kHeight = 600;
 
-    const std::vector<const char*> m_validationLayers = 
+#define NTF_VALIDATION_LAYERS_BASE_SIZE 1
+#if NTF_API_DUMP_VALIDATION_LAYER_ON
+    #define NTF_VALIDATION_LAYERS_SIZE (NTF_VALIDATION_LAYERS_BASE_SIZE + 1)
+#else
+    #define NTF_VALIDATION_LAYERS_SIZE (NTF_VALIDATION_LAYERS_BASE_SIZE)
+#endif//NTF_API_DUMP_VALIDATION_LAYER_ON
+    const std::array<const char*const, NTF_VALIDATION_LAYERS_SIZE> m_validationLayers = 
     {
         "VK_LAYER_LUNARG_standard_validation"
 #if NTF_API_DUMP_VALIDATION_LAYER_ON
@@ -231,25 +237,29 @@ private:
         glfwSetWindowSizeCallback(m_window, HelloTriangleApplication::onWindowResized);
     }
 
-    std::vector<const char*> getRequiredExtensions() 
+    template<size_t requiredExtensionsMaxNum>
+    void getRequiredExtensions(std::array<const char*, requiredExtensionsMaxNum>*const requiredExtensions, uint32_t*const requiredExtensionsCount)
     {
-        std::vector<const char*> extensions;
+        assert(requiredExtensions);
+        assert(requiredExtensionsCount);
+        
+        uint32_t& requiredExtensionsCountRef = *requiredExtensionsCount;
+        requiredExtensionsCountRef = 0;
 
         unsigned int glfwExtensionCount = 0;
         const char** glfwExtensions;
         glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+        assert(glfwExtensionCount <= requiredExtensionsMaxNum);
 
         for (unsigned int i = 0; i < glfwExtensionCount; i++) 
         {
-            extensions.push_back(glfwExtensions[i]);
+            (*requiredExtensions)[requiredExtensionsCountRef++] = glfwExtensions[i];
         }
 
         if (s_enableValidationLayers) 
         {
-            extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);//VulkanSDK\VERSION_NUMBER\Config\vk_layer_settings.txt sets many options about layer strictness (warning,performance,error) and action taken (callback, log, breakpoint, Visual Studio output, nothing), as well as dump behavior (level of detail, output to file vs stdout, I/O flush behavior)
+            (*requiredExtensions)[requiredExtensionsCountRef++] = VK_EXT_DEBUG_REPORT_EXTENSION_NAME;//VulkanSDK\VERSION_NUMBER\Config\vk_layer_settings.txt sets many options about layer strictness (warning,performance,error) and action taken (callback, log, breakpoint, Visual Studio output, nothing), as well as dump behavior (level of detail, output to file vs stdout, I/O flush behavior)
         }
-
-        return extensions;
     }
 
     void createInstance()
@@ -267,12 +277,15 @@ private:
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.apiVersion = VK_API_VERSION_1_0;
 
+        
         VkInstanceCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         createInfo.pApplicationInfo = &appInfo;
 
-        auto extensions = getRequiredExtensions();
-        createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
+        std::array<const char*, 32> extensions;
+        uint32_t extensionsCount;
+        getRequiredExtensions(&extensions, &extensionsCount);
+        createInfo.enabledExtensionCount = extensionsCount;
         createInfo.ppEnabledExtensionNames = extensions.data();
 
         if (s_enableValidationLayers)
@@ -293,13 +306,15 @@ private:
 
     bool checkValidationLayerSupport()
     {
+        const int layersMax = 32;
         uint32_t layerCount;
         {
             const VkResult enumerateInstanceLayerPropertiesResult = vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
             assert(enumerateInstanceLayerPropertiesResult == VK_SUCCESS);
+            assert(layerCount <= layersMax);
         }
         
-        std::vector<VkLayerProperties> availableLayers(layerCount);
+        std::array<VkLayerProperties, layersMax> availableLayers;
         {
             const VkResult enumerateInstanceLayerPropertiesResult = vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
             assert( enumerateInstanceLayerPropertiesResult == VK_SUCCESS);
@@ -343,34 +358,38 @@ private:
 
     struct SwapChainSupportDetails 
     {
+        enum { kItemsMax = 32 };
         VkSurfaceCapabilitiesKHR capabilities;
-        std::vector<VkSurfaceFormatKHR> formats;
-        std::vector<VkPresentModeKHR> presentModes;
+        std::array<VkSurfaceFormatKHR, kItemsMax> formats;
+        uint32_t formatCount;
+
+        std::array<VkPresentModeKHR, kItemsMax> presentModes;
+        uint32_t presentModeCount;
     };
 
-    SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device) 
+    void querySwapChainSupport(SwapChainSupportDetails*const swapChainSupportDetails, VkPhysicalDevice device)
     {
-        SwapChainSupportDetails details;
+        assert(swapChainSupportDetails);
 
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &details.capabilities);
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &swapChainSupportDetails->capabilities);
 
-        uint32_t formatCount;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, nullptr);
-        if (formatCount != 0) 
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &swapChainSupportDetails->formatCount, nullptr);
+        if (swapChainSupportDetails->formatCount != 0)
         {
-            details.formats.resize(formatCount);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, details.formats.data());
+            assert(swapChainSupportDetails->formatCount <= SwapChainSupportDetails::kItemsMax);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &swapChainSupportDetails->formatCount, swapChainSupportDetails->formats.data());
         }
 
-        uint32_t presentModeCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, nullptr);
-        if (presentModeCount != 0) 
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &swapChainSupportDetails->presentModeCount, nullptr);
+        if (swapChainSupportDetails->presentModeCount != 0)
         {
-            details.presentModes.resize(presentModeCount);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, details.presentModes.data());
+            assert(swapChainSupportDetails->presentModeCount <= SwapChainSupportDetails::kItemsMax);
+            vkGetPhysicalDeviceSurfacePresentModesKHR(
+                device, 
+                m_surface, 
+                &swapChainSupportDetails->presentModeCount, 
+                swapChainSupportDetails->presentModes.data());
         }
-
-        return details;
     }
 
     struct QueueFamilyIndices 
@@ -421,17 +440,21 @@ private:
         return indices;
     }
 
-    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) 
+    template<size_t kItemsMax>
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::array<VkSurfaceFormatKHR, kItemsMax>& availableFormats, const size_t availableFormatsNum)
     {
-        if (availableFormats.size() == 1 && availableFormats[0].format == VK_FORMAT_UNDEFINED) 
+        assert(availableFormatsNum > 0);
+
+        if (availableFormatsNum == 1 && availableFormats[0].format == VK_FORMAT_UNDEFINED) 
         {
             //all formats are supported, so return whatever we want
             return{ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
         }
 
         //there are some format limitations; see if we can find the desired format
-        for (const auto& availableFormat : availableFormats) 
+        for (size_t availableFormatsIndex = 0; availableFormatsIndex < availableFormatsNum; ++availableFormatsIndex)
         {
+            const auto& availableFormat = availableFormats[availableFormatsIndex];
             if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) 
             {
                 return availableFormat;
@@ -441,10 +464,14 @@ private:
         return availableFormats[0];//couldn't find the desired format
     }
 
-    VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR> availablePresentModes) 
+    template<size_t kItemsMax>
+    VkPresentModeKHR chooseSwapPresentMode(const std::array<VkPresentModeKHR, kItemsMax>& availablePresentModes, const size_t availablePresentModesNum)
     {
-        for (const auto& availablePresentMode : availablePresentModes) 
+        assert(availablePresentModesNum);
+
+        for (size_t availablePresentModesIndex = 0; availablePresentModesIndex < availablePresentModesNum; ++availablePresentModesIndex)
         {
+            const auto& availablePresentMode = availablePresentModes[availablePresentModesIndex];
             if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) //instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones
             {
                 return availablePresentMode;
@@ -483,10 +510,11 @@ private:
 
     void createSwapChain() 
     {
-        SwapChainSupportDetails swapChainSupport = querySwapChainSupport(m_physicalDevice);
+        SwapChainSupportDetails swapChainSupport;
+        querySwapChainSupport(&swapChainSupport, m_physicalDevice);
 
-        VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-        VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+        VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats, swapChainSupport.formatCount);
+        VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes, swapChainSupport.presentModeCount);
         VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
         //implement triple-buffering by allowing one more buffer than the minimum image count required by the swap chain
@@ -679,7 +707,8 @@ private:
         bool swapChainAdequate = false;
         if (extensionsSupported) 
         {
-            SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device);
+            SwapChainSupportDetails swapChainSupport;
+            querySwapChainSupport(&swapChainSupport, device);
             swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
         }
 
@@ -718,19 +747,25 @@ private:
     void createLogicalDevice() 
     {
         QueueFamilyIndices indices = findQueueFamilies(m_physicalDevice);
-
-        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-        std::set<int> uniqueQueueFamilies = { indices.graphicsFamily, indices.presentFamily };
+        
+        const uint32_t queueFamiliesNum = 2;
+        std::array<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos;
+        std::array<int, queueFamiliesNum> uniqueQueueFamilies = { indices.graphicsFamily, indices.presentFamily };
+        size_t uniqueQueueFamiliesNum;
+        SortAndRemoveDuplicatesFromArray(&uniqueQueueFamilies, &uniqueQueueFamiliesNum);
 
         const float queuePriority = 1.0f;
-        for (int queueFamily : uniqueQueueFamilies) 
+        int queueCreateInfosIndex = 0;
+        for (size_t uniqueQueueFamiliesIndex = 0; uniqueQueueFamiliesIndex < uniqueQueueFamiliesNum; ++uniqueQueueFamiliesIndex)
         {
+            const int queueFamily = uniqueQueueFamilies[uniqueQueueFamiliesIndex];
+
             VkDeviceQueueCreateInfo queueCreateInfo = {};
             queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             queueCreateInfo.queueFamilyIndex = queueFamily;
             queueCreateInfo.queueCount = 1;
             queueCreateInfo.pQueuePriorities = &queuePriority;
-            queueCreateInfos.push_back(queueCreateInfo);
+            queueCreateInfos[queueCreateInfosIndex++] = queueCreateInfo;
         }
 
         VkPhysicalDeviceFeatures deviceFeatures = {};
@@ -739,7 +774,7 @@ private:
         VkDeviceCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
-        createInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
+        createInfo.queueCreateInfoCount = static_cast<uint32_t>(uniqueQueueFamiliesNum);
         createInfo.pEnabledFeatures = &deviceFeatures;
         createInfo.enabledExtensionCount = static_cast<uint32_t>(m_deviceExtensions.size());//require swapchain extension
         createInfo.ppEnabledExtensionNames = m_deviceExtensions.data();//require swapchain extension
@@ -1270,7 +1305,7 @@ private:
         std::vector<tinyobj::material_t> materials;
         std::string err;
 
-        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, MODEL_PATH.c_str())) 
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, sk_ModelPath)) 
         {
             throw std::runtime_error(err);
         }
@@ -1547,7 +1582,7 @@ private:
     void createTextureImage() 
     {
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        stbi_uc* pixels = stbi_load(sk_texturePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
         if (!pixels) 
