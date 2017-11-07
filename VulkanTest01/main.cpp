@@ -410,23 +410,26 @@ private:
         uint32_t queueFamilyCount = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
 
-        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+        const uint32_t queueFamilyPropertyMaxNum = 8;
+        assert(queueFamilyCount <= queueFamilyPropertyMaxNum);
 
-        int i = 0;
-        for (const auto& queueFamily : queueFamilies) 
+        std::array<VkQueueFamilyProperties, queueFamilyPropertyMaxNum> queueFamilies;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+        
+        for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < queueFamilyCount; ++queueFamilyIndex)
         {
-            if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) 
+            const VkQueueFamilyProperties& queueFamilyProperties = queueFamilies[queueFamilyIndex];
+            if (queueFamilyProperties.queueCount > 0 && queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT) 
             {
-                indices.graphicsFamily = i;//queue supports rendering functionality
+                indices.graphicsFamily = queueFamilyIndex;//queue supports rendering functionality
             }
 
             //TODO NTF: add logic to explicitly prefer a physical device that supports drawing and presentation in the same queue for improved performance rather than use presentFamily and graphicsFamily as separate queues
             VkBool32 presentSupport = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &presentSupport);
-            if (queueFamily.queueCount > 0 && presentSupport)
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, queueFamilyIndex, m_surface, &presentSupport);
+            if (queueFamilyProperties.queueCount > 0 && presentSupport)
             {
-                indices.presentFamily = i;//queue supports present functionality
+                indices.presentFamily = queueFamilyIndex;//queue supports present functionality
             }
 
             if (indices.isComplete()) 
@@ -434,7 +437,7 @@ private:
                 break;
             }
 
-            i++;
+            queueFamilyIndex++;
         }
 
         return indices;
