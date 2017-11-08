@@ -47,7 +47,7 @@ const char*const sk_texturePath = "textures/chalet.jpg";
 
 
 ///@todo: replace with proper allocation strategy for streaming
-static std::vector<char> readFile(const std::string& filename) 
+static std::vector<char> readFile(const char*const filename) 
 {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
@@ -57,7 +57,7 @@ static std::vector<char> readFile(const std::string& filename)
     }
 
     size_t fileSize = (size_t)file.tellg();
-    std::vector<char> buffer(fileSize);
+    std::vector<char> buffer(fileSize);///<@todo: streaming memory management
     file.seekg(0);
     file.read(buffer.data(), fileSize);
     file.close();
@@ -730,10 +730,14 @@ private:
             throw std::runtime_error("failed to find GPUs with Vulkan support!");
         }
 
-        std::vector<VkPhysicalDevice> devices(deviceCount);
+        const uint32_t deviceMax = 8;
+        assert(deviceCount <= deviceMax);
+        std::array<VkPhysicalDevice, deviceMax> devices;
+
         vkEnumeratePhysicalDevices(m_instance, &deviceCount, devices.data());
-        for (const auto& device : devices) 
+        for (uint32_t deviceIndex = 0; deviceIndex < deviceCount; ++deviceIndex)
         {
+            const VkPhysicalDevice& device = devices[deviceIndex];
             if (isDeviceSuitable(device)) 
             {
                 m_physicalDevice = device;
@@ -1304,9 +1308,9 @@ private:
     void loadModel() 
     {
         tinyobj::attrib_t attrib;
-        std::vector<tinyobj::shape_t> shapes;
-        std::vector<tinyobj::material_t> materials;
-        std::string err;
+        std::vector<tinyobj::shape_t> shapes;///<@todo: streaming memory management
+        std::vector<tinyobj::material_t> materials;///<@todo: streaming memory management
+        std::string err;///<@todo: streaming memory management
 
         if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &err, sk_ModelPath)) 
         {
@@ -2015,8 +2019,8 @@ private:
     VkDeviceMemory m_textureImageMemory;
     VkImageView m_textureImageView;
     VkSampler m_textureSampler;
-    std::vector<Vertex> m_vertices;
-    std::vector<uint32_t> m_indices;
+    std::vector<Vertex> m_vertices;///<@todo: streaming memory management
+    std::vector<uint32_t> m_indices;///<@todo: streaming memory management
     VkBuffer m_vertexBuffer;
     VkDeviceMemory m_vertexBufferMemory;
     VkBuffer m_indexBuffer;
