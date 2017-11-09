@@ -1545,12 +1545,15 @@ private:
     }
 
     VkFormat findSupportedFormat(
-        const std::vector<VkFormat>& candidates, 
+        const VkFormat*const candidates,
+        const size_t candidatesNum,
         VkImageTiling tiling, 
         VkFormatFeatureFlags features) 
     {
-        for (VkFormat format : candidates) 
+        for (size_t candidatesIndex = 0; candidatesIndex < candidatesNum; ++candidatesIndex)
         {
+            const VkFormat format = candidates[candidatesIndex];
+
             VkFormatProperties props;
             vkGetPhysicalDeviceFormatProperties(m_physicalDevice, format, &props);
 
@@ -1569,8 +1572,15 @@ private:
 
     VkFormat findDepthFormat() 
     {
+        std::array<VkFormat, 3> candidates =
+        {
+            VK_FORMAT_D32_SFLOAT, /**<*32bit depth*/
+            VK_FORMAT_D32_SFLOAT_S8_UINT, /**<*32bit depth, 8bit stencil*/
+            VK_FORMAT_D24_UNORM_S8_UINT/**<*24bit depth, 8bit stencil*/
+        };
         return findSupportedFormat(
-        {   VK_FORMAT_D32_SFLOAT/**<*32bit depth*/, VK_FORMAT_D32_SFLOAT_S8_UINT/**<*32bit depth, 8bit stencil*/, VK_FORMAT_D24_UNORM_S8_UINT/**<*24bit depth, 8bit stencil*/ },
+            candidates.data(),
+            candidates.size(),
             VK_IMAGE_TILING_OPTIMAL,
             VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
     }
