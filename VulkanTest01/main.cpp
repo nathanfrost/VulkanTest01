@@ -521,17 +521,17 @@ private:
         VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
         //implement triple-buffering by allowing one more buffer than the minimum image count required by the swap chain
-        uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
+        m_swapChainImagesNum = swapChainSupport.capabilities.minImageCount + 1;
         if (swapChainSupport.capabilities.maxImageCount > 0 && //0 means max image count is unlimited
-            imageCount > swapChainSupport.capabilities.maxImageCount) 
+            m_swapChainImagesNum > swapChainSupport.capabilities.maxImageCount)
         {
-            imageCount = swapChainSupport.capabilities.maxImageCount;
+            m_swapChainImagesNum = swapChainSupport.capabilities.maxImageCount;
         }
 
         VkSwapchainCreateInfoKHR createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
         createInfo.surface = m_surface;
-        createInfo.minImageCount = imageCount;
+        createInfo.minImageCount = m_swapChainImagesNum;
         createInfo.imageFormat = surfaceFormat.format;
         createInfo.imageColorSpace = surfaceFormat.colorSpace;
         createInfo.imageExtent = extent;
@@ -566,9 +566,9 @@ private:
         }
 
         //extract swap chain image handles
-        vkGetSwapchainImagesKHR(m_device, m_swapChain, &imageCount, nullptr);
-        m_swapChainImages.resize(imageCount);
-        vkGetSwapchainImagesKHR(m_device, m_swapChain, &imageCount, m_swapChainImages.data());
+        vkGetSwapchainImagesKHR(m_device, m_swapChain, &m_swapChainImagesNum, nullptr);
+        assert(m_swapChainImagesNum <= kSwapChainImagesNumMax);
+        vkGetSwapchainImagesKHR(m_device, m_swapChain, &m_swapChainImagesNum, m_swapChainImages.data());
 
         m_swapChainImageFormat = surfaceFormat.format;
         m_swapChainExtent = extent;
@@ -653,9 +653,9 @@ private:
 
     void createImageViews()
     {
-        m_swapChainImageViews.resize(m_swapChainImages.size());
+        m_swapChainImageViews.resize(m_swapChainImagesNum);
 
-        for (size_t i = 0; i < m_swapChainImages.size(); i++)
+        for (size_t i = 0; i < m_swapChainImagesNum; i++)
         {
             m_swapChainImageViews[i] = createImageView(m_swapChainImages[i], m_swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
         }
@@ -2012,7 +2012,9 @@ private:
     {
         VK_KHR_SWAPCHAIN_EXTENSION_NAME
     };
-    std::vector<VkImage> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html
+    enum { kSwapChainImagesNumMax=8 };
+    uint32_t m_swapChainImagesNum;
+    std::array<VkImage, kSwapChainImagesNumMax> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html
     VkFormat m_swapChainImageFormat;
     VkExtent2D m_swapChainExtent;
     std::vector<VkImageView> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
@@ -2050,8 +2052,6 @@ private:
 int main() 
 {
     HelloTriangleApplication app;
-
-
 
     try 
     {
