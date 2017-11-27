@@ -47,6 +47,36 @@ public:
         m_sizeCurrentSet = true;
 #endif//#if NTF_ARRAY_FIXED_DEBUG
         m_sizeCurrent = size;
+
+        assert(m_sizeCurrent <= kSizeMax);
+        assert(m_sizeCurrent >= 0);
+    }
+    ///@todo: unit tests
+    void sizeIncrement()
+    {
+#if NTF_ARRAY_FIXED_DEBUG
+        assert(m_sizeCurrentSet);
+#endif//#if NTF_ARRAY_FIXED_DEBUG
+        ++m_sizeCurrent;
+        assert(m_sizeCurrent <= kSizeMax);
+        assert(m_sizeCurrent >= 0);
+    }
+    ///@todo: unit tests
+    void sizeDecrement()
+    {
+#if NTF_ARRAY_FIXED_DEBUG
+        assert(m_sizeCurrentSet);
+#endif//#if NTF_ARRAY_FIXED_DEBUG
+        --m_sizeCurrent;
+        assert(m_sizeCurrent <= kSizeMax);
+        assert(m_sizeCurrent >= 0);
+    }
+    ///@todo: unit tests
+    void Push(const T& item)
+    {
+        size_t indexForItem = m_sizeCurrent;
+        sizeIncrement();
+        operator[](indexForItem) = item;
     }
 
     const T* GetAddressOfUnderlyingArray() const
@@ -69,6 +99,7 @@ public:
         assert(pos < m_sizeCurrent);
         assert(pos < kSizeMax);
         assert(m_sizeCurrent <= kSizeMax);
+        assert(m_sizeCurrent >= 0);
 
         return const_cast<reference>(static_cast<const ThisDataType*>(this)->GetChecked(pos));
     }
@@ -78,6 +109,7 @@ public:
         assert(m_sizeCurrentSet);
 #endif//#if NTF_ARRAY_FIXED_DEBUG
         assert(m_sizeCurrent <= kSizeMax);
+        assert(m_sizeCurrent >= 0);
         return m_sizeCurrent - 1;
     }
     size_t GetOneAfterLastValidIndex() const
@@ -86,12 +118,9 @@ public:
         assert(m_sizeCurrentSet);
 #endif//#if NTF_ARRAY_FIXED_DEBUG
         assert(m_sizeCurrent <= kSizeMax);
+        assert(m_sizeCurrent >= 0);
         return GetLastValidIndex() + 1;
     }
-    //size_t GetOneBeforeFirstValidIndex() const
-    //{
-    //    return size_t(-1);
-    //}
 
     reference operator[](size_type pos) 
     {
@@ -157,18 +186,7 @@ public:
         return rbegin();
     }
 
-    //reverse_iterator rend() noexcept
-    //{
-    //    return reverse_iterator(GetOneBeforeFirstValidIndex());
-    //}
-    //const_reverse_iterator rend() const noexcept
-    //{
-    //    return const_reverse_iterator(rend());
-    //}
-    //const_reverse_iterator crend() const noexcept
-    //{
-    //    return rend();
-    //}
+    //iterator rend() and crend() purposefully omitted because underlying std::array implementation is already correct
 
     bool empty() const noexcept 
     {

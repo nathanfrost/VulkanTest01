@@ -114,10 +114,6 @@ int main()
     {
         ExitOnFail(__LINE__);
     }
-    //if (arrayFixed.GetOneBeforeFirstValidIndex() != size_t(-1))
-    //{
-    //    ExitOnFail(__LINE__);
-    //}
     for (int i = 0; i < actualSize; ++i)
     {
         if (arrayFixed[i] != i)
@@ -203,6 +199,16 @@ int main()
         ExitOnFail(__LINE__);
     }
 
+    arrayFixedTwo.Push(static_cast<int>(arrayFixedTwo.size()));
+    if (arrayFixedTwo.back() != static_cast<int>(arrayFixedTwo.size()) - 1)
+    {
+        ExitOnFail(__LINE__);
+    }
+    arrayFixedTwo.sizeDecrement();
+    if (arrayFixedTwo.size() != arrayFixed.size())
+    {
+        ExitOnFail(__LINE__);
+    }
     ConstMethodTesting(arrayFixed, actualSize, lastValidValue);
 
     ConsolePauseForUserAcknowledgement();

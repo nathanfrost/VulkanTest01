@@ -121,7 +121,9 @@ struct Vertex
         return bindingDescription;
     }
 
-    static void getAttributeDescriptions(std::array<VkVertexInputAttributeDescription, 3>* const attributeDescriptions)
+    enum{kGetAttributeDescriptionsSize=3};
+    static void getAttributeDescriptions(
+        std::array<VkVertexInputAttributeDescription, kGetAttributeDescriptionsSize>* const attributeDescriptions)
     {
         assert(attributeDescriptions);
 
@@ -234,28 +236,26 @@ private:
         glfwSetWindowSizeCallback(m_window, HelloTriangleApplication::onWindowResized);
     }
 
-    template<size_t requiredExtensionsMaxNum>
-    void getRequiredExtensions(std::array<const char*, requiredExtensionsMaxNum>*const requiredExtensions, uint32_t*const requiredExtensionsCount)
+    template<size_t kRequiredExtensionsMaxNum>
+    void getRequiredExtensions(ArrayFixed<const char*, kRequiredExtensionsMaxNum>*const requiredExtensions)
     {
         assert(requiredExtensions);
-        assert(requiredExtensionsCount);
         
-        uint32_t& requiredExtensionsCountRef = *requiredExtensionsCount;
-        requiredExtensionsCountRef = 0;
+        requiredExtensions->size(0);
 
         unsigned int glfwExtensionCount = 0;
         const char** glfwExtensions;
         glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-        assert(glfwExtensionCount <= requiredExtensionsMaxNum);
+        assert(glfwExtensionCount <= kRequiredExtensionsMaxNum);
 
         for (unsigned int i = 0; i < glfwExtensionCount; i++) 
         {
-            (*requiredExtensions)[requiredExtensionsCountRef++] = glfwExtensions[i];
+            requiredExtensions->Push(glfwExtensions[i]);
         }
 
         if (s_enableValidationLayers) 
         {
-            (*requiredExtensions)[requiredExtensionsCountRef++] = VK_EXT_DEBUG_REPORT_EXTENSION_NAME;//VulkanSDK\VERSION_NUMBER\Config\vk_layer_settings.txt sets many options about layer strictness (warning,performance,error) and action taken (callback, log, breakpoint, Visual Studio output, nothing), as well as dump behavior (level of detail, output to file vs stdout, I/O flush behavior)
+            requiredExtensions->Push(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);//VulkanSDK\VERSION_NUMBER\Config\vk_layer_settings.txt sets many options about layer strictness (warning,performance,error) and action taken (callback, log, breakpoint, Visual Studio output, nothing), as well as dump behavior (level of detail, output to file vs stdout, I/O flush behavior)
         }
     }
 
@@ -279,10 +279,9 @@ private:
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         createInfo.pApplicationInfo = &appInfo;
 
-        std::array<const char*, 32> extensions;
-        uint32_t extensionsCount;
-        getRequiredExtensions(&extensions, &extensionsCount);
-        createInfo.enabledExtensionCount = extensionsCount;
+        ArrayFixed<const char*, 32> extensions;
+        getRequiredExtensions(&extensions);
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
 
         if (s_enableValidationLayers)
@@ -357,8 +356,7 @@ private:
     {
         enum { kItemsMax = 32 };
         VkSurfaceCapabilitiesKHR capabilities;
-        std::array<VkSurfaceFormatKHR, kItemsMax> formats;
-        uint32_t formatCount;
+        ArrayFixed<VkSurfaceFormatKHR, kItemsMax> formats;
 
         std::array<VkPresentModeKHR, kItemsMax> presentModes;
         uint32_t presentModeCount;
@@ -370,11 +368,13 @@ private:
 
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &swapChainSupportDetails->capabilities);
 
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &swapChainSupportDetails->formatCount, nullptr);
-        if (swapChainSupportDetails->formatCount != 0)
+        uint32_t formatCount;
+        vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, nullptr);
+        if (formatCount != 0)
         {
-            assert(swapChainSupportDetails->formatCount <= SwapChainSupportDetails::kItemsMax);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &swapChainSupportDetails->formatCount, swapChainSupportDetails->formats.data());
+            assert(formatCount <= SwapChainSupportDetails::kItemsMax);
+            vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, swapChainSupportDetails->formats.data());
+            swapChainSupportDetails->formats.size(formatCount);
         }
 
         vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &swapChainSupportDetails->presentModeCount, nullptr);
@@ -513,7 +513,7 @@ private:
         SwapChainSupportDetails swapChainSupport;
         querySwapChainSupport(&swapChainSupport, m_physicalDevice);
 
-        VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats, swapChainSupport.formatCount);
+        VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats, swapChainSupport.formats.size());
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes, swapChainSupport.presentModeCount);
         VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
@@ -863,7 +863,7 @@ private:
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
         auto bindingDescription = Vertex::getBindingDescription();
-        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions;
+        std::array <VkVertexInputAttributeDescription, Vertex::kGetAttributeDescriptionsSize> attributeDescriptions;
         Vertex::getAttributeDescriptions(&attributeDescriptions);
 
         vertexInputInfo.vertexBindingDescriptionCount = 1;
