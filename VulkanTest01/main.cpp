@@ -1,6 +1,4 @@
 //originally from https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Base_code
-//TODO: Next:
-//https://vulkan-tutorial.com/Drawing_a_triangle/Drawing/Rendering_and_presentation
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
@@ -33,6 +31,7 @@
 
 //don't complain about scanf being unsafe
 #pragma warning(disable : 4996)
+///@todo: figure out which libraries I'm linking that trigger LNK4098 (seems like some libraries are linking /MD and /MDd and others are linking /MT and /MTd for C-runtime) -- for now, pass /IGNORE:4098 to the linker
 
 #define NTF_API_DUMP_VALIDATION_LAYER_ON 0
 #ifdef NDEBUG
@@ -122,26 +121,24 @@ struct Vertex
         return bindingDescription;
     }
 
-    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() 
+    static void getAttributeDescriptions(std::array<VkVertexInputAttributeDescription, 3>* const attributeDescriptions)
     {
-        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions = {};
+        assert(attributeDescriptions);
 
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;///<mirrored in the vertex shader
-        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;//equivalent to vec3 layout
-        attributeDescriptions[0].offset = offsetof(Vertex, pos);//defines address of first byte of the relevant datafield
+        (*attributeDescriptions)[0].binding = 0;
+        (*attributeDescriptions)[0].location = 0;///<mirrored in the vertex shader
+        (*attributeDescriptions)[0].format = VK_FORMAT_R32G32B32_SFLOAT;//equivalent to vec3 layout
+        (*attributeDescriptions)[0].offset = offsetof(Vertex, pos);//defines address of first byte of the relevant datafield
 
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
+        (*attributeDescriptions)[1].binding = 0;
+        (*attributeDescriptions)[1].location = 1;
+        (*attributeDescriptions)[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+        (*attributeDescriptions)[1].offset = offsetof(Vertex, color);
 
-        attributeDescriptions[2].binding = 0;
-        attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
-
-        return attributeDescriptions;
+        (*attributeDescriptions)[2].binding = 0;
+        (*attributeDescriptions)[2].location = 2;
+        (*attributeDescriptions)[2].format = VK_FORMAT_R32G32_SFLOAT;
+        (*attributeDescriptions)[2].offset = offsetof(Vertex, texCoord);
     }
 
     bool operator==(const Vertex& other) const 
@@ -866,7 +863,8 @@ private:
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
         auto bindingDescription = Vertex::getBindingDescription();
-        auto attributeDescriptions = Vertex::getAttributeDescriptions();
+        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions;
+        Vertex::getAttributeDescriptions(&attributeDescriptions);
 
         vertexInputInfo.vertexBindingDescriptionCount = 1;
         vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
