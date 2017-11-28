@@ -242,12 +242,9 @@ private:
         assert(requiredExtensions);
         
         requiredExtensions->size(0);
-
         unsigned int glfwExtensionCount = 0;
         const char** glfwExtensions;
         glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-        assert(glfwExtensionCount <= kRequiredExtensionsMaxNum);
-
         for (unsigned int i = 0; i < glfwExtensionCount; i++) 
         {
             requiredExtensions->Push(glfwExtensions[i]);
@@ -357,9 +354,7 @@ private:
         enum { kItemsMax = 32 };
         VkSurfaceCapabilitiesKHR capabilities;
         ArrayFixed<VkSurfaceFormatKHR, kItemsMax> formats;
-
-        std::array<VkPresentModeKHR, kItemsMax> presentModes;
-        uint32_t presentModeCount;
+        ArrayFixed<VkPresentModeKHR, kItemsMax> presentModes;
     };
 
     void querySwapChainSupport(SwapChainSupportDetails*const swapChainSupportDetails, VkPhysicalDevice device)
@@ -370,21 +365,21 @@ private:
 
         uint32_t formatCount;
         vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, nullptr);
-        if (formatCount != 0)
+        swapChainSupportDetails->formats.size(formatCount);
+        if (swapChainSupportDetails->formats.size() != 0)
         {
-            assert(formatCount <= SwapChainSupportDetails::kItemsMax);
             vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, swapChainSupportDetails->formats.data());
-            swapChainSupportDetails->formats.size(formatCount);
         }
 
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &swapChainSupportDetails->presentModeCount, nullptr);
-        if (swapChainSupportDetails->presentModeCount != 0)
+        uint32_t presentModeCount;
+        vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, nullptr);
+        swapChainSupportDetails->presentModes.size(presentModeCount);
+        if (swapChainSupportDetails->presentModes.size() != 0)
         {
-            assert(swapChainSupportDetails->presentModeCount <= SwapChainSupportDetails::kItemsMax);
             vkGetPhysicalDeviceSurfacePresentModesKHR(
                 device, 
                 m_surface, 
-                &swapChainSupportDetails->presentModeCount, 
+                &presentModeCount, 
                 swapChainSupportDetails->presentModes.data());
         }
     }
@@ -441,8 +436,9 @@ private:
     }
 
     template<size_t kItemsMax>
-    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::array<VkSurfaceFormatKHR, kItemsMax>& availableFormats, const size_t availableFormatsNum)
+    VkSurfaceFormatKHR chooseSwapSurfaceFormat(const ArrayFixed<VkSurfaceFormatKHR, kItemsMax>& availableFormats)
     {
+        size_t availableFormatsNum = availableFormats.size();
         assert(availableFormatsNum > 0);
 
         if (availableFormatsNum == 1 && availableFormats[0].format == VK_FORMAT_UNDEFINED) 
@@ -452,9 +448,8 @@ private:
         }
 
         //there are some format limitations; see if we can find the desired format
-        for (size_t availableFormatsIndex = 0; availableFormatsIndex < availableFormatsNum; ++availableFormatsIndex)
+        for (const auto& availableFormat:availableFormats)
         {
-            const auto& availableFormat = availableFormats[availableFormatsIndex];
             if (availableFormat.format == VK_FORMAT_B8G8R8A8_UNORM && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) 
             {
                 return availableFormat;
@@ -465,13 +460,12 @@ private:
     }
 
     template<size_t kItemsMax>
-    VkPresentModeKHR chooseSwapPresentMode(const std::array<VkPresentModeKHR, kItemsMax>& availablePresentModes, const size_t availablePresentModesNum)
+    VkPresentModeKHR chooseSwapPresentMode(const ArrayFixed<VkPresentModeKHR, kItemsMax>& availablePresentModes)
     {
-        assert(availablePresentModesNum);
+        assert(availablePresentModes.size());
 
-        for (size_t availablePresentModesIndex = 0; availablePresentModesIndex < availablePresentModesNum; ++availablePresentModesIndex)
+        for (const auto& availablePresentMode:availablePresentModes)
         {
-            const auto& availablePresentMode = availablePresentModes[availablePresentModesIndex];
             if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) //instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones
             {
                 return availablePresentMode;
@@ -513,9 +507,9 @@ private:
         SwapChainSupportDetails swapChainSupport;
         querySwapChainSupport(&swapChainSupport, m_physicalDevice);
 
-        VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats, swapChainSupport.formats.size());
-        VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes, swapChainSupport.presentModeCount);
-        VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
+        const VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
+        const VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
+        const VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
         //implement triple-buffering by allowing one more buffer than the minimum image count required by the swap chain
         m_swapChainImagesNum = swapChainSupport.capabilities.minImageCount + 1;
