@@ -401,13 +401,9 @@ private:
 
         uint32_t queueFamilyCount = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-        const uint32_t queueFamilyPropertyMaxNum = 8;
-        assert(queueFamilyCount <= queueFamilyPropertyMaxNum);
-
-        std::array<VkQueueFamilyProperties, queueFamilyPropertyMaxNum> queueFamilies;
+        ArrayFixed<VkQueueFamilyProperties, 8> queueFamilies(queueFamilyCount);
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
-        
+
         for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < queueFamilyCount; ++queueFamilyIndex)
         {
             const VkQueueFamilyProperties& queueFamilyProperties = queueFamilies[queueFamilyIndex];
@@ -662,19 +658,19 @@ private:
         {
             return false;
         }
-        std::array<VkExtensionProperties, maxExtensionCount> supportedExtensions;
+        ArrayFixed<VkExtensionProperties, maxExtensionCount> supportedExtensions(supportedExtensionCount);
         vkEnumerateDeviceExtensionProperties(device, nullptr, &supportedExtensionCount, supportedExtensions.data());
 
         const char*const extensionSupportedSymbol = 0;
         std::array<const char*, NTF_DEVICE_EXTENSIONS_NUM> requiredExtensions = m_deviceExtensions;
         const size_t requiredExtensionsSize = requiredExtensions.size();
-        for (size_t supportedExtensionsIndex = 0; supportedExtensionsIndex < supportedExtensionCount; ++supportedExtensionsIndex)
+        for (VkExtensionProperties supportedExtension:supportedExtensions)
         {
             for (size_t requiredExtensionsIndex = 0; requiredExtensionsIndex < requiredExtensionsSize; ++requiredExtensionsIndex)
             {
                 const char*const requiredExtensionName = requiredExtensions[requiredExtensionsIndex];
                 if (requiredExtensionName != extensionSupportedSymbol &&
-                    strcmp(requiredExtensionName, supportedExtensions[supportedExtensionsIndex].extensionName) == 0)
+                    strcmp(requiredExtensionName, supportedExtension.extensionName) == 0)
                 {
                     requiredExtensions[requiredExtensionsIndex] = extensionSupportedSymbol;
                     break;
@@ -682,9 +678,9 @@ private:
             }
         }
 
-        for (size_t requiredExtensionsIndex = 0; requiredExtensionsIndex < requiredExtensionsSize; ++requiredExtensionsIndex)
+        for (const char*const requiredExtension:requiredExtensions)
         {
-            if (requiredExtensions[requiredExtensionsIndex] != extensionSupportedSymbol)
+            if (requiredExtension != extensionSupportedSymbol)
             {
                 return false;//a required supportedExtension was not supported
             }
