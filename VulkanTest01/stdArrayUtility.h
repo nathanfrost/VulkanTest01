@@ -282,26 +282,25 @@ size_t ArrayInBytesMaxSize(const std::array<T, size> &a)
     return a.size()*sizeof(a[0]);
 }
 
+///@todo:unit test
 template<class T, size_t size>
-void SortAndRemoveDuplicatesFromArray(std::array<T, size>*const a, size_t*const uniqueElementsNum)
+void SortAndRemoveDuplicatesFromArray(ArrayFixed<T, size>*const a)
 {
     assert(a);
-    assert(uniqueElementsNum);
-
     std::sort(a->begin(), a->end());
-    RemoveDuplicatesFromSortedArray(a, uniqueElementsNum);
+    RemoveDuplicatesFromSortedArray(a);
 }
 
+///@todo:unit test
 template<class T, size_t size>
-void RemoveDuplicatesFromSortedArray(std::array<T, size>*const a, size_t*const uniqueElementsNum)
+void RemoveDuplicatesFromSortedArray(ArrayFixed<T, size>*const a)
 {
     assert(a);
-    assert(uniqueElementsNum);
-
     std::array<T, size>& aRef = *a;
 
     int uniqueIndex = 0;
-    for (int index = 1; index < size; ++index)
+    const size_t currentSize = a->size();
+    for (size_t index = 1; index < currentSize; ++index)
     {
         T& previousElement = aRef[index - 1];
         T& currentElement = aRef[index];
@@ -310,5 +309,5 @@ void RemoveDuplicatesFromSortedArray(std::array<T, size>*const a, size_t*const u
             aRef[++uniqueIndex] = currentElement;
         }
     }
-    *uniqueElementsNum = uniqueIndex + 1;
+    a->size(uniqueIndex + 1);
 }

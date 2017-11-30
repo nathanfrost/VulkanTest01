@@ -743,23 +743,21 @@ private:
         QueueFamilyIndices indices = findQueueFamilies(m_physicalDevice);
         
         const uint32_t queueFamiliesNum = 2;
-        std::array<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos;
-        std::array<int, queueFamiliesNum> uniqueQueueFamilies = { indices.graphicsFamily, indices.presentFamily };
-        size_t uniqueQueueFamiliesNum;
-        SortAndRemoveDuplicatesFromArray(&uniqueQueueFamilies, &uniqueQueueFamiliesNum);
+        ArrayFixed<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos(0);
+        ArrayFixed<int, queueFamiliesNum> uniqueQueueFamilies(0);
+        uniqueQueueFamilies.Push(indices.graphicsFamily);
+        uniqueQueueFamilies.Push(indices.presentFamily);
+        SortAndRemoveDuplicatesFromArray(&uniqueQueueFamilies);
 
         const float queuePriority = 1.0f;
-        int queueCreateInfosIndex = 0;
-        for (size_t uniqueQueueFamiliesIndex = 0; uniqueQueueFamiliesIndex < uniqueQueueFamiliesNum; ++uniqueQueueFamiliesIndex)
+        for (const int queueFamily:uniqueQueueFamilies)
         {
-            const int queueFamily = uniqueQueueFamilies[uniqueQueueFamiliesIndex];
-
             VkDeviceQueueCreateInfo queueCreateInfo = {};
             queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
             queueCreateInfo.queueFamilyIndex = queueFamily;
             queueCreateInfo.queueCount = 1;
             queueCreateInfo.pQueuePriorities = &queuePriority;
-            queueCreateInfos[queueCreateInfosIndex++] = queueCreateInfo;
+            queueCreateInfos.Push(queueCreateInfo);
         }
 
         VkPhysicalDeviceFeatures deviceFeatures = {};
@@ -768,7 +766,7 @@ private:
         VkDeviceCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
-        createInfo.queueCreateInfoCount = static_cast<uint32_t>(uniqueQueueFamiliesNum);
+        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pEnabledFeatures = &deviceFeatures;
         createInfo.enabledExtensionCount = static_cast<uint32_t>(m_deviceExtensions.size());//require swapchain extension
         createInfo.ppEnabledExtensionNames = m_deviceExtensions.data();//require swapchain extension
