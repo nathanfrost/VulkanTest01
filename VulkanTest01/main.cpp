@@ -123,7 +123,7 @@ struct Vertex
 
     enum{kGetAttributeDescriptionsSize=3};
     static void getAttributeDescriptions(
-        std::array<VkVertexInputAttributeDescription, kGetAttributeDescriptionsSize>* const attributeDescriptions)
+        ArrayFixed<VkVertexInputAttributeDescription, kGetAttributeDescriptionsSize>* const attributeDescriptions)
     {
         assert(attributeDescriptions);
 
@@ -718,13 +718,11 @@ private:
         }
 
         const uint32_t deviceMax = 8;
-        assert(deviceCount <= deviceMax);
-        std::array<VkPhysicalDevice, deviceMax> devices;
-
+        ArrayFixed<VkPhysicalDevice, deviceMax> devices;
         vkEnumeratePhysicalDevices(m_instance, &deviceCount, devices.data());
-        for (uint32_t deviceIndex = 0; deviceIndex < deviceCount; ++deviceIndex)
+        devices.size(deviceCount);
+        for (const VkPhysicalDevice& device:devices)
         {
-            const VkPhysicalDevice& device = devices[deviceIndex];
             if (isDeviceSuitable(device)) 
             {
                 m_physicalDevice = device;
@@ -851,7 +849,7 @@ private:
         vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
         auto bindingDescription = Vertex::getBindingDescription();
-        std::array <VkVertexInputAttributeDescription, Vertex::kGetAttributeDescriptionsSize> attributeDescriptions;
+        ArrayFixed<VkVertexInputAttributeDescription, Vertex::kGetAttributeDescriptionsSize> attributeDescriptions(Vertex::kGetAttributeDescriptionsSize);
         Vertex::getAttributeDescriptions(&attributeDescriptions);
 
         vertexInputInfo.vertexBindingDescriptionCount = 1;
