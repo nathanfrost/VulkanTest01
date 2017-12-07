@@ -209,6 +209,14 @@ int main()
     {
         ExitOnFail(__LINE__);
     }
+
+    ArrayFixed<int, kSizeMax> arrayFixedCopy;
+    arrayFixedCopy.Copy(arrayFixed);
+    if (arrayFixedCopy != arrayFixed)
+    {
+        ExitOnFail(__LINE__);
+    }
+
     ConstMethodTesting(arrayFixed, actualSize, lastValidValue);
 
     ConsolePauseForUserAcknowledgement();

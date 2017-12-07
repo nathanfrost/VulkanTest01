@@ -192,13 +192,7 @@ private:
 #else
     #define NTF_VALIDATION_LAYERS_SIZE (NTF_VALIDATION_LAYERS_BASE_SIZE)
 #endif//NTF_API_DUMP_VALIDATION_LAYER_ON
-    const std::array<const char*const, NTF_VALIDATION_LAYERS_SIZE> m_validationLayers = 
-    {
-        "VK_LAYER_LUNARG_standard_validation"
-#if NTF_API_DUMP_VALIDATION_LAYER_ON
-        ,"VK_LAYER_LUNARG_api_dump"///<this produces "file not found" after outputting to (I believe) stdout for a short while; seems like it overruns Windows 7's file descriptor or something.  Weirdly, running from Visual Studio 2015 does not seem to have this problem, but then I'm limited to 9999 lines of the command prompt VS2015 uses for output.  Not ideal
-#endif//NTF_API_DUMP_VALIDATION_LAYER_ON
-    };
+    ArrayFixed<const char*, NTF_VALIDATION_LAYERS_SIZE> m_validationLayers;
 
 #if NTF_VALIDATION_LAYERS_ON
     const bool s_enableValidationLayers = true;
@@ -304,13 +298,13 @@ private:
         {
             const VkResult enumerateInstanceLayerPropertiesResult = vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
             assert(enumerateInstanceLayerPropertiesResult == VK_SUCCESS);
-            assert(layerCount <= layersMax);
         }
         
-        std::array<VkLayerProperties, layersMax> availableLayers;
+        ArrayFixed<VkLayerProperties, layersMax> availableLayers(layerCount);
         {
             const VkResult enumerateInstanceLayerPropertiesResult = vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-            assert( enumerateInstanceLayerPropertiesResult == VK_SUCCESS);
+            assert(enumerateInstanceLayerPropertiesResult == VK_SUCCESS);
+            availableLayers.size(layerCount);
         }
 
         for (const char* layerName : m_validationLayers)
@@ -662,7 +656,8 @@ private:
         vkEnumerateDeviceExtensionProperties(device, nullptr, &supportedExtensionCount, supportedExtensions.data());
 
         const char*const extensionSupportedSymbol = 0;
-        std::array<const char*, NTF_DEVICE_EXTENSIONS_NUM> requiredExtensions = m_deviceExtensions;
+        ArrayFixed<const char*, NTF_DEVICE_EXTENSIONS_NUM> requiredExtensions;
+        requiredExtensions.Copy(m_deviceExtensions);
         const size_t requiredExtensionsSize = requiredExtensions.size();
         for (VkExtensionProperties supportedExtension:supportedExtensions)
         {
@@ -719,6 +714,7 @@ private:
 
         const uint32_t deviceMax = 8;
         ArrayFixed<VkPhysicalDevice, deviceMax> devices;
+        devices.size(deviceCount);
         vkEnumeratePhysicalDevices(m_instance, &deviceCount, devices.data());
         devices.size(deviceCount);
         for (const VkPhysicalDevice& device:devices)
@@ -1465,6 +1461,15 @@ private:
 
     void initVulkan() 
     {
+        m_validationLayers.size(0);
+        m_validationLayers.Push("VK_LAYER_LUNARG_standard_validation");
+#if NTF_API_DUMP_VALIDATION_LAYER_ON
+        m_validationLayers.Push("VK_LAYER_LUNARG_api_dump");///<this produces "file not found" after outputting to (I believe) stdout for a short while; seems like it overruns Windows 7's file descriptor or something.  Weirdly, running from Visual Studio 2015 does not seem to have this problem, but then I'm limited to 9999 lines of the command prompt VS2015 uses for output.  Not ideal
+#endif//NTF_API_DUMP_VALIDATION_LAYER_ON
+
+        m_deviceExtensions.size(0);
+        m_deviceExtensions.Push(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+
         createInstance();
         setupDebugCallback();
         createSurface();//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
@@ -1992,10 +1997,7 @@ private:
     VkSwapchainKHR m_swapChain;//must be destroyed before the logical device
     VkQueue m_graphicsQueue;//queues are implicitly cleaned up with the logical device; no need to delete
     VkQueue m_presentQueue;//queues are implicitly cleaned up with the logical device; no need to delete
-    const std::array<const char*, NTF_DEVICE_EXTENSIONS_NUM> m_deviceExtensions =
-    {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
-    };
+    ArrayFixed<const char*, NTF_DEVICE_EXTENSIONS_NUM> m_deviceExtensions;
     enum { kSwapChainImagesNumMax=8 };
     uint32_t m_swapChainImagesNum;
     std::array<VkImage, kSwapChainImagesNumMax> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html

@@ -32,6 +32,13 @@ public:
         m_sizeCurrentSet = true;
 #endif//#if NTF_ARRAY_FIXED_DEBUG
     }
+    template<size_t kSizeMaxOther>
+    void Copy(const ArrayFixed<T, kSizeMaxOther>& arrayFixedOther)
+    {
+        const size_t arrayFixedOtherSize = arrayFixedOther.size();
+        size(arrayFixedOtherSize);
+        memcpy(GetAddressOfUnderlyingArray(), arrayFixedOther.GetAddressOfUnderlyingArray(), arrayFixedOtherSize*sizeof(T));                                              
+    }
 
     size_type size() const noexcept
     {
