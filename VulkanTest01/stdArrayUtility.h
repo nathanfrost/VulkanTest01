@@ -32,12 +32,28 @@ public:
         m_sizeCurrentSet = true;
 #endif//#if NTF_ARRAY_FIXED_DEBUG
     }
+    ArrayFixed(const std::initializer_list<T>& initializerList)
+    {
+#if NTF_ARRAY_FIXED_DEBUG
+        m_sizeCurrentSet = true;
+#endif//#if NTF_ARRAY_FIXED_DEBUG
+        MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
+    }
     template<size_t kSizeMaxOther>
     void Copy(const ArrayFixed<T, kSizeMaxOther>& arrayFixedOther)
     {
-        const size_t arrayFixedOtherSize = arrayFixedOther.size();
-        size(arrayFixedOtherSize);
-        memcpy(GetAddressOfUnderlyingArray(), arrayFixedOther.GetAddressOfUnderlyingArray(), arrayFixedOtherSize*sizeof(T));                                              
+        MemcpyFromStart(arrayFixedOther.GetAddressOfUnderlyingArray(), arrayFixedOther.SizeCurrentInBytes());
+    }
+
+    void MemcpyFromStart(const T*const input, const size_t inputBytesNum)
+    {
+        assert(input);
+        assert(inputBytesNum > 0);
+        assert(inputBytesNum <= SizeMaxInBytes());
+        assert(inputBytesNum % sizeof(T) == 0);
+
+        memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
+        size(inputBytesNum / sizeof(T));
     }
 
     size_type size() const noexcept
@@ -68,7 +84,6 @@ public:
         assert(m_sizeCurrent <= kSizeMax);
         assert(m_sizeCurrent >= 0);
     }
-    ///@todo: unit tests
     void sizeDecrement()
     {
 #if NTF_ARRAY_FIXED_DEBUG
@@ -78,7 +93,14 @@ public:
         assert(m_sizeCurrent <= kSizeMax);
         assert(m_sizeCurrent >= 0);
     }
-    ///@todo: unit tests
+    size_t SizeCurrentInBytes() const
+    {
+        return size()*sizeof(T);
+    }
+    size_t SizeMaxInBytes() const
+    {
+        return kSizeMax*sizeof(T);
+    }
     void Push(const T& item)
     {
         size_t indexForItem = m_sizeCurrent;
@@ -280,13 +302,6 @@ const T&& get(ArrayFixed<T, N>&& a) noexcept
 {
     //if the implementation of this ever changes, update unit tests to cover the new implementation
     return a.GetChecked(I);
-}
-
-
-template<class T, size_t size>
-size_t ArrayInBytesMaxSize(const std::array<T, size> &a)
-{
-    return a.size()*sizeof(a[0]);
 }
 
 ///@todo:unit test

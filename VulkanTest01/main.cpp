@@ -738,9 +738,7 @@ private:
         
         const uint32_t queueFamiliesNum = 2;
         ArrayFixed<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos(0);
-        ArrayFixed<int, queueFamiliesNum> uniqueQueueFamilies(0);
-        uniqueQueueFamilies.Push(indices.graphicsFamily);
-        uniqueQueueFamilies.Push(indices.presentFamily);
+        ArrayFixed<int, queueFamiliesNum> uniqueQueueFamilies({indices.graphicsFamily, indices.presentFamily});
         SortAndRemoveDuplicatesFromArray(&uniqueQueueFamilies);
 
         const float queuePriority = 1.0f;
@@ -800,9 +798,7 @@ private:
         samplerLayoutBinding.pImmutableSamplers = nullptr;///@todo: consider using this; immutable samplers compile sampler into shader, reducing latency in shader (on AMD the Scalar Arithmetic Logic Unit [SALU] is often underutilized, and is used to construct immutable samplers)
         samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        ArrayFixed<VkDescriptorSetLayoutBinding, 2> bindings(0);
-        bindings.Push(uboLayoutBinding); 
-        bindings.Push(samplerLayoutBinding);
+        ArrayFixed<VkDescriptorSetLayoutBinding, 2> bindings({ uboLayoutBinding,samplerLayoutBinding });
 
         VkDescriptorSetLayoutCreateInfo layoutInfo = {};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1093,10 +1089,7 @@ private:
         dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-        ArrayFixed<VkAttachmentDescription, 2> attachments(0);
-        attachments.Push(colorAttachment); 
-        attachments.Push(depthAttachment);
-
+        ArrayFixed<VkAttachmentDescription, 2> attachments({colorAttachment,depthAttachment});
         VkRenderPassCreateInfo renderPassInfo = {};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -1473,8 +1466,7 @@ private:
         m_validationLayers.Push("VK_LAYER_LUNARG_api_dump");///<this produces "file not found" after outputting to (I believe) stdout for a short while; seems like it overruns Windows 7's file descriptor or something.  Weirdly, running from Visual Studio 2015 does not seem to have this problem, but then I'm limited to 9999 lines of the command prompt VS2015 uses for output.  Not ideal
 #endif//NTF_API_DUMP_VALIDATION_LAYER_ON
 
-        m_deviceExtensions.size(0);
-        m_deviceExtensions.Push(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+        m_deviceExtensions = ArrayFixed<const char*,1>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
 
         createInstance();
         setupDebugCallback();

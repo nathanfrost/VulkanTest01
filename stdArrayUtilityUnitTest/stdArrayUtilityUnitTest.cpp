@@ -94,6 +94,14 @@ int main()
     
     const size_t actualSize = 12;
     arrayFixed.size(actualSize);
+    if (arrayFixed.SizeCurrentInBytes() != actualSize*sizeof(int))
+    {
+        ExitOnFail(__LINE__);
+    }
+    if (arrayFixed.SizeMaxInBytes() != kSizeMax*sizeof(int))
+    {
+        ExitOnFail(__LINE__);
+    }
     for (int i = 0; i < actualSize; ++i)
     {
         arrayFixed[i] = i;
@@ -172,6 +180,10 @@ int main()
     {
         ExitOnFail(__LINE__);
     }
+    if(arrayFixedEmpty.SizeCurrentInBytes() != 0)
+    {
+        ExitOnFail(__LINE__);
+    }
 
     if (arrayFixedEmpty == arrayFixed)
     {
@@ -199,13 +211,14 @@ int main()
         ExitOnFail(__LINE__);
     }
 
+    const int arrayFixedTwoOldBack = arrayFixedTwo.back();
     arrayFixedTwo.Push(static_cast<int>(arrayFixedTwo.size()));
-    if (arrayFixedTwo.back() != static_cast<int>(arrayFixedTwo.size()) - 1)
+    if (arrayFixedTwo.back() != static_cast<int>(arrayFixedTwo.size()) - 1 || arrayFixedTwo.size() != arrayFixed.size() + 1)
     {
         ExitOnFail(__LINE__);
     }
     arrayFixedTwo.sizeDecrement();
-    if (arrayFixedTwo.size() != arrayFixed.size())
+    if (arrayFixedTwo.size() != arrayFixed.size() || arrayFixedTwo.back() != arrayFixedTwoOldBack)
     {
         ExitOnFail(__LINE__);
     }
@@ -215,6 +228,15 @@ int main()
     if (arrayFixedCopy != arrayFixed)
     {
         ExitOnFail(__LINE__);
+    }
+
+    ArrayFixed<int, kSizeMax> arrayFixedInitializerList({0, 1, 2 });
+    for (int i = 0; i < 3; ++i)
+    {
+        if (arrayFixedInitializerList[i] != i)
+        {
+            ExitOnFail(__LINE__);
+        }
     }
 
     ConstMethodTesting(arrayFixed, actualSize, lastValidValue);
