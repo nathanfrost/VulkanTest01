@@ -240,6 +240,21 @@ int main()
 
     ConsolePauseForUserAcknowledgement();
 
+    const int kDuplicateTestMaxNum = 7;
+    ArrayFixed<int, kSizeMax> arrayFixedDuplicateTest({0,4,3,1,1,1,2,5,6,6,kDuplicateTestMaxNum,5,5});
+    SortAndRemoveDuplicatesFromArray(&arrayFixedDuplicateTest);
+    if (arrayFixedDuplicateTest.size() != kDuplicateTestMaxNum + 1)
+    {
+        ExitOnFail(__LINE__);
+    }
+    for (int i = 0; i < kDuplicateTestMaxNum; ++i)
+    {
+        if (arrayFixedDuplicateTest[i] != i)
+        {
+            ExitOnFail(__LINE__);
+        }
+    }
+
     return 0;
 }
 
