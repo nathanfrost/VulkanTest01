@@ -7,7 +7,6 @@
 #define NTF_ARRAY_FIXED_DEBUG 1
 #endif//#if _DEBUG
 
-///@todo: replace std::array<> uses with this
 #define NTF_ARRAY_FIXED_PARENT std::array<T, kSizeMax>
 template<class T, size_t kSizeMax>
 class ArrayFixed:public NTF_ARRAY_FIXED_PARENT

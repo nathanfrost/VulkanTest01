@@ -575,9 +575,9 @@ private:
         vkDestroyImage(m_device, m_depthImage, nullptr);
         vkFreeMemory(m_device, m_depthImageMemory, nullptr);
 
-        for (size_t i = 0; i < m_swapChainFramebuffers.size(); i++) 
+        for (const VkFramebuffer vkFramebuffer:m_swapChainFramebuffers) 
         {
-            vkDestroyFramebuffer(m_device, m_swapChainFramebuffers[i], nullptr);
+            vkDestroyFramebuffer(m_device, vkFramebuffer, nullptr);
         }
 
         //return command buffers to the pool from whence they came
@@ -587,9 +587,9 @@ private:
         vkDestroyPipelineLayout(m_device, m_pipelineLayout, nullptr);
         vkDestroyRenderPass(m_device, m_renderPass, nullptr);
 
-        for (size_t i = 0; i < m_swapChainImageViews.size(); i++)
+        for (const VkImageView vkImageView:m_swapChainImageViews)
         {
-            vkDestroyImageView(m_device, m_swapChainImageViews[i], nullptr);
+            vkDestroyImageView(m_device, vkImageView, nullptr);
         }
 
         vkDestroySwapchainKHR(m_device, m_swapChain, nullptr);
@@ -634,7 +634,7 @@ private:
     void createImageViews()
     {
         const size_t swapChainImagesSize = m_swapChainImages.size();
-        m_swapChainImageViews.resize(swapChainImagesSize);
+        m_swapChainImageViews.size(swapChainImagesSize);
 
         for (size_t i = 0; i < swapChainImagesSize; i++)
         {
@@ -1107,13 +1107,13 @@ private:
 
     void createCommandBuffers() 
     {
-        m_commandBuffers.resize(m_swapChainFramebuffers.size());//bake one command buffer for every image in the swapchain so Vulkan can blast through them
+        m_commandBuffers.size(m_swapChainFramebuffers.size());//bake one command buffer for every image in the swapchain so Vulkan can blast through them
 
         VkCommandBufferAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;//only value allowed
         allocInfo.commandPool = m_commandPool;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;//primary can submit to execution queue, but not be submitted to other command buffers; secondary can't be submitted to execution queue but can be submitted to other command buffers (for example, to factor out common sequences of commands)
-        allocInfo.commandBufferCount = (uint32_t)m_commandBuffers.size();
+        allocInfo.commandBufferCount = static_cast<uint32_t>(m_commandBuffers.size());
 
         if (vkAllocateCommandBuffers(m_device, &allocInfo, m_commandBuffers.data()) != VK_SUCCESS) 
         {
@@ -1122,13 +1122,14 @@ private:
 
         for (size_t i = 0; i < m_commandBuffers.size(); i++) 
         {
+            const VkCommandBuffer& vkCommandBuffer = m_commandBuffers[i];
             VkCommandBufferBeginInfo beginInfo = {};
             beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
             beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT; /* options: * VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded right after executing it once
                                                                                         * VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: This is a secondary command buffer that will be entirely within a single render pass.
                                                                                         * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also already pending execution. */
             beginInfo.pInheritanceInfo = nullptr; //specifies what state a secondary buffer should inherit from the primary buffer
-            vkBeginCommandBuffer(m_commandBuffers[i], &beginInfo);  //implicitly resets the command buffer (you can't append commands to an existing buffer)
+            vkBeginCommandBuffer(vkCommandBuffer, &beginInfo);  //implicitly resets the command buffer (you can't append commands to an existing buffer)
 
             VkRenderPassBeginInfo renderPassInfo = {};
             renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1147,22 +1148,22 @@ private:
             renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
             renderPassInfo.pClearValues = clearValues.data();
 
-            vkCmdBeginRenderPass(m_commandBuffers[i], &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
-            vkCmdBindPipeline(m_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
+            vkCmdBeginRenderPass(vkCommandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
+            vkCmdBindPipeline(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
 
             VkBuffer vertexBuffers[] = { m_vertexBuffer };
             VkDeviceSize offsets[] = { 0 };
-            vkCmdBindVertexBuffers(m_commandBuffers[i], 0, 1, vertexBuffers, offsets);
-            vkCmdBindIndexBuffer(m_commandBuffers[i], m_indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdBindVertexBuffers(vkCommandBuffer, 0, 1, vertexBuffers, offsets);
+            vkCmdBindIndexBuffer(vkCommandBuffer, m_indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
             //note that with shader lines like the following, multiple descriptors can be passed such that per-object descriptors and shared descriptors can be passed in separate descriptor sets, so shared descriptors can be bound only once
             //layout(set = 0, binding = 0) uniform UniformBufferObject { ... }
-            vkCmdBindDescriptorSets(m_commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, m_pipelineLayout, 0, 1, &m_descriptorSet, 0, nullptr);
+            vkCmdBindDescriptorSets(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, m_pipelineLayout, 0, 1, &m_descriptorSet, 0, nullptr);
 
-            vkCmdDrawIndexed(m_commandBuffers[i], static_cast<uint32_t>(m_indices.size()), 1, 0, 0, 0);
-            vkCmdEndRenderPass(m_commandBuffers[i]);
+            vkCmdDrawIndexed(vkCommandBuffer, static_cast<uint32_t>(m_indices.size()), 1, 0, 0, 0);
+            vkCmdEndRenderPass(vkCommandBuffer);
 
-            if (vkEndCommandBuffer(m_commandBuffers[i]) != VK_SUCCESS)
+            if (vkEndCommandBuffer(vkCommandBuffer) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to record command buffer!");
             }
@@ -1843,9 +1844,10 @@ private:
 
     void createFramebuffers() 
     {
-        m_swapChainFramebuffers.resize(m_swapChainImageViews.size());
+        const size_t swapChainImageViewsSize = m_swapChainImageViews.size();
+        m_swapChainFramebuffers.size(swapChainImageViewsSize);
 
-        for (size_t i = 0; i < m_swapChainImageViews.size(); i++)
+        for (size_t i = 0; i < swapChainImageViewsSize; i++)
         {
             ArrayFixed<VkImageView, 2> attachments = 
             {
@@ -2005,8 +2007,8 @@ private:
     ArrayFixed<VkImage, kSwapChainImagesNumMax> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html
     VkFormat m_swapChainImageFormat;
     VkExtent2D m_swapChainExtent;
-    std::vector<VkImageView> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
-    std::vector<VkFramebuffer> m_swapChainFramebuffers;
+    ArrayFixed<VkImageView, kSwapChainImagesNumMax> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
+    ArrayFixed<VkFramebuffer, kSwapChainImagesNumMax> m_swapChainFramebuffers;
     VkRenderPass m_renderPass;
     VkDescriptorSetLayout m_descriptorSetLayout;
     VkPipelineLayout m_pipelineLayout;
@@ -2029,7 +2031,7 @@ private:
     VkDeviceMemory m_uniformBufferMemory;
     VkDescriptorPool m_descriptorPool;
     VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed
-    std::vector<VkCommandBuffer> m_commandBuffers;//automatically freed when VkCommandPool is destroyed
+    ArrayFixed<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffers;//automatically freed when VkCommandPool is destroyed
 
     /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 
         used to synchronize operations within or across command queues */
