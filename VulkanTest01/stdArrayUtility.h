@@ -304,7 +304,6 @@ const T&& get(ArrayFixed<T, N>&& a) noexcept
     return a.GetChecked(I);
 }
 
-///@todo:unit test
 template<class T, size_t size>
 void SortAndRemoveDuplicatesFromArray(ArrayFixed<T, size>*const a)
 {
@@ -313,7 +312,6 @@ void SortAndRemoveDuplicatesFromArray(ArrayFixed<T, size>*const a)
     RemoveDuplicatesFromSortedArray(a);
 }
 
-///@todo:unit test
 template<class T, size_t size>
 void RemoveDuplicatesFromSortedArray(ArrayFixed<T, size>*const a)
 {
