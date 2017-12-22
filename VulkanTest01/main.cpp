@@ -1,5 +1,3 @@
-//originally from https://vulkan-tutorial.com/Drawing_a_triangle/Setup/Base_code
-
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
