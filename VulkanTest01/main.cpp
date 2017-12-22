@@ -500,17 +500,17 @@ private:
         const VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
         //implement triple-buffering by allowing one more buffer than the minimum image count required by the swap chain
-        m_swapChainImagesNum = swapChainSupport.capabilities.minImageCount + 1;
+        uint32_t swapChainImagesNum = swapChainSupport.capabilities.minImageCount + 1;
         if (swapChainSupport.capabilities.maxImageCount > 0 && //0 means max image count is unlimited
-            m_swapChainImagesNum > swapChainSupport.capabilities.maxImageCount)
+            swapChainImagesNum > swapChainSupport.capabilities.maxImageCount)
         {
-            m_swapChainImagesNum = swapChainSupport.capabilities.maxImageCount;
+            swapChainImagesNum = swapChainSupport.capabilities.maxImageCount;
         }
 
         VkSwapchainCreateInfoKHR createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
         createInfo.surface = m_surface;
-        createInfo.minImageCount = m_swapChainImagesNum;
+        createInfo.minImageCount = swapChainImagesNum;
         createInfo.imageFormat = surfaceFormat.format;
         createInfo.imageColorSpace = surfaceFormat.colorSpace;
         createInfo.imageExtent = extent;
@@ -545,9 +545,10 @@ private:
         }
 
         //extract swap chain image handles
-        vkGetSwapchainImagesKHR(m_device, m_swapChain, &m_swapChainImagesNum, nullptr);
-        assert(m_swapChainImagesNum <= kSwapChainImagesNumMax);
-        vkGetSwapchainImagesKHR(m_device, m_swapChain, &m_swapChainImagesNum, m_swapChainImages.data());
+        vkGetSwapchainImagesKHR(m_device, m_swapChain, &swapChainImagesNum, nullptr);
+        assert(swapChainImagesNum <= kSwapChainImagesNumMax);
+        vkGetSwapchainImagesKHR(m_device, m_swapChain, &swapChainImagesNum, m_swapChainImages.data());
+        m_swapChainImages.size(swapChainImagesNum);
 
         m_swapChainImageFormat = surfaceFormat.format;
         m_swapChainExtent = extent;
@@ -632,9 +633,10 @@ private:
 
     void createImageViews()
     {
-        m_swapChainImageViews.resize(m_swapChainImagesNum);
+        const size_t swapChainImagesSize = m_swapChainImages.size();
+        m_swapChainImageViews.resize(swapChainImagesSize);
 
-        for (size_t i = 0; i < m_swapChainImagesNum; i++)
+        for (size_t i = 0; i < swapChainImagesSize; i++)
         {
             m_swapChainImageViews[i] = createImageView(m_swapChainImages[i], m_swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
         }
@@ -1137,7 +1139,8 @@ private:
             renderPassInfo.renderArea.offset = { 0, 0 };
             renderPassInfo.renderArea.extent = m_swapChainExtent;
 
-            std::array<VkClearValue, 2> clearValues = {};
+            const size_t kClearValueNum = 2;
+            ArrayFixed<VkClearValue, kClearValueNum> clearValues(kClearValueNum);
             clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
             clearValues[1].depthStencil = { 1.0f, 0 };
 
@@ -1174,7 +1177,8 @@ private:
 
     void createDescriptorPool() 
     {
-        std::array<VkDescriptorPoolSize, 2> poolSizes = {};
+        const size_t kPoolSizesNum = 2;
+        ArrayFixed<VkDescriptorPoolSize, kPoolSizesNum> poolSizes(kPoolSizesNum);
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = 1;
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1218,7 +1222,8 @@ private:
         imageInfo.imageView = m_textureImageView;
         imageInfo.sampler = m_textureSampler;
 
-        std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
+        const size_t kDescriptorWritesNum = 2;
+        ArrayFixed<VkWriteDescriptorSet, kDescriptorWritesNum> descriptorWrites(kDescriptorWritesNum);
 
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = m_descriptorSet;
@@ -1226,6 +1231,7 @@ private:
         descriptorWrites[0].dstArrayElement = 0;//descriptor is not an array
         descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descriptorWrites[0].descriptorCount = 1;
+        descriptorWrites[0].pNext = nullptr;//no extension
 
         //one of the following three must be non-null
         descriptorWrites[0].pBufferInfo = &bufferInfo;//if buffer data
@@ -1238,6 +1244,7 @@ private:
         descriptorWrites[1].dstArrayElement = 0;//descriptor is not an array
         descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         descriptorWrites[1].descriptorCount = 1;
+        descriptorWrites[1].pNext = nullptr;//no extension
 
         //one of the following three must be non-null
         descriptorWrites[1].pBufferInfo = nullptr;//if buffer data
@@ -1557,7 +1564,7 @@ private:
 
     VkFormat findDepthFormat() 
     {
-        std::array<VkFormat, 3> candidates =
+        ArrayFixed<VkFormat, 3> candidates =
         {
             VK_FORMAT_D32_SFLOAT, /**<*32bit depth*/
             VK_FORMAT_D32_SFLOAT_S8_UINT, /**<*32bit depth, 8bit stencil*/
@@ -1840,7 +1847,7 @@ private:
 
         for (size_t i = 0; i < m_swapChainImageViews.size(); i++)
         {
-            std::array<VkImageView, 2> attachments = 
+            ArrayFixed<VkImageView, 2> attachments = 
             {
                 m_swapChainImageViews[i],
                 m_depthImageView    //only need one depth buffer, since there's only one frame being actively rendered to at any given time
@@ -1995,8 +2002,7 @@ private:
     VkQueue m_presentQueue;//queues are implicitly cleaned up with the logical device; no need to delete
     ArrayFixed<const char*, NTF_DEVICE_EXTENSIONS_NUM> m_deviceExtensions;
     enum { kSwapChainImagesNumMax=8 };
-    uint32_t m_swapChainImagesNum;
-    std::array<VkImage, kSwapChainImagesNumMax> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html
+    ArrayFixed<VkImage, kSwapChainImagesNumMax> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html
     VkFormat m_swapChainImageFormat;
     VkExtent2D m_swapChainExtent;
     std::vector<VkImageView> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
