@@ -33,7 +33,7 @@
 
 #define NTF_API_DUMP_VALIDATION_LAYER_ON 0
 #ifdef NDEBUG
-#define NTF_VALIDATION_LAYERS_ON 1
+#define NTF_VALIDATION_LAYERS_ON 0
 #else
 #define NTF_VALIDATION_LAYERS_ON 1
 #endif//#ifdef NDEBUG
@@ -192,6 +192,7 @@ private:
 #endif//NTF_API_DUMP_VALIDATION_LAYER_ON
     ArrayFixed<const char*, NTF_VALIDATION_LAYERS_SIZE> m_validationLayers;
 
+    //these bools are static variables in case I want to make validation layers a runtime-settable property
 #if NTF_VALIDATION_LAYERS_ON
     const bool s_enableValidationLayers = true;
 #else

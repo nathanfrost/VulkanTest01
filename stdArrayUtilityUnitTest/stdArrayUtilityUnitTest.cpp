@@ -236,10 +236,6 @@ int main()
         }
     }
 
-    ConstMethodTesting(arrayFixed, actualSize, lastValidValue);
-
-    ConsolePauseForUserAcknowledgement();
-
     const int kDuplicateTestMaxNum = 7;
     ArrayFixed<int, kSizeMax> arrayFixedDuplicateTest({0,4,3,1,1,1,2,5,6,6,kDuplicateTestMaxNum,5,5});
     SortAndRemoveDuplicatesFromArray(&arrayFixedDuplicateTest);
@@ -255,6 +251,9 @@ int main()
         }
     }
 
+    ConstMethodTesting(arrayFixed, actualSize, lastValidValue);
+
+    ConsolePauseForUserAcknowledgement();
     return 0;
 }
 
