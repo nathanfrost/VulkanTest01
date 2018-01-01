@@ -734,7 +734,7 @@ private:
 
         for (size_t i = 0; i < swapChainImagesSize; i++)
         {
-            swapChainImageViews[i] = createImageView(device, swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+            createImageView(&swapChainImageViews[i], device, swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
         }
     }
 
@@ -1806,7 +1806,7 @@ private:
             device,
             physicalDevice);
         
-        depthImageView = createImageView(device, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+        createImageView(&depthImageView, device, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
         transitionImageLayout(
             depthImage,
@@ -1945,10 +1945,12 @@ private:
         vkFreeMemory(device, stagingBufferMemory, nullptr);
     }
 
-    void createTextureImageView(VkImageView*const textureImageView, const VkImage& textureImage, const VkDevice& device) 
+    void createTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device) 
     {
-        assert(textureImageView);
-        *textureImageView = createImageView(device, textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
+        assert(textureImageViewPtr);
+        auto& textureImageView = *textureImageViewPtr;
+        
+        createImageView(&textureImageView, device, textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 
     void createTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& device)
@@ -1983,8 +1985,11 @@ private:
         NTF_VK_ASSERT_SUCCESS(createSamplerResult);
     }
 
-    VkImageView createImageView(const VkDevice& device, const VkImage& image, const VkFormat& format, const VkImageAspectFlags& aspectFlags)
+    void createImageView(VkImageView*const imageViewPtr, const VkDevice& device, const VkImage& image, const VkFormat& format, const VkImageAspectFlags& aspectFlags)
     {
+        assert(imageViewPtr);
+        auto& imageView = *imageViewPtr;
+
         VkImageViewCreateInfo viewInfo = {};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = image;
@@ -1996,10 +2001,8 @@ private:
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
 
-        VkImageView imageView;
         const VkResult createImageViewResult = vkCreateImageView(device, &viewInfo, nullptr, &imageView);
         NTF_VK_ASSERT_SUCCESS(createImageViewResult);
-        return imageView;
     }
 
     void createImage(
