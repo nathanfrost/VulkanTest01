@@ -250,6 +250,7 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ntf_vulkan.h" />
     <ClInclude Include="stdArrayUtility.h" />
     <ClInclude Include="VDeleter.h" />
   </ItemGroup>
