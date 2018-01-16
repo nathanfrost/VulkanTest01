@@ -28,7 +28,7 @@ public:
     {
         vkDeviceWaitIdle(m_device);
 
-        cleanupSwapChain(
+        CleanupSwapChain(
             &m_commandBuffers,
             m_device,
             m_depthImageView,
@@ -42,11 +42,11 @@ public:
             m_swapChainImageViews,
             m_swapChain);
 
-        createSwapChain(m_window, &m_swapChain, &m_swapChainImages, &m_swapChainImageFormat, &m_swapChainExtent, m_physicalDevice, m_surface, m_device);
-        createImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
-        createRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
-        createGraphicsPipeline(&m_pipelineLayout, &m_graphicsPipeline, m_renderPass, m_descriptorSetLayout, m_swapChainExtent, m_device);
-        createDepthResources(
+        CreateSwapChain(m_window, &m_swapChain, &m_swapChainImages, &m_swapChainImageFormat, &m_swapChainExtent, m_physicalDevice, m_surface, m_device);
+        CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
+        CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
+        CreateGraphicsPipeline(&m_pipelineLayout, &m_graphicsPipeline, m_renderPass, m_descriptorSetLayout, m_swapChainExtent, m_device);
+        CreateDepthResources(
             &m_depthImage,
             &m_depthImageMemory,
             &m_depthImageView,
@@ -55,8 +55,8 @@ public:
             m_graphicsQueue,
             m_device,
             m_physicalDevice);
-        createFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
-        createCommandBuffers(
+        CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
+        CreateCommandBuffers(
             &m_commandBuffers,
             m_commandPool,
             m_descriptorSet,
@@ -107,7 +107,7 @@ private:
 
     void cleanup()
     {
-        cleanupSwapChain(
+        CleanupSwapChain(
             &m_commandBuffers,
             m_device,
             m_depthImageView,
@@ -163,18 +163,18 @@ private:
 
         m_deviceExtensions = ArrayFixed<const char*, NTF_DEVICE_EXTENSIONS_NUM>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
 
-        m_instance = createInstance(s_validationLayers);
-        m_callback = setupDebugCallback(m_instance);
-        createSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
-        pickPhysicalDevice(&m_physicalDevice, m_surface, m_deviceExtensions, m_instance);
-        createLogicalDevice(&m_device, &m_graphicsQueue, &m_presentQueue, m_deviceExtensions, s_validationLayers, m_surface, m_physicalDevice);
-        createSwapChain(m_window, &m_swapChain, &m_swapChainImages, &m_swapChainImageFormat, &m_swapChainExtent, m_physicalDevice, m_surface, m_device);
-        createImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
-        createRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
-        createDescriptorSetLayout(&m_descriptorSetLayout, m_device);
-        createGraphicsPipeline(&m_pipelineLayout, &m_graphicsPipeline, m_renderPass, m_descriptorSetLayout, m_swapChainExtent, m_device);
-        createCommandPool(&m_commandPool, m_surface, m_device, m_physicalDevice);
-        createDepthResources(
+        m_instance = CreateInstance(s_validationLayers);
+        m_callback = SetupDebugCallback(m_instance);
+        CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
+        PickPhysicalDevice(&m_physicalDevice, m_surface, m_deviceExtensions, m_instance);
+        CreateLogicalDevice(&m_device, &m_graphicsQueue, &m_presentQueue, m_deviceExtensions, s_validationLayers, m_surface, m_physicalDevice);
+        CreateSwapChain(m_window, &m_swapChain, &m_swapChainImages, &m_swapChainImageFormat, &m_swapChainExtent, m_physicalDevice, m_surface, m_device);
+        CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
+        CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
+        CreateDescriptorSetLayout(&m_descriptorSetLayout, m_device);
+        CreateGraphicsPipeline(&m_pipelineLayout, &m_graphicsPipeline, m_renderPass, m_descriptorSetLayout, m_swapChainExtent, m_device);
+        CreateCommandPool(&m_commandPool, m_surface, m_device, m_physicalDevice);
+        CreateDepthResources(
             &m_depthImage, 
             &m_depthImageMemory, 
             &m_depthImageView, 
@@ -183,17 +183,17 @@ private:
             m_graphicsQueue, 
             m_device,
             m_physicalDevice);
-        createFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
-        createTextureImage(&m_textureImage, &m_textureImageMemory, m_commandPool, m_graphicsQueue, m_device, m_physicalDevice);
-        createTextureImageView(&m_textureImageView, m_textureImage, m_device);
-        createTextureSampler(&m_textureSampler, m_device);
-        loadModel(&m_vertices, &m_indices);
-        createVertexBuffer(&m_vertexBuffer, &m_vertexBufferMemory, m_vertices, m_commandPool, m_graphicsQueue, m_device, m_physicalDevice);
-        createIndexBuffer(&m_indexBuffer, &m_indexBufferMemory, m_indices, m_commandPool, m_graphicsQueue, m_device, m_physicalDevice);
-        createUniformBuffer(&m_uniformBuffer, &m_uniformBufferMemory, m_device, m_physicalDevice);
-        createDescriptorPool(&m_descriptorPool, m_device);
-        createDescriptorSet(&m_descriptorSet, m_descriptorSetLayout, m_descriptorPool, m_uniformBuffer, m_textureImageView, m_textureSampler, m_device);
-        createCommandBuffers(
+        CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
+        CreateTextureImage(&m_textureImage, &m_textureImageMemory, m_commandPool, m_graphicsQueue, m_device, m_physicalDevice);
+        CreateTextureImageView(&m_textureImageView, m_textureImage, m_device);
+        CreateTextureSampler(&m_textureSampler, m_device);
+        LoadModel(&m_vertices, &m_indices);
+        CreateVertexBuffer(&m_vertexBuffer, &m_vertexBufferMemory, m_vertices, m_commandPool, m_graphicsQueue, m_device, m_physicalDevice);
+        CreateIndexBuffer(&m_indexBuffer, &m_indexBufferMemory, m_indices, m_commandPool, m_graphicsQueue, m_device, m_physicalDevice);
+        CreateUniformBuffer(&m_uniformBuffer, &m_uniformBufferMemory, m_device, m_physicalDevice);
+        CreateDescriptorPool(&m_descriptorPool, m_device);
+        CreateDescriptorSet(&m_descriptorSet, m_descriptorSetLayout, m_descriptorPool, m_uniformBuffer, m_textureImageView, m_textureSampler, m_device);
+        CreateCommandBuffers(
             &m_commandBuffers, 
             m_commandPool,
             m_descriptorSet, 
@@ -206,7 +206,7 @@ private:
             m_indexBuffer, 
             static_cast<uint32_t>(m_indices.size()),
             m_device);
-        createSemaphores(&m_imageAvailableSemaphore, &m_renderFinishedSemaphore, m_device);
+        CreateSemaphores(&m_imageAvailableSemaphore, &m_renderFinishedSemaphore, m_device);
     }
 
     void mainLoop(GLFWwindow* window) 
@@ -216,8 +216,8 @@ private:
         {
             glfwPollEvents();
 
-            updateUniformBuffer(m_uniformBufferMemory, m_swapChainExtent, m_device);
-            drawFrame(/*this,///#TODO_CALLBACK*/ m_swapChain, m_commandBuffers, m_graphicsQueue, m_presentQueue, m_imageAvailableSemaphore, m_renderFinishedSemaphore, m_device);
+            UpdateUniformBuffer(m_uniformBufferMemory, m_swapChainExtent, m_device);
+            DrawFrame(/*this,///#TODO_CALLBACK*/ m_swapChain, m_commandBuffers, m_graphicsQueue, m_presentQueue, m_imageAvailableSemaphore, m_renderFinishedSemaphore, m_device);
         }
 
         //wait for the logical device to finish operations before exiting mainLoop and destroying the window
