@@ -1,5 +1,8 @@
 #include"ntf_vulkan.h"
 
+
+ArrayFixed<const char*, NTF_VALIDATION_LAYERS_SIZE> s_validationLayers;
+
 //don't complain about scanf being unsafe
 #pragma warning(disable : 4996)
 ///@todo: figure out which libraries I'm linking that trigger LNK4098 (seems like some libraries are linking /MD and /MDd and others are linking /MT and /MTd for C-runtime) -- for now, pass /IGNORE:4098 to the linker
@@ -214,7 +217,7 @@ private:
             glfwPollEvents();
 
             updateUniformBuffer(m_uniformBufferMemory, m_swapChainExtent, m_device);
-            drawFrame(this, m_swapChain, m_commandBuffers, m_graphicsQueue, m_presentQueue, m_imageAvailableSemaphore, m_renderFinishedSemaphore, m_device);
+            drawFrame(/*this,///#TODO_CALLBACK*/ m_swapChain, m_commandBuffers, m_graphicsQueue, m_presentQueue, m_imageAvailableSemaphore, m_renderFinishedSemaphore, m_device);
         }
 
         //wait for the logical device to finish operations before exiting mainLoop and destroying the window

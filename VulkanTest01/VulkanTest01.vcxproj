@@ -248,6 +248,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="ntf_vulkan.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ntf_vulkan.h" />
