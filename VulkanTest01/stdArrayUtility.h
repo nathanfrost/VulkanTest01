@@ -10,9 +10,9 @@
 #endif//#if _DEBUG
 
 template<class T, size_t kSizeMax>
-class ArrayFixed
+class ArraySafe
 {
-    typedef ArrayFixed<T, kSizeMax> ThisDataType;
+    typedef ArraySafe<T, kSizeMax> ThisDataType;
     typedef T* iterator;
     typedef const T* const_iterator;
     typedef T& reference;
@@ -25,20 +25,20 @@ class ArrayFixed
     bool m_sizeCurrentSet;
 #endif//#if NTF_ARRAY_FIXED_DEBUG
 public:
-    ArrayFixed()
+    ArraySafe()
     {
 #if NTF_ARRAY_FIXED_DEBUG
         m_sizeCurrentSet = false;
 #endif//#if NTF_ARRAY_FIXED_DEBUG
     }
-    ArrayFixed(const size_t size):
+    ArraySafe(const size_t size):
     m_sizeCurrent(size)
     {
 #if NTF_ARRAY_FIXED_DEBUG
         m_sizeCurrentSet = true;
 #endif//#if NTF_ARRAY_FIXED_DEBUG
     }
-    ArrayFixed(const std::initializer_list<T>& initializerList)
+    ArraySafe(const std::initializer_list<T>& initializerList)
     {
 #if NTF_ARRAY_FIXED_DEBUG
         m_sizeCurrentSet = true;
@@ -46,7 +46,7 @@ public:
         MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     }
     template<size_t kSizeMaxOther>
-    void Copy(const ArrayFixed<T, kSizeMaxOther>& arrayFixedOther)
+    void Copy(const ArraySafe<T, kSizeMaxOther>& arrayFixedOther)
     {
         MemcpyFromStart(arrayFixedOther.GetAddressOfUnderlyingArray(), arrayFixedOther.SizeCurrentInBytes());
     }
@@ -247,8 +247,8 @@ public:
 };
 
 template< class T, std::size_t N >
-bool operator==(const ArrayFixed<T, N>& lhs,
-                const ArrayFixed<T, N>& rhs)
+bool operator==(const ArraySafe<T, N>& lhs,
+                const ArraySafe<T, N>& rhs)
 {
     const size_t lhsSize = lhs.size();
     if (lhsSize != rhs.size())
@@ -270,65 +270,65 @@ bool operator==(const ArrayFixed<T, N>& lhs,
 }
 
 template< class T, std::size_t N >
-bool operator!=(const ArrayFixed<T, N>& lhs, const ArrayFixed<T, N>& rhs)
+bool operator!=(const ArraySafe<T, N>& lhs, const ArraySafe<T, N>& rhs)
 {
     return !(lhs == rhs);
 }
 
 template< class T, std::size_t N >
-bool operator<(const ArrayFixed<T, N>& lhs, const ArrayFixed<T, N>& rhs)
+bool operator<(const ArraySafe<T, N>& lhs, const ArraySafe<T, N>& rhs)
 {
     return false;
 }
 
 template< class T, std::size_t N >
-bool operator<=(const ArrayFixed<T, N>& lhs, const ArrayFixed<T, N>& rhs)
+bool operator<=(const ArraySafe<T, N>& lhs, const ArraySafe<T, N>& rhs)
 {
     return false;
 }
 
 template< class T, std::size_t N >
-bool operator>(const ArrayFixed<T, N>& lhs, const ArrayFixed<T, N>& rhs)
+bool operator>(const ArraySafe<T, N>& lhs, const ArraySafe<T, N>& rhs)
 {
     return false;
 }
 
 template< class T, std::size_t N >
-bool operator>=(const ArrayFixed<T, N>& lhs, const ArrayFixed<T, N>& rhs)
+bool operator>=(const ArraySafe<T, N>& lhs, const ArraySafe<T, N>& rhs)
 {
     return false;
 }
 
 template< size_t I, class T, size_t N >
-T& get(ArrayFixed<T, N>& a) noexcept
+T& get(ArraySafe<T, N>& a) noexcept
 {
     //if the implementation of this ever changes, update unit tests to cover the new implementation
     return a.GetChecked(I);
 }
 
 template< size_t I, class T, size_t N >
-T&& get(ArrayFixed<T, N>&& a) noexcept
+T&& get(ArraySafe<T, N>&& a) noexcept
 {
     //if the implementation of this ever changes, update unit tests to cover the new implementation
     return a.GetChecked(I);
 }
 
 template< size_t I, class T, size_t N >
-const T& get(ArrayFixed<T, N>& a) noexcept
+const T& get(ArraySafe<T, N>& a) noexcept
 {
     //if the implementation of this ever changes, update unit tests to cover the new implementation
     return a.GetChecked(I);
 }
 
 template< size_t I, class T, size_t N >
-const T&& get(ArrayFixed<T, N>&& a) noexcept
+const T&& get(ArraySafe<T, N>&& a) noexcept
 {
     //if the implementation of this ever changes, update unit tests to cover the new implementation
     return a.GetChecked(I);
 }
 
 template<class T, size_t size>
-void SortAndRemoveDuplicatesFromArray(ArrayFixed<T, size>*const a)
+void SortAndRemoveDuplicatesFromArray(ArraySafe<T, size>*const a)
 {
     assert(a);
     std::sort(a->begin(), a->end());
@@ -336,10 +336,10 @@ void SortAndRemoveDuplicatesFromArray(ArrayFixed<T, size>*const a)
 }
 
 template<class T, size_t size>
-void RemoveDuplicatesFromSortedArray(ArrayFixed<T, size>*const a)
+void RemoveDuplicatesFromSortedArray(ArraySafe<T, size>*const a)
 {
     assert(a);
-    ArrayFixed<T, size>& aRef = *a;
+    ArraySafe<T, size>& aRef = *a;
 
     int uniqueIndex = 0;
     const size_t currentSize = a->size();

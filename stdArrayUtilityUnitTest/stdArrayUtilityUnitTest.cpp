@@ -20,7 +20,7 @@ static void ExitOnFail(const size_t lineNumber)
 }
 
 template<class T, size_t kMaxSize>
-static void ConstMethodTesting(const ArrayFixed<T,kMaxSize>& arrayFixed, const int actualSize, const int lastValidValue)
+static void ConstMethodTesting(const ArraySafe<T,kMaxSize>& arrayFixed, const int actualSize, const int lastValidValue)
 {
     //const function testing
     for (int i = 0; i < actualSize; ++i)
@@ -88,7 +88,7 @@ static void ConstMethodTesting(const ArrayFixed<T,kMaxSize>& arrayFixed, const i
 int main()
 {
     enum { kSizeMax = 16 };
-    ArrayFixed<int,kSizeMax> arrayFixed;
+    ArraySafe<int,kSizeMax> arrayFixed;
     
     const size_t actualSize = 12;
     arrayFixed.size(actualSize);
@@ -172,7 +172,7 @@ int main()
     {
         ExitOnFail(__LINE__);
     }
-    ArrayFixed<int, kSizeMax> arrayFixedEmpty;
+    ArraySafe<int, kSizeMax> arrayFixedEmpty;
     arrayFixedEmpty.size(0);
     if (!arrayFixedEmpty.empty())
     {
@@ -192,7 +192,7 @@ int main()
         ExitOnFail(__LINE__);
     }
 
-    ArrayFixed<int, kSizeMax> arrayFixedTwo(arrayFixed.size());
+    ArraySafe<int, kSizeMax> arrayFixedTwo(arrayFixed.size());
     for (size_t i = 0; i < arrayFixed.size(); ++i)
     {
         arrayFixedTwo[i] = arrayFixed[i];
@@ -220,14 +220,14 @@ int main()
         ExitOnFail(__LINE__);
     }
 
-    ArrayFixed<int, kSizeMax> arrayFixedCopy;
+    ArraySafe<int, kSizeMax> arrayFixedCopy;
     arrayFixedCopy.Copy(arrayFixed);
     if (arrayFixedCopy != arrayFixed)
     {
         ExitOnFail(__LINE__);
     }
 
-    ArrayFixed<int, kSizeMax> arrayFixedInitializerList({0, 1, 2 });
+    ArraySafe<int, kSizeMax> arrayFixedInitializerList({0, 1, 2 });
     for (int i = 0; i < 3; ++i)
     {
         if (arrayFixedInitializerList[i] != i)
@@ -237,7 +237,7 @@ int main()
     }
 
     const int kDuplicateTestMaxNum = 7;
-    ArrayFixed<int, kSizeMax> arrayFixedDuplicateTest({0,4,3,1,1,1,2,5,6,6,kDuplicateTestMaxNum,5,5});
+    ArraySafe<int, kSizeMax> arrayFixedDuplicateTest({0,4,3,1,1,1,2,5,6,6,kDuplicateTestMaxNum,5,5});
     SortAndRemoveDuplicatesFromArray(&arrayFixedDuplicateTest);
     if (arrayFixedDuplicateTest.size() != kDuplicateTestMaxNum + 1)
     {
