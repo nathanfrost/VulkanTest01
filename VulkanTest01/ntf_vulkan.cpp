@@ -278,7 +278,7 @@ void CreateShaderModule(VkShaderModule*const shaderModulePtr, const std::vector<
     NTF_VK_ASSERT_SUCCESS(createShaderModuleResult);
 }
 
-bool CheckValidationLayerSupport(const ArraySafe<const char*, NTF_VALIDATION_LAYERS_SIZE>& validationLayers)
+bool CheckValidationLayerSupport(ConstArraySafeRef<const char*> validationLayers)
 {
     const int layersMax = 32;
     uint32_t layerCount;
@@ -402,26 +402,22 @@ void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT
     return bindingDescription;
 }
 
-/*static*/ void Vertex::GetAttributeDescriptions(
-    ArraySafe<VkVertexInputAttributeDescription, 
-    Vertex::kGetAttributeDescriptionsSize>* const attributeDescriptions)
+/*static*/ void Vertex::GetAttributeDescriptions(ArraySafeRef<VkVertexInputAttributeDescription> attributeDescriptions)
 {
-    assert(attributeDescriptions);
+    attributeDescriptions[0].binding = 0;
+    attributeDescriptions[0].location = 0;///<mirrored in the vertex shader
+    attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;//equivalent to vec3 layout
+    attributeDescriptions[0].offset = offsetof(Vertex, pos);//defines address of first byte of the relevant datafield
 
-    (*attributeDescriptions)[0].binding = 0;
-    (*attributeDescriptions)[0].location = 0;///<mirrored in the vertex shader
-    (*attributeDescriptions)[0].format = VK_FORMAT_R32G32B32_SFLOAT;//equivalent to vec3 layout
-    (*attributeDescriptions)[0].offset = offsetof(Vertex, pos);//defines address of first byte of the relevant datafield
+    attributeDescriptions[1].binding = 0;
+    attributeDescriptions[1].location = 1;
+    attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+    attributeDescriptions[1].offset = offsetof(Vertex, color);
 
-    (*attributeDescriptions)[1].binding = 0;
-    (*attributeDescriptions)[1].location = 1;
-    (*attributeDescriptions)[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-    (*attributeDescriptions)[1].offset = offsetof(Vertex, color);
-
-    (*attributeDescriptions)[2].binding = 0;
-    (*attributeDescriptions)[2].location = 2;
-    (*attributeDescriptions)[2].format = VK_FORMAT_R32G32_SFLOAT;
-    (*attributeDescriptions)[2].offset = offsetof(Vertex, texCoord);
+    attributeDescriptions[2].binding = 0;
+    attributeDescriptions[2].location = 2;
+    attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
 }
 
 bool Vertex::operator==(const Vertex& other) const
@@ -455,7 +451,7 @@ size_t std::hash<Vertex>::operator()(Vertex const& vertex) const
     return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1);
 }
 
-bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, const ArraySafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>& deviceExtensions)
+bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstArraySafeRef<const char*> deviceExtensions)
 {
     uint32_t supportedExtensionCount;
     vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &supportedExtensionCount, nullptr);
@@ -469,8 +465,7 @@ bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, const A
     vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &supportedExtensionCount, supportedExtensions.data());
 
     const char*const extensionSupportedSymbol = 0;
-    ArraySafe<const char*, NTF_DEVICE_EXTENSIONS_NUM> requiredExtensions;
-    requiredExtensions.Copy(deviceExtensions);
+    ArraySafe<const char*, NTF_DEVICE_EXTENSIONS_NUM> requiredExtensions(deviceExtensions);
     const size_t requiredExtensionsSize = requiredExtensions.size();
     for (VkExtensionProperties supportedExtension : supportedExtensions)
     {
@@ -499,7 +494,7 @@ bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, const A
 bool IsDeviceSuitable(
     const VkPhysicalDevice& physicalDevice,
     const VkSurfaceKHR& surface,
-    const ArraySafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>& deviceExtensions)
+    ConstArraySafeRef<const char*> deviceExtensions)
 {
     QueueFamilyIndices indices = FindQueueFamilies(physicalDevice, surface);
     const bool extensionsSupported = CheckDeviceExtensionSupport(physicalDevice, deviceExtensions);
@@ -520,7 +515,7 @@ bool IsDeviceSuitable(
 bool PickPhysicalDevice(
     VkPhysicalDevice*const physicalDevicePtr,
     const VkSurfaceKHR& surface,
-    const ArraySafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>& deviceExtensions,
+    ConstArraySafeRef<const char*> deviceExtensions,
     const VkInstance& instance)
 {
     assert(physicalDevicePtr);
@@ -563,8 +558,8 @@ void CreateLogicalDevice(
     VkDevice*const devicePtr,
     VkQueue*const graphicsQueuePtr,
     VkQueue*const presentQueuePtr,
-    const ArraySafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>& deviceExtensions,
-    const ArraySafe<const char*, NTF_VALIDATION_LAYERS_SIZE>& validationLayers,
+    ConstArraySafeRef<const char*> deviceExtensions,
+    ConstArraySafeRef<const char*> validationLayers,
     const VkSurfaceKHR& surface,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -697,7 +692,8 @@ void CreateGraphicsPipeline(
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 
     auto bindingDescription = Vertex::GetBindingDescription();
-    ArraySafe<VkVertexInputAttributeDescription, Vertex::kGetAttributeDescriptionsSize> attributeDescriptions(Vertex::kGetAttributeDescriptionsSize);
+    const int attributeDescriptionsSize = 3;
+    ArraySafe<VkVertexInputAttributeDescription, attributeDescriptionsSize> attributeDescriptions(attributeDescriptionsSize);
     Vertex::GetAttributeDescriptions(&attributeDescriptions);
 
     vertexInputInfo.vertexBindingDescriptionCount = 1;
@@ -944,12 +940,11 @@ void CreateRenderPass(
     NTF_VK_ASSERT_SUCCESS(createRenderPassResult);
 }
 
-template<size_t kSwapChainImagesNumMax>
 void CreateCommandBuffers(
-    ArraySafe<VkCommandBuffer, kSwapChainImagesNumMax>*const commandBuffersPtr,
+    ArraySafeRef<VkCommandBuffer> commandBuffers,
     const VkCommandPool& commandPool,
     const VkDescriptorSet& descriptorSet,
-    const ArraySafe<VkFramebuffer, kSwapChainImagesNumMax>& swapChainFramebuffers,
+    ConstArraySafeRef<VkFramebuffer> swapChainFramebuffers,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkPipelineLayout& pipelineLayout,
@@ -959,9 +954,6 @@ void CreateCommandBuffers(
     const uint32_t& indicesNum,
     const VkDevice& device)
 {
-    assert(commandBuffersPtr);
-    auto& commandBuffers = *commandBuffersPtr;
-
     commandBuffers.size(swapChainFramebuffers.size());//bake one command buffer for every image in the swapchain so Vulkan can blast through them
 
     VkCommandBufferAllocateInfo allocInfo = {};
@@ -1020,22 +1012,6 @@ void CreateCommandBuffers(
         NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
     }
 }
-
-///#CleanupTemplateJunkWithDatafield
-template
-void CreateCommandBuffers(
-    ArraySafe<VkCommandBuffer, 8>*const commandBuffersPtr,
-    const VkCommandPool& commandPool,
-    const VkDescriptorSet& descriptorSet,
-    const ArraySafe<VkFramebuffer, 8>& swapChainFramebuffers,
-    const VkRenderPass& renderPass,
-    const VkExtent2D& swapChainExtent,
-    const VkPipelineLayout& pipelineLayout,
-    const VkPipeline& graphicsPipeline,
-    const VkBuffer& vertexBuffer,
-    const VkBuffer& indexBuffer,
-    const uint32_t& indicesNum,
-    const VkDevice& device);
 
 void CreateUniformBuffer(
     VkBuffer*const uniformBufferPtr,
@@ -1383,10 +1359,9 @@ void CreateDepthResources(
         device);
 }
 
-template<size_t kCandidatesMaxSize>
 VkFormat FindSupportedFormat(
     const VkPhysicalDevice& physicalDevice,
-    const ArraySafe<VkFormat, kCandidatesMaxSize>& candidates,
+    ConstArraySafeRef<VkFormat> candidates,
     const VkImageTiling& tiling,
     const VkFormatFeatureFlags& features)
 {
@@ -1531,18 +1506,14 @@ void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& dev
     NTF_VK_ASSERT_SUCCESS(createSamplerResult);
 }
 
-template<size_t kSwapChainImagesNumMax>
 void CreateFramebuffers(
-    ArraySafe<VkFramebuffer, kSwapChainImagesNumMax>*const swapChainFramebuffersPtr,
-    const ArraySafe<VkImageView, kSwapChainImagesNumMax>& swapChainImageViews,
+    ArraySafeRef<VkFramebuffer> swapChainFramebuffers,
+    ConstArraySafeRef<VkImageView> swapChainImageViews,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkImageView& depthImageView,
     const VkDevice& device)
 {
-    assert(swapChainFramebuffersPtr);
-    auto& swapChainFramebuffers = *swapChainFramebuffersPtr;
-
     const size_t swapChainImageViewsSize = swapChainImageViews.size();
     swapChainFramebuffers.size(swapChainImageViewsSize);
 
@@ -1567,16 +1538,6 @@ void CreateFramebuffers(
         NTF_VK_ASSERT_SUCCESS(createFramebufferResult);
     }
 }
-
-///#CleanupTemplateJunkWithDatafield
-template
-void CreateFramebuffers(
-    ArraySafe<VkFramebuffer, 8>*const swapChainFramebuffersPtr,
-    const ArraySafe<VkImageView, 8>& swapChainImageViews,
-    const VkRenderPass& renderPass,
-    const VkExtent2D& swapChainExtent,
-    const VkImageView& depthImageView,
-    const VkDevice& device);
 
 void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const VkInstance& instance)
 {
@@ -1628,11 +1589,10 @@ void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExte
     vkUnmapMemory(device, uniformBufferMemory);
 }
 
-template<size_t kSwapChainImagesNumMax>
 void DrawFrame(
     //HelloTriangleApplication*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
     const VkSwapchainKHR& swapChain,
-    const ArraySafe<VkCommandBuffer, kSwapChainImagesNumMax>& commandBuffers,
+    ConstArraySafeRef<VkCommandBuffer> commandBuffers,
     const VkQueue& graphicsQueue,
     const VkQueue& presentQueue,
     const VkSemaphore& imageAvailableSemaphore,
@@ -1656,6 +1616,7 @@ void DrawFrame(
     {
         assert(false);//failed to acquire swap chain image
     }
+    ///@todo: handle handle VK_ERROR_SURFACE_LOST_KHR return value
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;//only value allowed
@@ -1704,39 +1665,24 @@ void DrawFrame(
     vkQueueWaitIdle(presentQueue);
 }
 
-///#CleanupTemplateJunkWithDatafield
-template
-void DrawFrame(
-    //HelloTriangleApplication*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK
-    const VkSwapchainKHR& swapChain,
-    const ArraySafe<VkCommandBuffer, 8>& commandBuffers,
-    const VkQueue& graphicsQueue,
-    const VkQueue& presentQueue,
-    const VkSemaphore& imageAvailableSemaphore,
-    const VkSemaphore& renderFinishedSemaphore,
-    const VkDevice& device);
-
-template<size_t kRequiredExtensionsMaxNum>
-void GetRequiredExtensions(ArraySafe<const char*, kRequiredExtensionsMaxNum>*const requiredExtensions)
+void GetRequiredExtensions(ArraySafeRef<const char*> requiredExtensions)
 {
-    assert(requiredExtensions);
-
-    requiredExtensions->size(0);
+    requiredExtensions.size(0);
     unsigned int glfwExtensionCount = 0;
     const char** glfwExtensions;
     glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
     for (unsigned int i = 0; i < glfwExtensionCount; i++)
     {
-        requiredExtensions->Push(glfwExtensions[i]);
+        requiredExtensions.Push(glfwExtensions[i]);
     }
 
     if (s_enableValidationLayers)
     {
-        requiredExtensions->Push(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);//VulkanSDK\VERSION_NUMBER\Config\vk_layer_settings.txt sets many options about layer strictness (warning,performance,error) and action taken (callback, log, breakpoint, Visual Studio output, nothing), as well as dump behavior (level of detail, output to file vs stdout, I/O flush behavior)
+        requiredExtensions.Push(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);//VulkanSDK\VERSION_NUMBER\Config\vk_layer_settings.txt sets many options about layer strictness (warning,performance,error) and action taken (callback, log, breakpoint, Visual Studio output, nothing), as well as dump behavior (level of detail, output to file vs stdout, I/O flush behavior)
     }
 }
 
-VkInstance CreateInstance(const ArraySafe<const char*, NTF_VALIDATION_LAYERS_SIZE>& validationLayers)
+VkInstance CreateInstance(ConstArraySafeRef<const char*> validationLayers)
 {
     if (s_enableValidationLayers && !CheckValidationLayerSupport(validationLayers))
     {
@@ -1756,7 +1702,7 @@ VkInstance CreateInstance(const ArraySafe<const char*, NTF_VALIDATION_LAYERS_SIZ
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
 
-    ArraySafe<const char*, 32> extensions;
+    ArraySafe<const char*, 32> extensions(0);
     GetRequiredExtensions(&extensions);
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
@@ -1855,8 +1801,7 @@ QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice& device, const VkSur
     return indices;
 }
 
-template<size_t kItemsMax>
-VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const ArraySafe<VkSurfaceFormatKHR, kItemsMax>& availableFormats)
+VkSurfaceFormatKHR ChooseSwapSurfaceFormat(ConstArraySafeRef<VkSurfaceFormatKHR> availableFormats)
 {
     size_t availableFormatsNum = availableFormats.size();
     assert(availableFormatsNum > 0);
@@ -1879,26 +1824,32 @@ VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const ArraySafe<VkSurfaceFormatKHR, k
     return availableFormats[0];//couldn't find the desired format
 }
 
-template<size_t kItemsMax>
-VkPresentModeKHR ChooseSwapPresentMode(const ArraySafe<VkPresentModeKHR, kItemsMax>& availablePresentModes)
+VkPresentModeKHR ChooseSwapPresentMode(ConstArraySafeRef<VkPresentModeKHR> availablePresentModes)
 {
     assert(availablePresentModes.size());
 
     for (const auto& availablePresentMode : availablePresentModes)
     {
-        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) //instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer ones
+        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
         {
+            /*  instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer 
+                ones -- eg wait for the next vertical blanking interval to update the image. If we render another image, the image waiting to be 
+                displayed is overwritten. */
             return availablePresentMode;
         }
     }
 
-    return VK_PRESENT_MODE_FIFO_KHR;// display takes an image from the front of the queue on a vertical blank and the program inserts rendered images at the back of the queue. If the queue is full then the program has to wait
-                                    /* could also return:
-                                    * VK_PRESENT_MODE_FIFO_RELAXED_KHR: This mode only differs from VK_PRESENT_MODE_FIFO_KHR if the application is late and the queue was
-                                    empty at the last vertical blank. Instead of waiting for the next vertical blank, the image is
-                                    transferred right away when it finally arrives. This may result in visible tearing.
-                                    * VK_PRESENT_MODE_IMMEDIATE_KHR: Images submitted by your application are transferred to the screen right away, which may result in tearing.
-                                    */
+    return VK_PRESENT_MODE_FIFO_KHR;/* display takes an image from the front of the queue on a vertical blank and the program inserts rendered images 
+                                        at the back of the queue.  If the queue is full then the program has to wait */
+    /* could also return:
+    * VK_PRESENT_MODE_FIFO_RELAXED_KHR: This mode only differs from VK_PRESENT_MODE_FIFO_KHR if the application is late and the queue was 
+                                        empty at the last vertical blank. Instead of waiting for the next vertical blank, the image is
+                                        transferred right away when it finally arrives. This may result in visible tearing.  In other words, 
+                                        wait for the next vertical blanking interval to update the image. If we've missed the interval, we do 
+                                        not wait. We will append already rendered images to the pending presentation queue. We present as soon as 
+                                        possible
+    * VK_PRESENT_MODE_IMMEDIATE_KHR: Images submitted by your application are transferred to the screen right away, which may result in tearing.
+    */
 }
 
 ///choose the resolution of the render target based on surface capabilities and window resolution
@@ -1924,11 +1875,10 @@ VkExtent2D ChooseSwapExtent(GLFWwindow*const window, const VkSurfaceCapabilities
     }
 }
 
-template<size_t kSwapChainImagesNumMax>
 void CreateSwapChain(
     GLFWwindow*const window,
     VkSwapchainKHR*const swapChainPtr,
-    ArraySafe<VkImage, kSwapChainImagesNumMax>*const swapChainImagesPtr,
+    ArraySafeRef<VkImage> swapChainImages,
     VkFormat*const swapChainImageFormatPtr,
     VkExtent2D*const swapChainExtentPtr,
     const VkPhysicalDevice& physicalDevice,
@@ -1939,9 +1889,6 @@ void CreateSwapChain(
 
     assert(swapChainPtr);
     VkSwapchainKHR& swapChain = *swapChainPtr;
-
-    assert(swapChainImagesPtr);
-    auto& swapChainImages = *swapChainImagesPtr;
 
     assert(swapChainImageFormatPtr);
     auto& swapChainImageFormat = *swapChainImageFormatPtr;
@@ -1956,13 +1903,18 @@ void CreateSwapChain(
     const VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainSupport.presentModes);
     const VkExtent2D extent = ChooseSwapExtent(window, swapChainSupport.capabilities);
 
-    //implement triple-buffering by allowing one more buffer than the minimum image count required by the swap chain
-    uint32_t swapChainImagesNum = swapChainSupport.capabilities.minImageCount + 1;
+    /*  #ImagesFramesInFlight:  If we're GPU-bound, we want to able to acquire at most 3 images without presenting, so we must exceed minImageCount by 
+                                one less than this number.  This is because, for example, if the minImageCount member of VkSurfaceCapabilitiesKHR is 
+                                2, and the application creates a swapchain with 2 presentable images, the application can acquire one image, and must 
+                                present it before trying to acquire another image. */
+    const uint32_t swapChainImagesNumRequired = swapChainSupport.capabilities.minImageCount + 2;///@todo: implement #ImagesFramesInFlight in DrawFrame
+    uint32_t swapChainImagesNum = swapChainImagesNumRequired;
     if (swapChainSupport.capabilities.maxImageCount > 0 && //0 means max image count is unlimited
         swapChainImagesNum > swapChainSupport.capabilities.maxImageCount)
     {
         swapChainImagesNum = swapChainSupport.capabilities.maxImageCount;
     }
+    assert(swapChainImagesNum >= swapChainImagesNumRequired);
 
     VkSwapchainCreateInfoKHR createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -2001,7 +1953,7 @@ void CreateSwapChain(
 
     //extract swap chain image handles
     vkGetSwapchainImagesKHR(device, swapChain, &swapChainImagesNum, nullptr);
-    assert(swapChainImagesNum <= kSwapChainImagesNumMax);
+    swapChainImages.AssertSufficient(swapChainImagesNum);
     vkGetSwapchainImagesKHR(device, swapChain, &swapChainImagesNum, swapChainImages.data());
     swapChainImages.size(swapChainImagesNum);
 
@@ -2009,36 +1961,20 @@ void CreateSwapChain(
     swapChainExtent = extent;
 }
 
-///#CleanupTemplateJunkWithDatafield
-template
-void CreateSwapChain(
-    GLFWwindow*const window,
-    VkSwapchainKHR*const swapChainPtr,
-    ArraySafe<VkImage, 8>*const swapChainImagesPtr,
-    VkFormat*const swapChainImageFormatPtr,
-    VkExtent2D*const swapChainExtentPtr,
-    const VkPhysicalDevice& physicalDevice,
-    const VkSurfaceKHR& surface,
-    const VkDevice& device);
-
-template<size_t kSwapChainImagesNumMax>
 void CleanupSwapChain(
-    ArraySafe<VkCommandBuffer, kSwapChainImagesNumMax>*const commandBuffersPtr,
+    ArraySafeRef<VkCommandBuffer> commandBuffers,
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
     const VkDeviceMemory& depthImageMemory,
-    const ArraySafe<VkFramebuffer, kSwapChainImagesNumMax>& swapChainFramebuffers,
+    ConstArraySafeRef<VkFramebuffer> swapChainFramebuffers,
     const VkCommandPool& commandPool,
     const VkPipeline& graphicsPipeline,
     const VkPipelineLayout& pipelineLayout,
     const VkRenderPass& renderPass,
-    const ArraySafe<VkImageView, kSwapChainImagesNumMax>& swapChainImageViews,
+    ConstArraySafeRef<VkImageView> swapChainImageViews,
     const VkSwapchainKHR& swapChain)
 {
-    assert(commandBuffersPtr);
-    auto& commandBuffers = *commandBuffersPtr;
-
     assert(commandBuffers.size() == swapChainFramebuffers.size());
     assert(swapChainFramebuffers.size() == swapChainImageViews.size());
 
@@ -2065,31 +2001,13 @@ void CleanupSwapChain(
 
     vkDestroySwapchainKHR(device, swapChain, nullptr);
 }
-///#CleanupTemplateJunkWithDatafield
-template void CleanupSwapChain<8>(
-    ArraySafe<VkCommandBuffer, 8>*const commandBuffersPtr,
-    const VkDevice& device,
-    const VkImageView& depthImageView,
-    const VkImage& depthImage,
-    const VkDeviceMemory& depthImageMemory,
-    const ArraySafe<VkFramebuffer, 8>& swapChainFramebuffers,
-    const VkCommandPool& commandPool,
-    const VkPipeline& graphicsPipeline,
-    const VkPipelineLayout& pipelineLayout,
-    const VkRenderPass& renderPass,
-    const ArraySafe<VkImageView, 8>& swapChainImageViews,
-    const VkSwapchainKHR& swapChain);
 
-template<size_t kSwapChainImagesNumMax>
 void CreateImageViews(
-    ArraySafe<VkImageView, kSwapChainImagesNumMax>*const swapChainImageViewsPtr,
-    const ArraySafe<VkImage, kSwapChainImagesNumMax>& swapChainImages,
+    ArraySafeRef<VkImageView> swapChainImageViews,
+    ConstArraySafeRef<VkImage> swapChainImages,
     const VkFormat& swapChainImageFormat,
     const VkDevice& device)
 {
-    assert(swapChainImageViewsPtr);
-    auto& swapChainImageViews = *swapChainImageViewsPtr;
-
     const size_t swapChainImagesSize = swapChainImages.size();
     swapChainImageViews.size(swapChainImagesSize);
 
@@ -2098,11 +2016,3 @@ void CreateImageViews(
         CreateImageView(&swapChainImageViews[i], device, swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
     }
 }
-
-///#CleanupTemplateJunkWithDatafield
-template
-void CreateImageViews(
-    ArraySafe<VkImageView, 8>*const swapChainImageViewsPtr,
-    const ArraySafe<VkImage, 8>& swapChainImages,
-    const VkFormat& swapChainImageFormat,
-    const VkDevice& device);
