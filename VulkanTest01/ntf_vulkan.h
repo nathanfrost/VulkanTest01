@@ -356,7 +356,7 @@ void CreateFrameSyncPrimitives(
 void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExtent2D& swapChainExtent, const VkDevice& device);
 
 void DrawFrame(
-    //HelloTriangleApplication*const hackToRecreateSwapChainIfNecessaryPtr,
+    //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,
     const VkSwapchainKHR& swapChain,
     ConstArraySafeRef<VkCommandBuffer> commandBuffers,
     const VkQueue& graphicsQueue,

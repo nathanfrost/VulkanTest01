@@ -8,7 +8,7 @@ ArraySafe<const char*, NTF_VALIDATION_LAYERS_SIZE> s_validationLayers;
 ///@todo: figure out which libraries I'm linking that trigger LNK4098 (seems like some libraries are linking /MD and /MDd and others are linking /MT and /MTd for C-runtime) -- for now, pass /IGNORE:4098 to the linker
 
 
-class HelloTriangleApplication 
+class VulkanRendererNTF 
 {
 public:
 #define NTF_FRAMES_IN_FLIGHT_NUM 2//#FramesInFlight
@@ -99,7 +99,7 @@ private:
             nullptr/*no sharing objects with another window; that's OpenGL, not Vulkan anyway*/);
 
         glfwSetWindowUserPointer(windowPtr, this);
-        glfwSetWindowSizeCallback(windowPtr, HelloTriangleApplication::onWindowResized);
+        glfwSetWindowSizeCallback(windowPtr, VulkanRendererNTF::onWindowResized);
     }
 
     /*  Viewport and scissor rectangle size is specified during graphics pipeline creation, so the pipeline also needs to be rebuilt when the window 
@@ -111,7 +111,7 @@ private:
 			return;//handle the case where the window was minimized
 		}
 
-        HelloTriangleApplication* app = reinterpret_cast<HelloTriangleApplication*>(glfwGetWindowUserPointer(window));
+        VulkanRendererNTF* app = reinterpret_cast<VulkanRendererNTF*>(glfwGetWindowUserPointer(window));
         app->recreateSwapChain();
     }
 
@@ -310,7 +310,7 @@ private:
 
 int main() 
 {
-    HelloTriangleApplication app;
+    VulkanRendererNTF app;
     app.run();
     return EXIT_SUCCESS;
 }

@@ -1603,7 +1603,7 @@ void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExte
 }
 
 void DrawFrame(
-    //HelloTriangleApplication*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
+    //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
     const VkSwapchainKHR& swapChain,
     ConstArraySafeRef<VkCommandBuffer> commandBuffers,
     const VkQueue& graphicsQueue,
@@ -1706,7 +1706,7 @@ VkInstance CreateInstance(ConstArraySafeRef<const char*> validationLayers)
 
     VkApplicationInfo appInfo = {};
     appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-    appInfo.pApplicationName = "Hello Triangle";
+    appInfo.pApplicationName = "VulkanNTF Test";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "No Engine";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
