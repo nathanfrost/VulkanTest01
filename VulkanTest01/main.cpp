@@ -11,6 +11,7 @@ ArraySafe<const char*, NTF_VALIDATION_LAYERS_SIZE> s_validationLayers;
 class HelloTriangleApplication 
 {
 public:
+#define NTF_FRAMES_IN_FLIGHT_NUM 2//#FramesInFlight
 
     void run() 
 	{
@@ -42,7 +43,16 @@ public:
             m_swapChainImageViews,
             m_swapChain);
 
-        CreateSwapChain(m_window, &m_swapChain, &m_swapChainImages, &m_swapChainImageFormat, &m_swapChainExtent, m_physicalDevice, m_surface, m_device);
+        CreateSwapChain(
+            m_window, 
+            &m_swapChain, 
+            &m_swapChainImages, 
+            &m_swapChainImageFormat, 
+            &m_swapChainExtent, 
+            m_physicalDevice, 
+            NTF_FRAMES_IN_FLIGHT_NUM, 
+            m_surface, 
+            m_device);
         CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
         CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
         CreateGraphicsPipeline(&m_pipelineLayout, &m_graphicsPipeline, m_renderPass, m_descriptorSetLayout, m_swapChainExtent, m_device);
@@ -138,8 +148,13 @@ private:
         vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
         vkFreeMemory(m_device, m_vertexBufferMemory, nullptr);
 
-        vkDestroySemaphore(m_device, m_renderFinishedSemaphore, nullptr);
-        vkDestroySemaphore(m_device, m_imageAvailableSemaphore, nullptr);
+
+        for (size_t frameIndex = 0; frameIndex < NTF_FRAMES_IN_FLIGHT_NUM; ++frameIndex)
+        {
+            vkDestroySemaphore(m_device, m_renderFinishedSemaphore[frameIndex], nullptr);
+            vkDestroySemaphore(m_device, m_imageAvailableSemaphore[frameIndex], nullptr);
+            vkDestroyFence(m_device, m_fence[frameIndex], nullptr);
+        }
 
         vkDestroyCommandPool(m_device, m_commandPool, nullptr);
 
@@ -168,7 +183,16 @@ private:
         CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
         PickPhysicalDevice(&m_physicalDevice, m_surface, m_deviceExtensions, m_instance);
         CreateLogicalDevice(&m_device, &m_graphicsQueue, &m_presentQueue, m_deviceExtensions, s_validationLayers, m_surface, m_physicalDevice);
-        CreateSwapChain(m_window, &m_swapChain, &m_swapChainImages, &m_swapChainImageFormat, &m_swapChainExtent, m_physicalDevice, m_surface, m_device);
+        CreateSwapChain(
+            m_window, 
+            &m_swapChain, 
+            &m_swapChainImages, 
+            &m_swapChainImageFormat, 
+            &m_swapChainExtent, 
+            m_physicalDevice, 
+            NTF_FRAMES_IN_FLIGHT_NUM, 
+            m_surface, 
+            m_device);
         CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
         CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
         CreateDescriptorSetLayout(&m_descriptorSetLayout, m_device);
@@ -206,18 +230,29 @@ private:
             m_indexBuffer, 
             static_cast<uint32_t>(m_indices.size()),
             m_device);
-        CreateSemaphores(&m_imageAvailableSemaphore, &m_renderFinishedSemaphore, m_device);
+        CreateFrameSyncPrimitives(&m_imageAvailableSemaphore, &m_renderFinishedSemaphore, &m_fence, NTF_FRAMES_IN_FLIGHT_NUM, m_device);
     }
 
     void mainLoop(GLFWwindow* window) 
     {
         assert(window);
+        size_t frameIndex = 0;
         while (!glfwWindowShouldClose(window)) 
         {
             glfwPollEvents();
 
             UpdateUniformBuffer(m_uniformBufferMemory, m_swapChainExtent, m_device);
-            DrawFrame(/*this,///#TODO_CALLBACK*/ m_swapChain, m_commandBuffers, m_graphicsQueue, m_presentQueue, m_imageAvailableSemaphore, m_renderFinishedSemaphore, m_device);
+            DrawFrame(
+                /*this,///#TODO_CALLBACK*/ 
+                m_swapChain, 
+                m_commandBuffers, 
+                m_graphicsQueue, 
+                m_presentQueue, 
+                m_fence[frameIndex],
+                m_imageAvailableSemaphore[frameIndex],
+                m_renderFinishedSemaphore[frameIndex],
+                m_device);
+            frameIndex = (frameIndex + 1) % NTF_FRAMES_IN_FLIGHT_NUM;
         }
 
         //wait for the logical device to finish operations before exiting mainLoop and destroying the window
@@ -267,8 +302,10 @@ private:
 
     /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 
         used to synchronize operations within or across command queues */
-    VkSemaphore m_imageAvailableSemaphore;
-    VkSemaphore m_renderFinishedSemaphore;
+    int m_frameIndex=0;
+    ArraySafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_imageAvailableSemaphore = ArraySafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a true ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
+    ArraySafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_renderFinishedSemaphore = ArraySafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a true ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
+    ArraySafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_fence = ArraySafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a true ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
 };
 
 int main() 

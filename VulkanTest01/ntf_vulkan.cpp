@@ -1550,21 +1550,34 @@ void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const
     NTF_VK_ASSERT_SUCCESS(createWindowSurfaceResult);
 }
 
-void CreateSemaphores(VkSemaphore*const imageAvailablePtr, VkSemaphore*const renderFinishedPtr, const VkDevice& device)
+void CreateFrameSyncPrimitives(
+    ArraySafeRef<VkSemaphore> imageAvailable, 
+    ArraySafeRef<VkSemaphore> renderFinished, 
+    ArraySafeRef<VkFence> fence, 
+    const size_t framesNum,
+    const VkDevice& device)
 {
-    assert(imageAvailablePtr);
-    auto& imageAvailable = *imageAvailablePtr;
-
-    assert(renderFinishedPtr);
-    auto& renderFinished = *renderFinishedPtr;
+    assert(framesNum);
 
     VkSemaphoreCreateInfo semaphoreInfo = {};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-    if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailable) != VK_SUCCESS ||
-        vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinished) != VK_SUCCESS)
+    VkFenceCreateInfo fenceInfo;
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    fenceInfo.pNext = nullptr;
+    fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;//fence starts signaled
+
+    for (size_t frameIndex = 0; frameIndex < framesNum; ++frameIndex)
     {
-        assert(false);//failed to create semaphores
+        if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &imageAvailable[frameIndex]) != VK_SUCCESS ||
+            vkCreateSemaphore(device, &semaphoreInfo, nullptr, &renderFinished[frameIndex]) != VK_SUCCESS)
+        {
+            assert(false);//failed to create semaphores
+        }
+        if (vkCreateFence(device, &fenceInfo, nullptr/*no allocator specified*/, &fence[frameIndex]) != VK_SUCCESS)
+        {
+            assert(false);//failed to create fence
+        }
     }
 }
 
@@ -1595,6 +1608,7 @@ void DrawFrame(
     ConstArraySafeRef<VkCommandBuffer> commandBuffers,
     const VkQueue& graphicsQueue,
     const VkQueue& presentQueue,
+    const VkFence& fence,
     const VkSemaphore& imageAvailableSemaphore,
     const VkSemaphore& renderFinishedSemaphore,
     const VkDevice& device)
@@ -1618,11 +1632,14 @@ void DrawFrame(
     }
     ///@todo: handle handle VK_ERROR_SURFACE_LOST_KHR return value
 
+    vkWaitForFences(device, 1, &fence,  VK_TRUE, UINT64_MAX/*wait until fence is signaled*/);
+    vkResetFences(device, 1, &fence);//queue has completed on the GPU and is ready to be prepared on the CPU
+
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;//only value allowed
 
-                                                     //theoretically the implementation can already start executing our vertex shader and such while the image is not
-                                                     //available yet. Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores
+    //theoretically the implementation can already start executing our vertex shader and such while the image is not
+    //available yet. Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores
     VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
     submitInfo.waitSemaphoreCount = 1;
@@ -1637,7 +1654,7 @@ void DrawFrame(
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    const VkResult queueSubmitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    const VkResult queueSubmitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo, fence);
     NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
 
     VkPresentInfoKHR presentInfo = {};
@@ -1661,8 +1678,6 @@ void DrawFrame(
         //hackToRecreateSwapChainIfNecessary.recreateSwapChain();//haven't seen this get hit yet, even when minimizing and resizing the window
     }
     NTF_VK_ASSERT_SUCCESS(result);
-
-    vkQueueWaitIdle(presentQueue);
 }
 
 void GetRequiredExtensions(ArraySafeRef<const char*> requiredExtensions)
@@ -1882,6 +1897,7 @@ void CreateSwapChain(
     VkFormat*const swapChainImageFormatPtr,
     VkExtent2D*const swapChainExtentPtr,
     const VkPhysicalDevice& physicalDevice,
+    const uint32_t framesNum,
     const VkSurfaceKHR& surface,
     const VkDevice& device)
 {
@@ -1896,6 +1912,8 @@ void CreateSwapChain(
     assert(swapChainExtentPtr);
     auto& swapChainExtent = *swapChainExtentPtr;
 
+    assert(framesNum > 0);
+
     SwapChainSupportDetails swapChainSupport;
     QuerySwapChainSupport(&swapChainSupport, surface, physicalDevice);
 
@@ -1903,11 +1921,11 @@ void CreateSwapChain(
     const VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainSupport.presentModes);
     const VkExtent2D extent = ChooseSwapExtent(window, swapChainSupport.capabilities);
 
-    /*  #ImagesFramesInFlight:  If we're GPU-bound, we want to able to acquire at most 3 images without presenting, so we must exceed minImageCount by 
-                                one less than this number.  This is because, for example, if the minImageCount member of VkSurfaceCapabilitiesKHR is 
-                                2, and the application creates a swapchain with 2 presentable images, the application can acquire one image, and must 
-                                present it before trying to acquire another image. */
-    const uint32_t swapChainImagesNumRequired = swapChainSupport.capabilities.minImageCount + 2;///@todo: implement #ImagesFramesInFlight in DrawFrame
+    /*  #FramesInFlight:    Example: If we're GPU-bound, we might want to able to acquire at most 3 images without presenting, so we must exceed minImageCount by 
+                            one less than this number.  This is because, for example, if the minImageCount member of VkSurfaceCapabilitiesKHR is 
+                            2, and the application creates a swapchain with 2 presentable images, the application can acquire one image, and must 
+                            present it before trying to acquire another image -- per Vulkan spec */
+    const uint32_t swapChainImagesNumRequired = swapChainSupport.capabilities.minImageCount + framesNum;
     uint32_t swapChainImagesNum = swapChainImagesNumRequired;
     if (swapChainSupport.capabilities.maxImageCount > 0 && //0 means max image count is unlimited
         swapChainImagesNum > swapChainSupport.capabilities.maxImageCount)

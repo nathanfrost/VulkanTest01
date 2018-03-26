@@ -189,10 +189,11 @@ VkExtent2D ChooseSwapExtent(GLFWwindow*const window, const VkSurfaceCapabilities
 void CreateSwapChain(
     GLFWwindow*const window,
     VkSwapchainKHR*const swapChainPtr,
-    ArraySafeRef<VkImage> swapChainImagesPtr,
+    ArraySafeRef<VkImage> swapChainImages,
     VkFormat*const swapChainImageFormatPtr,
     VkExtent2D*const swapChainExtentPtr,
     const VkPhysicalDevice& physicalDevice,
+    const uint32_t framesNum,
     const VkSurfaceKHR& surface,
     const VkDevice& device);
 
@@ -345,7 +346,12 @@ void CreateFramebuffers(
     const VkImageView& depthImageView,
     const VkDevice& device);
 void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const VkInstance& instance);
-void CreateSemaphores(VkSemaphore*const imageAvailablePtr, VkSemaphore*const renderFinishedPtr, const VkDevice& device);
+void CreateFrameSyncPrimitives(
+    ArraySafeRef<VkSemaphore> imageAvailable,
+    ArraySafeRef<VkSemaphore> renderFinished,
+    ArraySafeRef<VkFence> fence,
+    const size_t framesNum,
+    const VkDevice& device);
 
 void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExtent2D& swapChainExtent, const VkDevice& device);
 
@@ -355,6 +361,7 @@ void DrawFrame(
     ConstArraySafeRef<VkCommandBuffer> commandBuffers,
     const VkQueue& graphicsQueue,
     const VkQueue& presentQueue,
+    const VkFence& fence,
     const VkSemaphore& imageAvailableSemaphore,
     const VkSemaphore& renderFinishedSemaphore,
     const VkDevice& device);
