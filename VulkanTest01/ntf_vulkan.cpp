@@ -6,6 +6,9 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include"tiny_obj_loader.h"
 
+#if NTF_WIN_TIMER
+FILE* s_winTimer;
+#endif//NTF_WIN_TIMER
 
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device)
 {
@@ -1602,6 +1605,8 @@ void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExte
     vkUnmapMemory(device, uniformBufferMemory);
 }
 
+WIN_TIMER_DEF(s_frameTimer);
+
 void DrawFrame(
     //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
     const VkSwapchainKHR& swapChain,
@@ -1613,6 +1618,15 @@ void DrawFrame(
     const VkSemaphore& renderFinishedSemaphore,
     const VkDevice& device)
 {
+#if NTF_WIN_TIMER
+    WIN_TIMER_STOP(s_frameTimer);
+    const int maxLen = 256;
+    char buf[maxLen];
+    snprintf(&buf[0], maxLen, "s_frameTimer:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(s_frameTimer));
+    fwrite(&buf[0], sizeof(buf[0]), strlen(&buf[0]), s_winTimer);
+    WIN_TIMER_START(s_frameTimer);
+#endif//#if NTF_WIN_TIMER
+
     ///#TODO_CALLBACK
     //assert(hackToRecreateSwapChainIfNecessaryPtr);
     //auto& hackToRecreateSwapChainIfNecessary = *hackToRecreateSwapChainIfNecessaryPtr;
@@ -1632,7 +1646,13 @@ void DrawFrame(
     }
     ///@todo: handle handle VK_ERROR_SURFACE_LOST_KHR return value
 
+    WIN_TIMER_DEF_START(waitForFences);
     vkWaitForFences(device, 1, &fence,  VK_TRUE, UINT64_MAX/*wait until fence is signaled*/);
+    WIN_TIMER_STOP(waitForFences);
+    //const int maxLen = 256;
+    //char buf[maxLen];
+    //snprintf(&buf[0], maxLen, "waitForFences:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(waitForFences));
+    //fwrite(&buf[0], sizeof(buf[0]), strlen(&buf[0]), s_winTimer);
     vkResetFences(device, 1, &fence);//queue has completed on the GPU and is ready to be prepared on the CPU
 
     VkSubmitInfo submitInfo = {};
@@ -1699,6 +1719,11 @@ void GetRequiredExtensions(ArraySafeRef<const char*> requiredExtensions)
 
 VkInstance CreateInstance(ConstArraySafeRef<const char*> validationLayers)
 {
+#if NTF_WIN_TIMER
+    fopen_s(&s_winTimer, "WinTimer.txt", "w+");
+    assert(s_winTimer);
+#endif//NTF_WIN_TIMER
+
     if (s_enableValidationLayers && !CheckValidationLayerSupport(validationLayers))
     {
         assert(false);//validation layers requested, but not available
