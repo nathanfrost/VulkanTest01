@@ -2,10 +2,6 @@
 #include<windows.h>
 #include<assert.h>
 
-#if !NDEBUG
-#define NTF_WIN_TIMER 1 ///@todo: rename NTF_ARRAY_SAFE_DEBUG
-#endif//#if _DEBUG
-
 #if NTF_WIN_TIMER
 class WinTimerNTF
 {
