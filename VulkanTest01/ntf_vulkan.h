@@ -148,9 +148,7 @@ namespace std
 
 struct UniformBufferObject
 {
-    glm::mat4 model;
-    glm::mat4 view;
-    glm::mat4 proj;
+    glm::mat4 modelToClip;
 };
 
 void GetRequiredExtensions(ArraySafeRef<const char*>*const requiredExtensions);
