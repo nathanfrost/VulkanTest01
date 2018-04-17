@@ -20,37 +20,37 @@ static void ExitOnFail(const size_t lineNumber)
 }
 
 template<class T, size_t kMaxSize>
-static void ConstMethodTesting(const ArraySafe<T,kMaxSize>& arrayFixed, const int actualSize, const int lastValidValue)
+static void ConstMethodTesting(const VectorSafe<T,kMaxSize>& vectorSafe, const int actualSize, const int lastValidValue)
 {
     //const function testing
     for (int i = 0; i < actualSize; ++i)
     {
-        if (arrayFixed[i] != i)
+        if (vectorSafe[i] != i)
         {
             ExitOnFail(__LINE__);
         }
     }
     for (int i = 0; i < actualSize; ++i)
     {
-        if (arrayFixed.at(i) != i)
+        if (vectorSafe.at(i) != i)
         {
             ExitOnFail(__LINE__);
         }
     }
-    if (arrayFixed.front() != 0)
+    if (vectorSafe.front() != 0)
     {
         ExitOnFail(__LINE__);
     }
-    if (arrayFixed.back() != lastValidValue)
+    if (vectorSafe.back() != lastValidValue)
     {
         ExitOnFail(__LINE__);
     }
 
 
     {
-        auto arrayFixedEnd = arrayFixed.end();
+        auto vectorSafeEnd = vectorSafe.end();
         int index = 0;
-        for (auto it = arrayFixed.begin(); it != arrayFixedEnd; ++it)
+        for (auto it = vectorSafe.begin(); it != vectorSafeEnd; ++it)
         {
             if (*it != index)
             {
@@ -60,9 +60,9 @@ static void ConstMethodTesting(const ArraySafe<T,kMaxSize>& arrayFixed, const in
         }
     }
     {
-        auto arrayFixedEnd = arrayFixed.cend();
+        auto vectorSafeEnd = vectorSafe.cend();
         int index = 0;
-        for (auto it = arrayFixed.begin(); it != arrayFixedEnd; ++it)
+        for (auto it = vectorSafe.begin(); it != vectorSafeEnd; ++it)
         {
             if (*it != index)
             {
@@ -72,9 +72,9 @@ static void ConstMethodTesting(const ArraySafe<T,kMaxSize>& arrayFixed, const in
         }
     }
     //{
-    //    auto arrayFixedREnd = arrayFixed.rend();
+    //    auto vectorSafeREnd = vectorSafe.rend();
     //    int index = lastValidValue;
-    //    for (auto it = arrayFixed.crbegin(); it != arrayFixedREnd; ++it)
+    //    for (auto it = vectorSafe.crbegin(); it != vectorSafeREnd; ++it)
     //    {
     //        if (*it != index)
     //        {
@@ -88,64 +88,64 @@ static void ConstMethodTesting(const ArraySafe<T,kMaxSize>& arrayFixed, const in
 int main()
 {
     enum { kSizeMax = 16 };
-    ArraySafe<int,kSizeMax> arrayFixed;
+    VectorSafe<int,kSizeMax> vectorSafe;
     
     const size_t actualSize = 12;
-    arrayFixed.size(actualSize);
-    if (arrayFixed.SizeCurrentInBytes() != actualSize*sizeof(int))
+    vectorSafe.size(actualSize);
+    if (vectorSafe.SizeCurrentInBytes() != actualSize*sizeof(int))
     {
         ExitOnFail(__LINE__);
     }
-    if (arrayFixed.SizeMaxInBytes() != kSizeMax*sizeof(int))
+    if (vectorSafe.SizeMaxInBytes() != kSizeMax*sizeof(int))
     {
         ExitOnFail(__LINE__);
     }
     for (int i = 0; i < actualSize; ++i)
     {
-        arrayFixed[i] = i;
+        vectorSafe[i] = i;
     }
     for (int i = 0; i < actualSize; ++i)
     {
-        if (arrayFixed.GetChecked(i) != i)
+        if (vectorSafe.GetChecked(i) != i)
         {
             ExitOnFail(__LINE__);
         }
     }
     const int lastValidValue = actualSize - 1;
-    if (arrayFixed.GetLastValidIndex() != lastValidValue)
+    if (vectorSafe.GetLastValidIndex() != lastValidValue)
     {
         ExitOnFail(__LINE__);
     }
-    if (arrayFixed.GetOneAfterLastValidIndex() != actualSize)
+    if (vectorSafe.GetOneAfterLastValidIndex() != actualSize)
     {
         ExitOnFail(__LINE__);
     }
     for (int i = 0; i < actualSize; ++i)
     {
-        if (arrayFixed[i] != i)
+        if (vectorSafe[i] != i)
         {
             ExitOnFail(__LINE__);
         }
     }
     for (int i = 0; i < actualSize; ++i)
     {
-        if (arrayFixed.at(i) != i)
+        if (vectorSafe.at(i) != i)
         {
             ExitOnFail(__LINE__);
         }
     }
-    if (arrayFixed.front() != 0)
+    if (vectorSafe.front() != 0)
     {
         ExitOnFail(__LINE__);
     }
-    if (arrayFixed.back() != lastValidValue)
+    if (vectorSafe.back() != lastValidValue)
     {
         ExitOnFail(__LINE__);
     }
     {
-        auto arrayFixedEnd = arrayFixed.end();
+        auto vectorSafeEnd = vectorSafe.end();
         int index = 0;
-        for (auto it = arrayFixed.begin(); it != arrayFixedEnd; ++it)
+        for (auto it = vectorSafe.begin(); it != vectorSafeEnd; ++it)
         {
             if (*it != index)
             {
@@ -156,9 +156,9 @@ int main()
     }
 
     //{
-    //    auto arrayFixedREnd = arrayFixed.rend();
+    //    auto vectorSafeREnd = vectorSafe.rend();
     //    int index = lastValidValue;
-    //    for (auto it = arrayFixed.rbegin(); it != arrayFixedREnd; ++it)
+    //    for (auto it = vectorSafe.rbegin(); it != vectorSafeREnd; ++it)
     //    {
     //        if (*it != index)
     //        {
@@ -168,90 +168,90 @@ int main()
     //    }
     //}
 
-    if (arrayFixed.empty())
+    if (vectorSafe.empty())
     {
         ExitOnFail(__LINE__);
     }
-    ArraySafe<int, kSizeMax> arrayFixedEmpty;
-    arrayFixedEmpty.size(0);
-    if (!arrayFixedEmpty.empty())
+    VectorSafe<int, kSizeMax> vectorSafeEmpty;
+    vectorSafeEmpty.size(0);
+    if (!vectorSafeEmpty.empty())
     {
         ExitOnFail(__LINE__);
     }
-    if(arrayFixedEmpty.SizeCurrentInBytes() != 0)
-    {
-        ExitOnFail(__LINE__);
-    }
-
-    if (arrayFixedEmpty == arrayFixed)
-    {
-        ExitOnFail(__LINE__);
-    }
-    if (!(arrayFixedEmpty != arrayFixed))
+    if(vectorSafeEmpty.SizeCurrentInBytes() != 0)
     {
         ExitOnFail(__LINE__);
     }
 
-    ArraySafe<int, kSizeMax> arrayFixedTwo(arrayFixed.size());
-    for (size_t i = 0; i < arrayFixed.size(); ++i)
-    {
-        arrayFixedTwo[i] = arrayFixed[i];
-    }
-
-    if (arrayFixed != arrayFixedTwo)
+    if (vectorSafeEmpty == vectorSafe)
     {
         ExitOnFail(__LINE__);
     }
-    arrayFixedTwo[3] = 666;
-    if (arrayFixed == arrayFixedTwo)
+    if (!(vectorSafeEmpty != vectorSafe))
     {
         ExitOnFail(__LINE__);
     }
 
-    const int arrayFixedTwoOldBack = arrayFixedTwo.back();
-    arrayFixedTwo.Push(static_cast<int>(arrayFixedTwo.size()));
-    if (arrayFixedTwo.back() != static_cast<int>(arrayFixedTwo.size()) - 1 || arrayFixedTwo.size() != arrayFixed.size() + 1)
+    VectorSafe<int, kSizeMax> vectorSafeTwo(vectorSafe.size());
+    for (size_t i = 0; i < vectorSafe.size(); ++i)
+    {
+        vectorSafeTwo[i] = vectorSafe[i];
+    }
+
+    if (vectorSafe != vectorSafeTwo)
     {
         ExitOnFail(__LINE__);
     }
-    arrayFixedTwo.sizeDecrement();
-    if (arrayFixedTwo.size() != arrayFixed.size() || arrayFixedTwo.back() != arrayFixedTwoOldBack)
+    vectorSafeTwo[3] = 666;
+    if (vectorSafe == vectorSafeTwo)
     {
         ExitOnFail(__LINE__);
     }
 
-    ArraySafe<int, kSizeMax> arrayFixedCopy;
-    arrayFixedCopy.Copy(arrayFixed);
-    if (arrayFixedCopy != arrayFixed)
+    const int vectorSafeTwoOldBack = vectorSafeTwo.back();
+    vectorSafeTwo.Push(static_cast<int>(vectorSafeTwo.size()));
+    if (vectorSafeTwo.back() != static_cast<int>(vectorSafeTwo.size()) - 1 || vectorSafeTwo.size() != vectorSafe.size() + 1)
+    {
+        ExitOnFail(__LINE__);
+    }
+    vectorSafeTwo.sizeDecrement();
+    if (vectorSafeTwo.size() != vectorSafe.size() || vectorSafeTwo.back() != vectorSafeTwoOldBack)
     {
         ExitOnFail(__LINE__);
     }
 
-    ArraySafe<int, kSizeMax> arrayFixedInitializerList({0, 1, 2 });
+    VectorSafe<int, kSizeMax> vectorSafeCopy;
+    vectorSafeCopy.Copy(vectorSafe);
+    if (vectorSafeCopy != vectorSafe)
+    {
+        ExitOnFail(__LINE__);
+    }
+
+    VectorSafe<int, kSizeMax> vectorSafeInitializerList({0, 1, 2 });
     for (int i = 0; i < 3; ++i)
     {
-        if (arrayFixedInitializerList[i] != i)
+        if (vectorSafeInitializerList[i] != i)
         {
             ExitOnFail(__LINE__);
         }
     }
 
     const int kDuplicateTestMaxNum = 7;
-    ArraySafe<int, kSizeMax> arrayFixedDuplicateTest({0,4,3,1,1,1,2,5,6,6,kDuplicateTestMaxNum,5,5});
-    SortAndRemoveDuplicatesFromArray(&arrayFixedDuplicateTest);
-    if (arrayFixedDuplicateTest.size() != kDuplicateTestMaxNum + 1)
+    VectorSafe<int, kSizeMax> vectorSafeDuplicateTest({0,4,3,1,1,1,2,5,6,6,kDuplicateTestMaxNum,5,5});
+    SortAndRemoveDuplicatesFromVectorSafe(&vectorSafeDuplicateTest);
+    if (vectorSafeDuplicateTest.size() != kDuplicateTestMaxNum + 1)
     {
         ExitOnFail(__LINE__);
     }
     for (int i = 0; i < kDuplicateTestMaxNum; ++i)
     {
-        if (arrayFixedDuplicateTest[i] != i)
+        if (vectorSafeDuplicateTest[i] != i)
         {
             ExitOnFail(__LINE__);
         }
     }
 
-    ConstMethodTesting(arrayFixed, actualSize, lastValidValue);
+    ConstMethodTesting(vectorSafe, actualSize, lastValidValue);
 
     printf("Unit test SUCCESS!\n");
     ConsolePauseForUserAcknowledgement();

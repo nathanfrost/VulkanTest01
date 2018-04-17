@@ -6,17 +6,17 @@
 #include<string.h>
 
 #if !NDEBUG
-#define NTF_ARRAY_FIXED_DEBUG 1 ///@todo: rename NTF_ARRAY_SAFE_DEBUG
+#define NTF_ARRAY_SAFE_DEBUG 1 ///@todo: rename NTF_ARRAY_SAFE_DEBUG
 #endif//#if _DEBUG
 
 template<class T, size_t kSize>
-class ArraySafe;
+class VectorSafe;
 
 template<class T>
-class ArraySafeRef///@todo: rename VectorSafeRef
+class VectorSafeRef
 {
 public:
-    typedef ArraySafeRef<T> ThisDataType;
+    typedef VectorSafeRef<T> ThisDataType;
     typedef T* iterator;
     typedef const T* const_iterator;
     typedef T& reference;
@@ -28,62 +28,62 @@ private:
     {
         assert(p);
         m_array = p;
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         m_arraySet = true;
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
     void SetSizeCurrent(const size_t sizeCurrent)
     {
         assert(m_sizeCurrent);
         
         *m_sizeCurrent = sizeCurrent;
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         assert(m_sizeCurrentSet);
         *m_sizeCurrentSet = true;
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
     void SetSizeCurrentPtr(size_t* const sizeCurrentPtr
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         ,bool* sizeCurrentSetPtr
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
         )
     {
         assert(sizeCurrentPtr);
         m_sizeCurrent = sizeCurrentPtr;
 
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         assert(sizeCurrentSetPtr);
         m_sizeCurrentSet = sizeCurrentSetPtr;
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
     void SetSizeMax(const size_t sizeMax)
     {
         assert(sizeMax > 0);
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         m_sizeMax = sizeMax;
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
-    ///@todo: reduce code duplication with ArraySafe
+    ///@todo: reduce code duplication with VectorSafe
     T* m_array;
     size_t* m_sizeCurrent;
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
     bool* m_sizeCurrentSet;
     size_t m_sizeMax;
     bool m_arraySet;
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
 
 public:
 //this would be a non-const pointer to non-const -- this class is for const pointer to non-const
-//    ArraySafeRef()
+//    VectorSafeRef()
 //    {
-//#if NTF_ARRAY_FIXED_DEBUG
+//#if NTF_ARRAY_SAFE_DEBUG
 //        m_arraySet = m_sizeCurrentSet = false;
 //        m_sizeMax = 0;
-//#endif//#if NTF_ARRAY_FIXED_DEBUG
+//#endif//#if NTF_ARRAY_SAFE_DEBUG
 //    }
     ///@todo
-    //ArraySafeRef(T*const pointer, const std::initializer_list<T>& initializerList, const size_t maxSize)
+    //VectorSafeRef(T*const pointer, const std::initializer_list<T>& initializerList, const size_t maxSize)
     //{
     //    SetArray(pointer);
     //    SetSizeMax(maxSize);
@@ -91,15 +91,15 @@ public:
     //    AssertValid();
     //}
     template<size_t kSizeMax>
-    ArraySafeRef(ArraySafe<T, kSizeMax>*const arraySafe)
+    VectorSafeRef(VectorSafe<T, kSizeMax>*const arraySafe)
     {
         assert(arraySafe);
 
         SetSizeCurrentPtr(
             &arraySafe->m_sizeCurrent
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
             ,&arraySafe->m_sizeCurrentSet
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
             );
         SetSizeMax(arraySafe->SizeMax());
         SetArray(arraySafe->begin());
@@ -108,15 +108,15 @@ public:
     ///@todo: AssertCurrentSufficient() //m_sizeMax - m_sizeCurrent >= elementsNum
     void AssertSufficient(const size_t elementsNum) const
     {
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         AssertValid();
         assert(m_sizeMax >= elementsNum);
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
     void AssertValid() const
     {
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         assert(m_arraySet);
         assert(m_sizeCurrentSet);
         assert(m_sizeCurrent);
@@ -126,21 +126,21 @@ public:
         }
         
         assert(m_sizeMax > 0);
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
     ///@todo: have to pass in number of bytes explicitly
-    //void Copy(const ArraySafeRef<T>& arrayFixedOther)
+    //void Copy(const VectorSafeRef<T>& vectorSafeOther)
     //{
-    //    MemcpyFromStart(arrayFixedOther.GetAddressOfUnderlyingArray(), arrayFixedOther.SizeCurrentInBytes());
+    //    MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
     //}
 
     void MemcpyFromStart(const T*const input, const size_t inputBytesNum)
     {
         AssertValid();
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         assert(inputBytesNum <= SizeMaxInBytes());
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
 
         assert(input);
         assert(inputBytesNum > 0);
@@ -312,10 +312,10 @@ public:
 };
 
 template<class T>
-class ConstArraySafeRef///@todo: rename VectorSafeRefConst
+class ConstVectorSafeRef///@todo: rename VectorSafeRefConst
 {
 public:
-    typedef ConstArraySafeRef<T> ThisDataType;
+    typedef ConstVectorSafeRef<T> ThisDataType;
     typedef const T* const_iterator;
     typedef const T& const_reference;
     typedef size_t size_type;
@@ -332,19 +332,19 @@ private:
         m_sizeMax = sizeMax;
     }
 
-    ///@todo: reduce code duplication with ArraySafe
+    ///@todo: reduce code duplication with VectorSafe
     const T* m_array;
     size_t m_sizeMax;
 
 public:
-    ConstArraySafeRef(const T*const pointer, const size_t sizeMax)
+    ConstVectorSafeRef(const T*const pointer, const size_t sizeMax)
     {
         SetArray(pointer);
         SetSizeMax(sizeMax);
         AssertValid();
     }
     template<size_t kSizeMax>
-    ConstArraySafeRef(const ArraySafe<T, kSizeMax>& arraySafe)
+    ConstVectorSafeRef(const VectorSafe<T, kSizeMax>& arraySafe)
     {
         SetArray(arraySafe.begin());
         SetSizeMax(arraySafe.size());
@@ -353,10 +353,10 @@ public:
 
     void AssertValid() const
     {
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         assert(m_array);
         assert(m_sizeMax > 0);
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
     size_type size() const noexcept
@@ -445,10 +445,10 @@ public:
 };
 
 template<class T, size_t kSizeMax>
-class ArraySafe///@todo: rename VectorSafe
+class VectorSafe///@todo: rename VectorSafe
 {
 public:
-    typedef ArraySafe<T, kSizeMax> ThisDataType;
+    typedef VectorSafe<T, kSizeMax> ThisDataType;
     typedef T* iterator;
     typedef const T* const_iterator;
     typedef T& reference;
@@ -458,52 +458,52 @@ public:
 private:
     T m_array[kSizeMax];
     size_t m_sizeCurrent;///<must be manually managed with methods
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
     bool m_sizeCurrentSet;
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
 
-    friend class ArraySafeRef<T>;
-    friend class ConstArraySafeRef<T>;
+    friend class VectorSafeRef<T>;
+    friend class ConstVectorSafeRef<T>;
 
     void AssertValid() const
     {
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         assert(m_sizeCurrentSet);
         assert(m_sizeCurrent <= kSizeMax);
 
-        static_assert(kSizeMax > 0, "ArraySafe<T>::kSizeMax must be greater than 0");
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+        static_assert(kSizeMax > 0, "VectorSafe<T>::kSizeMax must be greater than 0");
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
 public:
-    ArraySafe()
+    VectorSafe()
     {
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         m_sizeCurrentSet = false;
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
-    ArraySafe(const size_t sz)
+    VectorSafe(const size_t sz)
     {
         size(sz);
     }
-    ArraySafe(const std::initializer_list<T>& initializerList)
+    VectorSafe(const std::initializer_list<T>& initializerList)
     {
         MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     }
-    ArraySafe(ConstArraySafeRef<T> r)
+    VectorSafe(ConstVectorSafeRef<T> r)
     {
         MemcpyFromStart(r.begin(), r.size()*sizeof(T));
     }
     template<class T, size_t kSizeMax>
-    operator ArraySafeRef<T>()
+    operator VectorSafeRef<T>()
     {
-        return ArraySafeRef(this);
+        return VectorSafeRef(this);
     }
 
     template<size_t kSizeMaxOther>
-    void Copy(const ArraySafe<T, kSizeMaxOther>& arrayFixedOther)
+    void Copy(const VectorSafe<T, kSizeMaxOther>& vectorSafeOther)
     {
-        MemcpyFromStart(arrayFixedOther.GetAddressOfUnderlyingArray(), arrayFixedOther.SizeCurrentInBytes());
+        MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
     }
 
     void MemcpyFromStart(const T*const input, const size_t inputBytesNum)///@todo: rename to make obvious that the semantics of this is to CLEAR the Array and replace with the contents of input
@@ -525,9 +525,9 @@ public:
     }
     void size(const size_t size)
     {
-#if NTF_ARRAY_FIXED_DEBUG
+#if NTF_ARRAY_SAFE_DEBUG
         m_sizeCurrentSet = true;
-#endif//#if NTF_ARRAY_FIXED_DEBUG
+#endif//#if NTF_ARRAY_SAFE_DEBUG
         m_sizeCurrent = size;
 
         AssertValid();
@@ -687,8 +687,8 @@ public:
 
 
 template< class T, std::size_t N >
-bool operator==(const ArraySafe<T, N>& lhs,
-                const ArraySafe<T, N>& rhs)
+bool operator==(const VectorSafe<T, N>& lhs,
+                const VectorSafe<T, N>& rhs)
 {
     const size_t lhsSize = lhs.size();
     if (lhsSize != rhs.size())
@@ -710,54 +710,54 @@ bool operator==(const ArraySafe<T, N>& lhs,
 }
 
 template< class T, std::size_t N >
-bool operator!=(const ArraySafe<T, N>& lhs, const ArraySafe<T, N>& rhs)
+bool operator!=(const VectorSafe<T, N>& lhs, const VectorSafe<T, N>& rhs)
 {
     return !(lhs == rhs);
 }
 
-//purposefully don't overload comparison operators for ArraySafe
+//purposefully don't overload comparison operators for VectorSafe
 
 template< size_t I, class T, size_t N >
-T& get(ArraySafe<T, N>& a) noexcept
+T& get(VectorSafe<T, N>& a) noexcept
 {
     //if the implementation of this ever changes, update unit tests to cover the new implementation
     return a.GetChecked(I);
 }
 
 template< size_t I, class T, size_t N >
-T&& get(ArraySafe<T, N>&& a) noexcept
+T&& get(VectorSafe<T, N>&& a) noexcept
 {
     //if the implementation of this ever changes, update unit tests to cover the new implementation
     return a.GetChecked(I);
 }
 
 template< size_t I, class T, size_t N >
-const T& get(ArraySafe<T, N>& a) noexcept
+const T& get(VectorSafe<T, N>& a) noexcept
 {
     //if the implementation of this ever changes, update unit tests to cover the new implementation
     return a.GetChecked(I);
 }
 
 template< size_t I, class T, size_t N >
-const T&& get(ArraySafe<T, N>&& a) noexcept
+const T&& get(VectorSafe<T, N>&& a) noexcept
 {
     //if the implementation of this ever changes, update unit tests to cover the new implementation
     return a.GetChecked(I);
 }
 
 template<class T, size_t size>
-void SortAndRemoveDuplicatesFromArray(ArraySafe<T, size>*const a)
+void SortAndRemoveDuplicatesFromVectorSafe(VectorSafe<T, size>*const a)
 {
     assert(a);
     std::sort(a->begin(), a->end());
-    RemoveDuplicatesFromSortedArray(a);
+    RemoveDuplicatesFromSortedVectorSafe(a);
 }
 
 template<class T, size_t size>
-void RemoveDuplicatesFromSortedArray(ArraySafe<T, size>*const a)
+void RemoveDuplicatesFromSortedVectorSafe(VectorSafe<T, size>*const a)
 {
     assert(a);
-    ArraySafe<T, size>& aRef = *a;
+    VectorSafe<T, size>& aRef = *a;
 
     int uniqueIndex = 0;
     const size_t currentSize = a->size();

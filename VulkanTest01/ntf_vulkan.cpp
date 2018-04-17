@@ -258,7 +258,7 @@ void CreateBuffer(
 
 VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice)
 {
-    ArraySafe<VkFormat, 3> candidates =
+    VectorSafe<VkFormat, 3> candidates =
     {
         VK_FORMAT_D32_SFLOAT, /**<*32bit depth*/
         VK_FORMAT_D32_SFLOAT_S8_UINT, /**<*32bit depth, 8bit stencil*/
@@ -281,7 +281,7 @@ void CreateShaderModule(VkShaderModule*const shaderModulePtr, const std::vector<
     NTF_VK_ASSERT_SUCCESS(createShaderModuleResult);
 }
 
-bool CheckValidationLayerSupport(ConstArraySafeRef<const char*> validationLayers)
+bool CheckValidationLayerSupport(ConstVectorSafeRef<const char*> validationLayers)
 {
     const int layersMax = 32;
     uint32_t layerCount;
@@ -290,7 +290,7 @@ bool CheckValidationLayerSupport(ConstArraySafeRef<const char*> validationLayers
         NTF_VK_ASSERT_SUCCESS(enumerateInstanceLayerPropertiesResult);
     }
 
-    ArraySafe<VkLayerProperties, layersMax> availableLayers(layerCount);
+    VectorSafe<VkLayerProperties, layersMax> availableLayers(layerCount);
     {
         const VkResult enumerateInstanceLayerPropertiesResult = vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
         NTF_VK_ASSERT_SUCCESS(enumerateInstanceLayerPropertiesResult);
@@ -405,7 +405,7 @@ void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT
     return bindingDescription;
 }
 
-/*static*/ void Vertex::GetAttributeDescriptions(ArraySafeRef<VkVertexInputAttributeDescription> attributeDescriptions)
+/*static*/ void Vertex::GetAttributeDescriptions(VectorSafeRef<VkVertexInputAttributeDescription> attributeDescriptions)
 {
     attributeDescriptions[0].binding = 0;
     attributeDescriptions[0].location = 0;///<mirrored in the vertex shader
@@ -454,7 +454,7 @@ size_t std::hash<Vertex>::operator()(Vertex const& vertex) const
     return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1);
 }
 
-bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstArraySafeRef<const char*> deviceExtensions)
+bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstVectorSafeRef<const char*> deviceExtensions)
 {
     uint32_t supportedExtensionCount;
     vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &supportedExtensionCount, nullptr);
@@ -464,11 +464,11 @@ bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstAr
     {
         return false;
     }
-    ArraySafe<VkExtensionProperties, maxExtensionCount> supportedExtensions(supportedExtensionCount);
+    VectorSafe<VkExtensionProperties, maxExtensionCount> supportedExtensions(supportedExtensionCount);
     vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &supportedExtensionCount, supportedExtensions.data());
 
     const char*const extensionSupportedSymbol = 0;
-    ArraySafe<const char*, NTF_DEVICE_EXTENSIONS_NUM> requiredExtensions(deviceExtensions);
+    VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM> requiredExtensions(deviceExtensions);
     const size_t requiredExtensionsSize = requiredExtensions.size();
     for (VkExtensionProperties supportedExtension : supportedExtensions)
     {
@@ -497,7 +497,7 @@ bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstAr
 bool IsDeviceSuitable(
     const VkPhysicalDevice& physicalDevice,
     const VkSurfaceKHR& surface,
-    ConstArraySafeRef<const char*> deviceExtensions)
+    ConstVectorSafeRef<const char*> deviceExtensions)
 {
     QueueFamilyIndices indices = FindQueueFamilies(physicalDevice, surface);
     const bool extensionsSupported = CheckDeviceExtensionSupport(physicalDevice, deviceExtensions);
@@ -518,7 +518,7 @@ bool IsDeviceSuitable(
 bool PickPhysicalDevice(
     VkPhysicalDevice*const physicalDevicePtr,
     const VkSurfaceKHR& surface,
-    ConstArraySafeRef<const char*> deviceExtensions,
+    ConstVectorSafeRef<const char*> deviceExtensions,
     const VkInstance& instance)
 {
     assert(physicalDevicePtr);
@@ -534,7 +534,7 @@ bool PickPhysicalDevice(
     }
 
     const uint32_t deviceMax = 8;
-    ArraySafe<VkPhysicalDevice, deviceMax> devices;
+    VectorSafe<VkPhysicalDevice, deviceMax> devices;
     devices.size(deviceCount);
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
     devices.size(deviceCount);
@@ -561,8 +561,8 @@ void CreateLogicalDevice(
     VkDevice*const devicePtr,
     VkQueue*const graphicsQueuePtr,
     VkQueue*const presentQueuePtr,
-    ConstArraySafeRef<const char*> deviceExtensions,
-    ConstArraySafeRef<const char*> validationLayers,
+    ConstVectorSafeRef<const char*> deviceExtensions,
+    ConstVectorSafeRef<const char*> validationLayers,
     const VkSurfaceKHR& surface,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -578,9 +578,9 @@ void CreateLogicalDevice(
     QueueFamilyIndices indices = FindQueueFamilies(physicalDevice, surface);
 
     const uint32_t queueFamiliesNum = 2;
-    ArraySafe<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos(0);
-    ArraySafe<int, queueFamiliesNum> uniqueQueueFamilies({ indices.graphicsFamily, indices.presentFamily });
-    SortAndRemoveDuplicatesFromArray(&uniqueQueueFamilies);
+    VectorSafe<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos(0);
+    VectorSafe<int, queueFamiliesNum> uniqueQueueFamilies({ indices.graphicsFamily, indices.presentFamily });
+    SortAndRemoveDuplicatesFromVectorSafe(&uniqueQueueFamilies);
 
     const float queuePriority = 1.0f;
     for (const int queueFamily : uniqueQueueFamilies)
@@ -640,7 +640,7 @@ void CreateDescriptorSetLayout(VkDescriptorSetLayout*const descriptorSetLayoutPt
     samplerLayoutBinding.pImmutableSamplers = nullptr;///@todo: consider using this; immutable samplers compile sampler into shader, reducing latency in shader (on AMD the Scalar Arithmetic Logic Unit [SALU] is often underutilized, and is used to construct immutable samplers)
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    ArraySafe<VkDescriptorSetLayoutBinding, 2> bindings({ uboLayoutBinding,samplerLayoutBinding });
+    VectorSafe<VkDescriptorSetLayoutBinding, 2> bindings({ uboLayoutBinding,samplerLayoutBinding });
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -696,7 +696,7 @@ void CreateGraphicsPipeline(
 
     auto bindingDescription = Vertex::GetBindingDescription();
     const int attributeDescriptionsSize = 3;
-    ArraySafe<VkVertexInputAttributeDescription, attributeDescriptionsSize> attributeDescriptions(attributeDescriptionsSize);
+    VectorSafe<VkVertexInputAttributeDescription, attributeDescriptionsSize> attributeDescriptions(attributeDescriptionsSize);
     Vertex::GetAttributeDescriptions(&attributeDescriptions);
 
     vertexInputInfo.vertexBindingDescriptionCount = 1;
@@ -929,7 +929,7 @@ void CreateRenderPass(
     dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-    ArraySafe<VkAttachmentDescription, 2> attachments({ colorAttachment,depthAttachment });
+    VectorSafe<VkAttachmentDescription, 2> attachments({ colorAttachment,depthAttachment });
     VkRenderPassCreateInfo renderPassInfo = {};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -944,10 +944,10 @@ void CreateRenderPass(
 }
 
 void CreateCommandBuffers(
-    ArraySafeRef<VkCommandBuffer> commandBuffers,
+    VectorSafeRef<VkCommandBuffer> commandBuffers,
     const VkCommandPool& commandPool,
     const VkDescriptorSet& descriptorSet,
-    ConstArraySafeRef<VkFramebuffer> swapChainFramebuffers,
+    ConstVectorSafeRef<VkFramebuffer> swapChainFramebuffers,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkPipelineLayout& pipelineLayout,
@@ -989,7 +989,7 @@ void CreateCommandBuffers(
         renderPassInfo.renderArea.extent = swapChainExtent;
 
         const size_t kClearValueNum = 2;
-        ArraySafe<VkClearValue, kClearValueNum> clearValues(kClearValueNum);
+        VectorSafe<VkClearValue, kClearValueNum> clearValues(kClearValueNum);
         clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
         clearValues[1].depthStencil = { 1.0f, 0 };
 
@@ -1046,7 +1046,7 @@ void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDevi
     VkDescriptorPool& descriptorPool = *descriptorPoolPtr;
 
     const size_t kPoolSizesNum = 2;
-    ArraySafe<VkDescriptorPoolSize, kPoolSizesNum> poolSizes(kPoolSizesNum);
+    VectorSafe<VkDescriptorPoolSize, kPoolSizesNum> poolSizes(kPoolSizesNum);
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = 1;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1097,7 +1097,7 @@ void CreateDescriptorSet(
     imageInfo.sampler = textureSampler;
 
     const size_t kDescriptorWritesNum = 2;
-    ArraySafe<VkWriteDescriptorSet, kDescriptorWritesNum> descriptorWrites(kDescriptorWritesNum);
+    VectorSafe<VkWriteDescriptorSet, kDescriptorWritesNum> descriptorWrites(kDescriptorWritesNum);
 
     descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[0].dstSet = descriptorSet;
@@ -1364,7 +1364,7 @@ void CreateDepthResources(
 
 VkFormat FindSupportedFormat(
     const VkPhysicalDevice& physicalDevice,
-    ConstArraySafeRef<VkFormat> candidates,
+    ConstVectorSafeRef<VkFormat> candidates,
     const VkImageTiling& tiling,
     const VkFormatFeatureFlags& features)
 {
@@ -1510,8 +1510,8 @@ void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& dev
 }
 
 void CreateFramebuffers(
-    ArraySafeRef<VkFramebuffer> swapChainFramebuffers,
-    ConstArraySafeRef<VkImageView> swapChainImageViews,
+    VectorSafeRef<VkFramebuffer> swapChainFramebuffers,
+    ConstVectorSafeRef<VkImageView> swapChainImageViews,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkImageView& depthImageView,
@@ -1522,7 +1522,7 @@ void CreateFramebuffers(
 
     for (size_t i = 0; i < swapChainImageViewsSize; i++)
     {
-        ArraySafe<VkImageView, 2> attachments =
+        VectorSafe<VkImageView, 2> attachments =
         {
             swapChainImageViews[i],
             depthImageView    //only need one depth buffer, since there's only one frame being actively rendered to at any given time
@@ -1554,9 +1554,9 @@ void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const
 }
 
 void CreateFrameSyncPrimitives(
-    ArraySafeRef<VkSemaphore> imageAvailable, 
-    ArraySafeRef<VkSemaphore> renderFinished, 
-    ArraySafeRef<VkFence> fence, 
+    VectorSafeRef<VkSemaphore> imageAvailable, 
+    VectorSafeRef<VkSemaphore> renderFinished, 
+    VectorSafeRef<VkFence> fence, 
     const size_t framesNum,
     const VkDevice& device)
 {
@@ -1615,7 +1615,7 @@ WIN_TIMER_DEF(s_frameTimer);
 void DrawFrame(
     //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
     const VkSwapchainKHR& swapChain,
-    ConstArraySafeRef<VkCommandBuffer> commandBuffers,
+    ConstVectorSafeRef<VkCommandBuffer> commandBuffers,
     const VkQueue& graphicsQueue,
     const VkQueue& presentQueue,
     const VkFence& fence,
@@ -1705,7 +1705,7 @@ void DrawFrame(
     NTF_VK_ASSERT_SUCCESS(result);
 }
 
-void GetRequiredExtensions(ArraySafeRef<const char*> requiredExtensions)
+void GetRequiredExtensions(VectorSafeRef<const char*> requiredExtensions)
 {
     requiredExtensions.size(0);
     unsigned int glfwExtensionCount = 0;
@@ -1722,7 +1722,7 @@ void GetRequiredExtensions(ArraySafeRef<const char*> requiredExtensions)
     }
 }
 
-VkInstance CreateInstance(ConstArraySafeRef<const char*> validationLayers)
+VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers)
 {
 #if NTF_WIN_TIMER
     fopen_s(&s_winTimer, "WinTimer.txt", "w+");
@@ -1747,7 +1747,7 @@ VkInstance CreateInstance(ConstArraySafeRef<const char*> validationLayers)
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
 
-    ArraySafe<const char*, 32> extensions(0);
+    VectorSafe<const char*, 32> extensions(0);
     GetRequiredExtensions(&extensions);
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
@@ -1816,7 +1816,7 @@ QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice& device, const VkSur
 
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-    ArraySafe<VkQueueFamilyProperties, 8> queueFamilies(queueFamilyCount);
+    VectorSafe<VkQueueFamilyProperties, 8> queueFamilies(queueFamilyCount);
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 
     for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < queueFamilyCount; ++queueFamilyIndex)
@@ -1846,7 +1846,7 @@ QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice& device, const VkSur
     return indices;
 }
 
-VkSurfaceFormatKHR ChooseSwapSurfaceFormat(ConstArraySafeRef<VkSurfaceFormatKHR> availableFormats)
+VkSurfaceFormatKHR ChooseSwapSurfaceFormat(ConstVectorSafeRef<VkSurfaceFormatKHR> availableFormats)
 {
     size_t availableFormatsNum = availableFormats.size();
     assert(availableFormatsNum > 0);
@@ -1869,7 +1869,7 @@ VkSurfaceFormatKHR ChooseSwapSurfaceFormat(ConstArraySafeRef<VkSurfaceFormatKHR>
     return availableFormats[0];//couldn't find the desired format
 }
 
-VkPresentModeKHR ChooseSwapPresentMode(ConstArraySafeRef<VkPresentModeKHR> availablePresentModes)
+VkPresentModeKHR ChooseSwapPresentMode(ConstVectorSafeRef<VkPresentModeKHR> availablePresentModes)
 {
     assert(availablePresentModes.size());
 
@@ -1923,7 +1923,7 @@ VkExtent2D ChooseSwapExtent(GLFWwindow*const window, const VkSurfaceCapabilities
 void CreateSwapChain(
     GLFWwindow*const window,
     VkSwapchainKHR*const swapChainPtr,
-    ArraySafeRef<VkImage> swapChainImages,
+    VectorSafeRef<VkImage> swapChainImages,
     VkFormat*const swapChainImageFormatPtr,
     VkExtent2D*const swapChainExtentPtr,
     const VkPhysicalDevice& physicalDevice,
@@ -2010,17 +2010,17 @@ void CreateSwapChain(
 }
 
 void CleanupSwapChain(
-    ArraySafeRef<VkCommandBuffer> commandBuffers,
+    VectorSafeRef<VkCommandBuffer> commandBuffers,
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
     const VkDeviceMemory& depthImageMemory,
-    ConstArraySafeRef<VkFramebuffer> swapChainFramebuffers,
+    ConstVectorSafeRef<VkFramebuffer> swapChainFramebuffers,
     const VkCommandPool& commandPool,
     const VkPipeline& graphicsPipeline,
     const VkPipelineLayout& pipelineLayout,
     const VkRenderPass& renderPass,
-    ConstArraySafeRef<VkImageView> swapChainImageViews,
+    ConstVectorSafeRef<VkImageView> swapChainImageViews,
     const VkSwapchainKHR& swapChain)
 {
     assert(commandBuffers.size() == swapChainFramebuffers.size());
@@ -2051,8 +2051,8 @@ void CleanupSwapChain(
 }
 
 void CreateImageViews(
-    ArraySafeRef<VkImageView> swapChainImageViews,
-    ConstArraySafeRef<VkImage> swapChainImages,
+    VectorSafeRef<VkImageView> swapChainImageViews,
+    ConstVectorSafeRef<VkImage> swapChainImages,
     const VkFormat& swapChainImageFormat,
     const VkDevice& device)
 {

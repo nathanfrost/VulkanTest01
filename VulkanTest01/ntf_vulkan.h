@@ -13,7 +13,6 @@
 #include <unordered_map>
 #include<algorithm>
 #include <chrono>
-#include <array>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -106,7 +105,7 @@ void CreateBuffer(
     );
 VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice);
 void CreateShaderModule(VkShaderModule*const shaderModulePtr, const std::vector<char>& code, const VkDevice& device);
-bool CheckValidationLayerSupport(ConstArraySafeRef<const char*> validationLayers);
+bool CheckValidationLayerSupport(ConstVectorSafeRef<const char*> validationLayers);
 void CreateImageView(VkImageView*const imageViewPtr, const VkDevice& device, const VkImage& image, const VkFormat& format, const VkImageAspectFlags& aspectFlags);
 std::vector<char> ReadFile(const char*const filename);
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
@@ -133,7 +132,7 @@ struct Vertex
     glm::vec2 texCoord;
 
     static VkVertexInputBindingDescription GetBindingDescription();
-    static void GetAttributeDescriptions(ArraySafeRef<VkVertexInputAttributeDescription> attributeDescriptions);
+    static void GetAttributeDescriptions(VectorSafeRef<VkVertexInputAttributeDescription> attributeDescriptions);
 
     bool operator==(const Vertex& other) const;
 };
@@ -151,9 +150,9 @@ struct UniformBufferObject
     glm::mat4 modelToClip;
 };
 
-void GetRequiredExtensions(ArraySafeRef<const char*>*const requiredExtensions);
+void GetRequiredExtensions(VectorSafeRef<const char*>*const requiredExtensions);
 
-VkInstance CreateInstance(ConstArraySafeRef<const char*> validationLayers);
+VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers);
 
 VkDebugReportCallbackEXT SetupDebugCallback(const VkInstance& instance);
 
@@ -161,8 +160,8 @@ struct SwapChainSupportDetails
 {
     enum { kItemsMax = 32 };
     VkSurfaceCapabilitiesKHR capabilities;
-    ArraySafe<VkSurfaceFormatKHR, kItemsMax> formats;
-    ArraySafe<VkPresentModeKHR, kItemsMax> presentModes;
+    VectorSafe<VkSurfaceFormatKHR, kItemsMax> formats;
+    VectorSafe<VkPresentModeKHR, kItemsMax> presentModes;
 };
 
 void QuerySwapChainSupport(SwapChainSupportDetails*const swapChainSupportDetails, const VkSurfaceKHR& surface, const VkPhysicalDevice& device);
@@ -180,16 +179,16 @@ struct QueueFamilyIndices
 
 QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice& device, const VkSurfaceKHR& surface);
 
-VkSurfaceFormatKHR ChooseSwapSurfaceFormat(ConstArraySafeRef<VkSurfaceFormatKHR> availableFormats);
+VkSurfaceFormatKHR ChooseSwapSurfaceFormat(ConstVectorSafeRef<VkSurfaceFormatKHR> availableFormats);
 
-VkPresentModeKHR ChooseSwapPresentMode(const ArraySafeRef<VkPresentModeKHR>& availablePresentModes);
+VkPresentModeKHR ChooseSwapPresentMode(const VectorSafeRef<VkPresentModeKHR>& availablePresentModes);
 
 VkExtent2D ChooseSwapExtent(GLFWwindow*const window, const VkSurfaceCapabilitiesKHR& capabilities);
 
 void CreateSwapChain(
     GLFWwindow*const window,
     VkSwapchainKHR*const swapChainPtr,
-    ArraySafeRef<VkImage> swapChainImages,
+    VectorSafeRef<VkImage> swapChainImages,
     VkFormat*const swapChainImageFormatPtr,
     VkExtent2D*const swapChainExtentPtr,
     const VkPhysicalDevice& physicalDevice,
@@ -198,44 +197,44 @@ void CreateSwapChain(
     const VkDevice& device);
 
 void CleanupSwapChain(
-    ArraySafeRef<VkCommandBuffer> commandBuffersPtr,
+    VectorSafeRef<VkCommandBuffer> commandBuffersPtr,
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
     const VkDeviceMemory& depthImageMemory,
-    ConstArraySafeRef<VkFramebuffer> swapChainFramebuffers,
+    ConstVectorSafeRef<VkFramebuffer> swapChainFramebuffers,
     const VkCommandPool& commandPool,
     const VkPipeline& graphicsPipeline,
     const VkPipelineLayout& pipelineLayout,
     const VkRenderPass& renderPass,
-    ConstArraySafeRef<VkImageView> swapChainImageViews,
+    ConstVectorSafeRef<VkImageView> swapChainImageViews,
     const VkSwapchainKHR& swapChain);
 
 void CreateImageViews(
-    ArraySafeRef<VkImageView> swapChainImageViewsPtr,
-    ConstArraySafeRef<VkImage> swapChainImages,
+    VectorSafeRef<VkImageView> swapChainImageViewsPtr,
+    ConstVectorSafeRef<VkImage> swapChainImages,
     const VkFormat& swapChainImageFormat,
     const VkDevice& device);
 
-bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstArraySafeRef<const char*> deviceExtensions);
+bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstVectorSafeRef<const char*> deviceExtensions);
 
 bool IsDeviceSuitable(
     const VkPhysicalDevice& physicalDevice,
     const VkSurfaceKHR& surface,
-    ConstArraySafeRef<const char*> deviceExtensions);
+    ConstVectorSafeRef<const char*> deviceExtensions);
 
 bool PickPhysicalDevice(
     VkPhysicalDevice*const physicalDevicePtr,
     const VkSurfaceKHR& surface,
-    ConstArraySafeRef<const char*> deviceExtensions,
+    ConstVectorSafeRef<const char*> deviceExtensions,
     const VkInstance& instance);
 
 void CreateLogicalDevice(
     VkDevice*const devicePtr,
     VkQueue*const graphicsQueuePtr,
     VkQueue*const presentQueuePtr,
-    ConstArraySafeRef<const char*> deviceExtensions,
-    ConstArraySafeRef<const char*> validationLayers,
+    ConstVectorSafeRef<const char*> deviceExtensions,
+    ConstVectorSafeRef<const char*> validationLayers,
     const VkSurfaceKHR& surface,
     const VkPhysicalDevice& physicalDevice);
 
@@ -255,10 +254,10 @@ void CreateRenderPass(
     );
 
 void CreateCommandBuffers(
-    ArraySafeRef<VkCommandBuffer> commandBuffersPtr,
+    VectorSafeRef<VkCommandBuffer> commandBuffersPtr,
     const VkCommandPool& commandPool,
     const VkDescriptorSet& descriptorSet,
-    ConstArraySafeRef<VkFramebuffer> swapChainFramebuffers,
+    ConstVectorSafeRef<VkFramebuffer> swapChainFramebuffers,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkPipelineLayout& pipelineLayout,
@@ -318,7 +317,7 @@ void CreateDepthResources(
 
 VkFormat FindSupportedFormat(
     const VkPhysicalDevice& physicalDevice,
-    ConstArraySafeRef<VkFormat> candidates,
+    ConstVectorSafeRef<VkFormat> candidates,
     const VkImageTiling& tiling,
     const VkFormatFeatureFlags& features);
 
@@ -339,17 +338,17 @@ void CreateTextureImage(
 void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& device);
 
 void CreateFramebuffers(
-    ArraySafeRef<VkFramebuffer> swapChainFramebuffersPtr,
-    ConstArraySafeRef<VkImageView> swapChainImageViews,
+    VectorSafeRef<VkFramebuffer> swapChainFramebuffersPtr,
+    ConstVectorSafeRef<VkImageView> swapChainImageViews,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkImageView& depthImageView,
     const VkDevice& device);
 void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const VkInstance& instance);
 void CreateFrameSyncPrimitives(
-    ArraySafeRef<VkSemaphore> imageAvailable,
-    ArraySafeRef<VkSemaphore> renderFinished,
-    ArraySafeRef<VkFence> fence,
+    VectorSafeRef<VkSemaphore> imageAvailable,
+    VectorSafeRef<VkSemaphore> renderFinished,
+    VectorSafeRef<VkFence> fence,
     const size_t framesNum,
     const VkDevice& device);
 
@@ -358,7 +357,7 @@ void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExte
 void DrawFrame(
     //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,
     const VkSwapchainKHR& swapChain,
-    ConstArraySafeRef<VkCommandBuffer> commandBuffers,
+    ConstVectorSafeRef<VkCommandBuffer> commandBuffers,
     const VkQueue& graphicsQueue,
     const VkQueue& presentQueue,
     const VkFence& fence,
