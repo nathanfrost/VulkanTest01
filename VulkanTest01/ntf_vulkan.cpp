@@ -1592,7 +1592,9 @@ void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExte
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0f;
 
-    const glm::mat4 modelToWorld = glm::rotate(glm::mat4(), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    const glm::mat4 worldRotation = glm::rotate(glm::mat4(), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    const glm::mat4 worldTranslation = glm::translate(glm::mat4(), glm::vec3(-1.f, -1.f, 0.f));
+    const glm::mat4 modelToWorld = worldTranslation*worldRotation;
     const glm::mat4 worldToView = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
     glm::mat4 viewToClip = glm::perspective(glm::radians(45.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
