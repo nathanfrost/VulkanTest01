@@ -66,18 +66,10 @@ public:
             m_device,
             m_physicalDevice);
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
-        CreateCommandBuffers(
+        AllocateCommandBuffers(
             &m_commandBuffers,
             m_commandPool,
-            m_descriptorSet,
-            m_swapChainFramebuffers,
-            m_renderPass,
-            m_swapChainExtent,
-            m_pipelineLayout,
-            m_graphicsPipeline,
-            m_vertexBuffer,
-            m_indexBuffer,
-            static_cast<uint32_t>(m_indices.size()),
+            static_cast<uint32_t>(m_swapChainFramebuffers.size()),
             m_device);
     }
 
@@ -217,18 +209,10 @@ private:
         CreateUniformBuffer(&m_uniformBuffer, &m_uniformBufferMemory, m_device, m_physicalDevice);
         CreateDescriptorPool(&m_descriptorPool, m_device);
         CreateDescriptorSet(&m_descriptorSet, m_descriptorSetLayout, m_descriptorPool, m_uniformBuffer, m_textureImageView, m_textureSampler, m_device);
-        CreateCommandBuffers(
-            &m_commandBuffers, 
+        AllocateCommandBuffers(
+            &m_commandBuffers,
             m_commandPool,
-            m_descriptorSet, 
-            m_swapChainFramebuffers, 
-            m_renderPass, 
-            m_swapChainExtent, 
-            m_pipelineLayout,
-            m_graphicsPipeline, 
-            m_vertexBuffer, 
-            m_indexBuffer, 
-            static_cast<uint32_t>(m_indices.size()),
+            static_cast<uint32_t>(m_swapChainFramebuffers.size()),
             m_device);
         CreateFrameSyncPrimitives(&m_imageAvailableSemaphore, &m_renderFinishedSemaphore, &m_fence, NTF_FRAMES_IN_FLIGHT_NUM, m_device);
     }
@@ -242,14 +226,32 @@ private:
             glfwPollEvents();
 
             UpdateUniformBuffer(m_uniformBufferMemory, m_swapChainExtent, m_device);
+            
+            const VkSemaphore imageAvailableSemaphore = m_imageAvailableSemaphore[frameIndex];
+            uint32_t acquiredImageIndex;
+            AcquireNextImage(&acquiredImageIndex, m_swapChain, imageAvailableSemaphore, m_device);
+
+            FillCommandBuffer(
+                m_commandBuffers[acquiredImageIndex],
+                m_descriptorSet,
+                m_swapChainFramebuffers[acquiredImageIndex],
+                m_renderPass,
+                m_swapChainExtent,
+                m_pipelineLayout,
+                m_graphicsPipeline,
+                m_vertexBuffer,
+                m_indexBuffer,
+                static_cast<uint32_t>(m_indices.size()),
+                m_device);
             DrawFrame(
                 /*this,///#TODO_CALLBACK*/ 
                 m_swapChain, 
                 m_commandBuffers, 
+                acquiredImageIndex,
                 m_graphicsQueue, 
                 m_presentQueue, 
                 m_fence[frameIndex],
-                m_imageAvailableSemaphore[frameIndex],
+                imageAvailableSemaphore,
                 m_renderFinishedSemaphore[frameIndex],
                 m_device);
             frameIndex = (frameIndex + 1) % NTF_FRAMES_IN_FLIGHT_NUM;

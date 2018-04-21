@@ -253,11 +253,22 @@ void CreateRenderPass(
     const VkPhysicalDevice& physicalDevice
     );
 
-void CreateCommandBuffers(
-    VectorSafeRef<VkCommandBuffer> commandBuffersPtr,
+void AllocateCommandBuffers(
+    VectorSafeRef<VkCommandBuffer> commandBuffers,
     const VkCommandPool& commandPool,
+    const int swapChainFramebuffersSize,
+    const VkDevice& device);
+
+void AcquireNextImage(
+    uint32_t*const acquiredImageIndexPtr,
+    const VkSwapchainKHR& swapChain,
+    const VkSemaphore& imageAvailableSemaphore,
+    const VkDevice& device);
+
+void FillCommandBuffer(
+    const VkCommandBuffer& commandBuffer,
     const VkDescriptorSet& descriptorSet,
-    ConstVectorSafeRef<VkFramebuffer> swapChainFramebuffers,
+    const VkFramebuffer& swapChainFramebuffers,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkPipelineLayout& pipelineLayout,
@@ -355,9 +366,10 @@ void CreateFrameSyncPrimitives(
 void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExtent2D& swapChainExtent, const VkDevice& device);
 
 void DrawFrame(
-    //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,
+    //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
     const VkSwapchainKHR& swapChain,
     ConstVectorSafeRef<VkCommandBuffer> commandBuffers,
+    const uint32_t acquiredImageIndex,
     const VkQueue& graphicsQueue,
     const VkQueue& presentQueue,
     const VkFence& fence,

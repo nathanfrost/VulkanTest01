@@ -943,21 +943,13 @@ void CreateRenderPass(
     NTF_VK_ASSERT_SUCCESS(createRenderPassResult);
 }
 
-void CreateCommandBuffers(
+void AllocateCommandBuffers(
     VectorSafeRef<VkCommandBuffer> commandBuffers,
     const VkCommandPool& commandPool,
-    const VkDescriptorSet& descriptorSet,
-    ConstVectorSafeRef<VkFramebuffer> swapChainFramebuffers,
-    const VkRenderPass& renderPass,
-    const VkExtent2D& swapChainExtent,
-    const VkPipelineLayout& pipelineLayout,
-    const VkPipeline& graphicsPipeline,
-    const VkBuffer& vertexBuffer,
-    const VkBuffer& indexBuffer,
-    const uint32_t& indicesNum,
+    const int swapChainFramebuffersSize,
     const VkDevice& device)
 {
-    commandBuffers.size(swapChainFramebuffers.size());//bake one command buffer for every image in the swapchain so Vulkan can blast through them
+    commandBuffers.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
 
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;//only value allowed
@@ -967,53 +959,63 @@ void CreateCommandBuffers(
 
     const VkResult allocateCommandBuffersResult = vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data());
     NTF_VK_ASSERT_SUCCESS(allocateCommandBuffersResult);
+}
 
-    for (size_t i = 0; i < commandBuffers.size(); i++)
-    {
-        const VkCommandBuffer& vkCommandBuffer = commandBuffers[i];
-        VkCommandBufferBeginInfo beginInfo = {};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT; /* options: * VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded right after executing it once
-                                                                                    * VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: This is a secondary command buffer that will be entirely within a single render pass.
-                                                                                    * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also already pending execution. */
-        beginInfo.pInheritanceInfo = nullptr; //specifies what state a secondary buffer should inherit from the primary buffer
-        vkBeginCommandBuffer(vkCommandBuffer, &beginInfo);  //implicitly resets the command buffer (you can't append commands to an existing buffer)
+void FillCommandBuffer(
+    const VkCommandBuffer& vkCommandBuffer,
+    const VkDescriptorSet& descriptorSet,
+    const VkFramebuffer& swapChainFramebuffer,
+    const VkRenderPass& renderPass,
+    const VkExtent2D& swapChainExtent,
+    const VkPipelineLayout& pipelineLayout,
+    const VkPipeline& graphicsPipeline,
+    const VkBuffer& vertexBuffer,
+    const VkBuffer& indexBuffer,
+    const uint32_t& indicesNum,
+    const VkDevice& device)
+{
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT; /* options: * VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded right after executing it once
+                                                                                * VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: This is a secondary command buffer that will be entirely within a single render pass.
+                                                                                * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also already pending execution. */
+    beginInfo.pInheritanceInfo = nullptr; //specifies what state a secondary buffer should inherit from the primary buffer
+    vkBeginCommandBuffer(vkCommandBuffer, &beginInfo);  //implicitly resets the command buffer (you can't append commands to an existing buffer)
 
-        VkRenderPassBeginInfo renderPassInfo = {};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = swapChainFramebuffers[i];
+    VkRenderPassBeginInfo renderPassInfo = {};
+    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    renderPassInfo.renderPass = renderPass;
+    renderPassInfo.framebuffer = swapChainFramebuffer;
 
-        //any pixels outside of the area defined here have undefined values; we don't want that
-        renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = swapChainExtent;
+    //any pixels outside of the area defined here have undefined values; we don't want that
+    renderPassInfo.renderArea.offset = { 0, 0 };
+    renderPassInfo.renderArea.extent = swapChainExtent;
 
-        const size_t kClearValueNum = 2;
-        VectorSafe<VkClearValue, kClearValueNum> clearValues(kClearValueNum);
-        clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
-        clearValues[1].depthStencil = { 1.0f, 0 };
+    const size_t kClearValueNum = 2;
+    VectorSafe<VkClearValue, kClearValueNum> clearValues(kClearValueNum);
+    clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
+    clearValues[1].depthStencil = { 1.0f, 0 };
 
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+    renderPassInfo.pClearValues = clearValues.data();
 
-        vkCmdBeginRenderPass(vkCommandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
-        vkCmdBindPipeline(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+    vkCmdBeginRenderPass(vkCommandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
+    vkCmdBindPipeline(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-        VkBuffer vertexBuffers[] = { vertexBuffer };
-        VkDeviceSize offsets[] = { 0 };
-        vkCmdBindVertexBuffers(vkCommandBuffer, 0, 1, vertexBuffers, offsets);
-        vkCmdBindIndexBuffer(vkCommandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    VkBuffer vertexBuffers[] = { vertexBuffer };
+    VkDeviceSize offsets[] = { 0 };
+    vkCmdBindVertexBuffers(vkCommandBuffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(vkCommandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-        //note that with shader lines like the following, multiple descriptors can be passed such that per-object descriptors and shared descriptors can be passed in separate descriptor sets, so shared descriptors can be bound only once
-        //layout(set = 0, binding = 0) uniform UniformBufferObject { ... }
-        vkCmdBindDescriptorSets(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    //note that with shader lines like the following, multiple descriptors can be passed such that per-object descriptors and shared descriptors can be passed in separate descriptor sets, so shared descriptors can be bound only once
+    //layout(set = 0, binding = 0) uniform UniformBufferObject { ... }
+    vkCmdBindDescriptorSets(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
-        vkCmdDrawIndexed(vkCommandBuffer, static_cast<uint32_t>(indicesNum), 1, 0, 0, 0);
-        vkCmdEndRenderPass(vkCommandBuffer);
+    vkCmdDrawIndexed(vkCommandBuffer, indicesNum, 1, 0, 0, 0);
+    vkCmdEndRenderPass(vkCommandBuffer);
 
-        const VkResult endCommandBufferResult = vkEndCommandBuffer(vkCommandBuffer);
-        NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
-    }
+    const VkResult endCommandBufferResult = vkEndCommandBuffer(vkCommandBuffer);
+    NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
 }
 
 void CreateUniformBuffer(
@@ -1311,8 +1313,8 @@ void CreateCommandPool(VkCommandPool*const commandPoolPtr, const VkSurfaceKHR& s
     VkCommandPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily;
-    poolInfo.flags = 0; //options:  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new commands very often(may change memory allocation behavior)
-                        //          VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : Allow command buffers to be rerecorded individually, without this flag they all have to be reset together
+    poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;   //options:  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new commands very often(may change memory allocation behavior)
+                                                                        //          VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : Allow command buffers to be rerecorded individually, without this flag they all have to be reset together
     const VkResult createCommandPoolResult = vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool);
     NTF_VK_ASSERT_SUCCESS(createCommandPoolResult);
 }
@@ -1610,12 +1612,37 @@ void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExte
     vkUnmapMemory(device, uniformBufferMemory);
 }
 
+void AcquireNextImage(
+    uint32_t*const acquiredImageIndexPtr,
+    const VkSwapchainKHR& swapChain, 
+    const VkSemaphore& imageAvailableSemaphore, 
+    const VkDevice& device)
+{
+    assert(acquiredImageIndexPtr);
+    auto& acquiredImageIndex = *acquiredImageIndexPtr;
+
+    const VkResult result = vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphore, VK_NULL_HANDLE, &acquiredImageIndex);//place the vkAcquireNextImageKHR() call as late as possible in the frame because this call can block according to the Vulkan spec.  Also note the spec allows the Acquire to return Image indexes in random order, so an application cannot assume round-robin order even with FIFO mode and a 2-deep swap chain
+    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+        ///#TODO_CALLBACK
+        //swap chain can no longer be used for rendering
+        //hackToRecreateSwapChainIfNecessary.recreateSwapChain();//haven't seen this get hit yet, even when minimizing and resizing the window
+        return;
+    }
+    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR/*VK_SUBOPTIMAL_KHR indicates swap chain can still present image, but surface properties don't entirely match; for example, during resizing*/)
+    {
+        assert(false);//failed to acquire swap chain image
+    }
+    ///@todo: handle handle VK_ERROR_SURFACE_LOST_KHR return value
+}
+
 WIN_TIMER_DEF(s_frameTimer);
 
 void DrawFrame(
     //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
     const VkSwapchainKHR& swapChain,
     ConstVectorSafeRef<VkCommandBuffer> commandBuffers,
+    const uint32_t acquiredImageIndex,
     const VkQueue& graphicsQueue,
     const VkQueue& presentQueue,
     const VkFence& fence,
@@ -1635,21 +1662,6 @@ void DrawFrame(
     ///#TODO_CALLBACK
     //assert(hackToRecreateSwapChainIfNecessaryPtr);
     //auto& hackToRecreateSwapChainIfNecessary = *hackToRecreateSwapChainIfNecessaryPtr;
-
-    uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);//place the vkAcquireNextImageKHR() call as late as possible in the frame because this call can block according to the Vulkan spec.  Also note the spec allows the Acquire to return Image indexes in random order, so an application cannot assume round-robin order even with FIFO mode and a 2-deep swap chain
-    if (result == VK_ERROR_OUT_OF_DATE_KHR)
-    {
-        ///#TODO_CALLBACK
-        //swap chain can no longer be used for rendering
-        //hackToRecreateSwapChainIfNecessary.recreateSwapChain();//haven't seen this get hit yet, even when minimizing and resizing the window
-        return;
-    }
-    else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR/*VK_SUBOPTIMAL_KHR indicates swap chain can still present image, but surface properties don't entirely match; for example, during resizing*/)
-    {
-        assert(false);//failed to acquire swap chain image
-    }
-    ///@todo: handle handle VK_ERROR_SURFACE_LOST_KHR return value
 
     WIN_TIMER_DEF_START(waitForFences);
     vkWaitForFences(device, 1, &fence,  VK_TRUE, UINT64_MAX/*wait until fence is signaled*/);
@@ -1672,7 +1684,7 @@ void DrawFrame(
     submitInfo.pWaitDstStageMask = waitStages;
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffers[imageIndex];
+    submitInfo.pCommandBuffers = &commandBuffers[acquiredImageIndex];
 
     //signal these semaphores once the command buffer(s) have finished execution
     VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };
@@ -1692,10 +1704,9 @@ void DrawFrame(
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapChains;
     presentInfo.pResults = nullptr; // allows you to specify an array of VkResult values to check for every individual swap chain if presentation was successful
+    presentInfo.pImageIndices = &acquiredImageIndex;
 
-    presentInfo.pImageIndices = &imageIndex;
-
-    result = vkQueuePresentKHR(presentQueue, &presentInfo);
+    const VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR/*swap chain can no longer be used for rendering*/ ||
         result == VK_SUBOPTIMAL_KHR/*swap chain can still present image, but surface properties don't entirely match; for example, during resizing*/)
     {
