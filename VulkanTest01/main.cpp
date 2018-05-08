@@ -131,8 +131,13 @@ private:
 
         vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
+        
+        //@todo: BEG_DestroyUniformBuffer()
+        vkUnmapMemory(m_device, m_uniformBufferGpuMemory);
+        m_uniformBufferCpuMemory = nullptr;
         vkDestroyBuffer(m_device, m_uniformBuffer, nullptr);
-        vkFreeMemory(m_device, m_uniformBufferMemory, nullptr);
+        vkFreeMemory(m_device, m_uniformBufferGpuMemory, nullptr);        
+        //@todo: END_DestroyUniformBuffer()
 
         vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
         vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
@@ -187,7 +192,9 @@ private:
             m_device);
         CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
         CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
-        CreateDescriptorSetLayout(&m_descriptorSetLayout, m_device);
+        
+        const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        CreateDescriptorSetLayout(&m_descriptorSetLayout, descriptorType, m_device);
         CreateGraphicsPipeline(&m_pipelineLayout, &m_graphicsPipeline, m_renderPass, m_descriptorSetLayout, m_swapChainExtent, m_device);
         CreateCommandPool(&m_commandPool, m_surface, m_device, m_physicalDevice);
         CreateDepthResources(
@@ -206,9 +213,28 @@ private:
         LoadModel(&m_vertices, &m_indices);
         CreateVertexBuffer(&m_vertexBuffer, &m_vertexBufferMemory, m_vertices, m_commandPool, m_graphicsQueue, m_device, m_physicalDevice);
         CreateIndexBuffer(&m_indexBuffer, &m_indexBufferMemory, m_indices, m_commandPool, m_graphicsQueue, m_device, m_physicalDevice);
-        CreateUniformBuffer(&m_uniformBuffer, &m_uniformBufferMemory, m_device, m_physicalDevice);
-        CreateDescriptorPool(&m_descriptorPool, m_device);
-        CreateDescriptorSet(&m_descriptorSet, m_descriptorSetLayout, m_descriptorPool, m_uniformBuffer, m_textureImageView, m_textureSampler, m_device);
+        
+        m_uniformBufferSize = sizeof(UniformBufferObject);
+        const VkDeviceSize uniformBufferCpuAlignment = UniformBufferCpuAlignmentCalculate(m_uniformBufferSize, m_physicalDevice);
+        CreateUniformBuffer(
+            &m_uniformBuffer, 
+            &m_uniformBufferGpuMemory, 
+            &m_uniformBufferCpuMemory, 
+            uniformBufferCpuAlignment*1/**<@todo NTF:have more than one object*/,
+            m_device, 
+            m_physicalDevice);
+
+        CreateDescriptorPool(&m_descriptorPool, descriptorType, m_device);
+        CreateDescriptorSet(
+            &m_descriptorSet, 
+            descriptorType, 
+            m_descriptorSetLayout, 
+            m_descriptorPool, 
+            m_uniformBuffer, 
+            m_uniformBufferSize, 
+            m_textureImageView, 
+            m_textureSampler, 
+            m_device);
         AllocateCommandBuffers(
             &m_commandBuffers,
             m_commandPool,
@@ -225,7 +251,7 @@ private:
         {
             glfwPollEvents();
 
-            UpdateUniformBuffer(m_uniformBufferMemory, m_swapChainExtent, m_device);
+            UpdateUniformBuffer(m_uniformBufferCpuMemory, m_uniformBufferGpuMemory, m_uniformBufferSize, m_swapChainExtent, m_device);
             
             const VkSemaphore imageAvailableSemaphore = m_imageAvailableSemaphore[frameIndex];
             uint32_t acquiredImageIndex;
@@ -297,7 +323,9 @@ private:
     VkBuffer m_indexBuffer;
     VkDeviceMemory m_indexBufferMemory;
     VkBuffer m_uniformBuffer;
-    VkDeviceMemory m_uniformBufferMemory;
+    VkDeviceMemory m_uniformBufferGpuMemory;
+    void* m_uniformBufferCpuMemory;
+    size_t m_uniformBufferSize;
     VkDescriptorPool m_descriptorPool;
     VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffers;//automatically freed when VkCommandPool is destroyed

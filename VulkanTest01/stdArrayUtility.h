@@ -9,6 +9,23 @@
 #define NTF_ARRAY_SAFE_DEBUG 1 ///@todo: rename NTF_ARRAY_SAFE_DEBUG
 #endif//#if _DEBUG
 
+inline void* AlignedMalloc(size_t size, size_t alignment)
+{
+    assert(size > 0);
+    assert(alignment > 0);
+
+    void* ret = _aligned_malloc(size, alignment);
+    assert(ret);
+    assert((uintptr_t)(ret) % (uintptr_t)(alignment) == 0);
+    return ret;
+}
+
+inline void AlignedFree(void* mem)
+{
+    assert(mem);
+    _aligned_free(mem);
+}
+
 template<class T, size_t kSize>
 class VectorSafe;
 
@@ -103,6 +120,34 @@ public:
             );
         SetSizeMax(arraySafe->SizeMax());
         SetArray(arraySafe->begin());
+    }
+
+    ///@todo: unit tests
+    VectorSafeRef(T*const p, const size_t sizeMax, const size_t alignment)
+    {
+        assert((uintptr_t)p % alignment == 0);
+        assert(sizeMax % alignment == 0);
+
+        SetSizeMax(sizeMax);
+        SetArray(p);
+    }
+
+    ///@todo: unit tests
+    VectorSafeRef()
+    {
+        Reset();
+    }
+    ///@todo: unit tests
+    void Reset()
+    {
+        m_array = nullptr;
+        m_sizeCurrent = 0;
+
+#if NTF_ARRAY_SAFE_DEBUG
+        m_sizeCurrentSet = nullptr;
+        m_arraySet = false;
+        m_sizeMax = 0;
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
     ///@todo: AssertCurrentSufficient() //m_sizeMax - m_sizeCurrent >= elementsNum
@@ -310,6 +355,23 @@ public:
         return *m_sizeCurrent == 0;
     }
 };
+
+///NOTE: the caller is responsible for freeing this memory with AlignedFree(); VectorSafeRef is only a reference
+template<class T>
+void AlignedMalloc(VectorSafeRef<T>*const vectorSafeRef, size_t size, size_t alignment)
+{
+    assert(vectorSafeRef);
+    *vectorSafeRef = VectorSafeRef<T>(reinterpret_cast<T*>(AlignedMalloc(size, alignment)), size, alignment);
+}
+
+template<class T>
+void AlignedFree(VectorSafeRef<T>*const vectorSafeRef)
+{
+    assert(vectorSafeRef);
+    AlignedFree(vectorSafeRef->data());
+    vectorSafeRef->Reset();
+}
+
 
 template<class T>
 class ConstVectorSafeRef///@todo: rename VectorSafeRefConst

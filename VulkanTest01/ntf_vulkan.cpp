@@ -621,15 +621,22 @@ void CreateLogicalDevice(
     vkGetDeviceQueue(device, indices.presentFamily, 0, &presentQueue);
 }
 
-void CreateDescriptorSetLayout(VkDescriptorSetLayout*const descriptorSetLayoutPtr, const VkDevice& device)
+void DescriptorTypeAssertOnInvalid(const VkDescriptorType descriptorType)
+{
+    assert(descriptorType >= VK_DESCRIPTOR_TYPE_BEGIN_RANGE && descriptorType <= VK_DESCRIPTOR_TYPE_END_RANGE);
+}
+
+void CreateDescriptorSetLayout(VkDescriptorSetLayout*const descriptorSetLayoutPtr, const VkDescriptorType descriptorType, const VkDevice& device)
 {
     assert(descriptorSetLayoutPtr);
     VkDescriptorSetLayout& descriptorSetLayout = *descriptorSetLayoutPtr;
 
+    DescriptorTypeAssertOnInvalid(descriptorType);
+
     VkDescriptorSetLayoutBinding uboLayoutBinding = {};
     uboLayoutBinding.binding = 0;
     uboLayoutBinding.descriptorCount = 1;
-    uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    uboLayoutBinding.descriptorType = descriptorType;
     uboLayoutBinding.pImmutableSamplers = nullptr;
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
@@ -1009,7 +1016,8 @@ void FillCommandBuffer(
 
     //note that with shader lines like the following, multiple descriptors can be passed such that per-object descriptors and shared descriptors can be passed in separate descriptor sets, so shared descriptors can be bound only once
     //layout(set = 0, binding = 0) uniform UniformBufferObject { ... }
-    vkCmdBindDescriptorSets(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    const uint32_t dynamicOffset = 0;
+    vkCmdBindDescriptorSets(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 1, &dynamicOffset);
 
     vkCmdDrawIndexed(vkCommandBuffer, indicesNum, 1, 0, 0, 0);
     vkCmdEndRenderPass(vkCommandBuffer);
@@ -1018,38 +1026,63 @@ void FillCommandBuffer(
     NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
 }
 
+VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferSize, const VkPhysicalDevice& physicalDevice)
+{
+    assert(bufferSize > 0);
+
+    VkPhysicalDeviceProperties physicalDeviceProperties;
+    vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
+    const VkDeviceSize minUniformBufferOffsetAlignment = physicalDeviceProperties.limits.minUniformBufferOffsetAlignment;
+
+    VkDeviceSize uniformBufferAlignment = bufferSize;
+    if (minUniformBufferOffsetAlignment > 0)
+    {
+        uniformBufferAlignment = (uniformBufferAlignment + minUniformBufferOffsetAlignment - 1) & ~(minUniformBufferOffsetAlignment - 1);
+    }
+    return uniformBufferAlignment;
+}
+
 void CreateUniformBuffer(
     VkBuffer*const uniformBufferPtr,
-    VkDeviceMemory*const uniformBufferMemoryPtr,
+    VkDeviceMemory*const uniformBufferGpuMemoryPtr,
+    void**const uniformBufferCpuMemoryPtr,
+    const VkDeviceSize bufferSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
     assert(uniformBufferPtr);
     auto& uniformBuffer = *uniformBufferPtr;
 
-    assert(uniformBufferMemoryPtr);
-    auto& uniformBufferMemory = *uniformBufferMemoryPtr;
+    assert(uniformBufferGpuMemoryPtr);
+    auto& uniformBufferGpuMemory = *uniformBufferGpuMemoryPtr;
 
-    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+    assert(uniformBufferCpuMemoryPtr);
+    auto& uniformBufferCpuMemory = *uniformBufferCpuMemoryPtr;
+
+    assert(bufferSize > 0);
+
     CreateBuffer(
         &uniformBuffer,
-        &uniformBufferMemory,
+        &uniformBufferGpuMemory,
         bufferSize,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
         device,
-        physicalDevice
-        );
+        physicalDevice);
+
+    vkMapMemory(device, uniformBufferGpuMemory, 0, bufferSize, 0, &uniformBufferCpuMemory);
 }
 
-void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDevice& device)
+void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDescriptorType descriptorType, const VkDevice& device)
 {
     assert(descriptorPoolPtr);
     VkDescriptorPool& descriptorPool = *descriptorPoolPtr;
 
+    DescriptorTypeAssertOnInvalid(descriptorType);
+
     const size_t kPoolSizesNum = 2;
     VectorSafe<VkDescriptorPoolSize, kPoolSizesNum> poolSizes(kPoolSizesNum);
-    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].type = descriptorType;
     poolSizes[0].descriptorCount = 1;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     poolSizes[1].descriptorCount = 1;
@@ -1068,15 +1101,20 @@ void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDevi
 
 void CreateDescriptorSet(
     VkDescriptorSet*const descriptorSetPtr,
+    const VkDescriptorType descriptorType,
     const VkDescriptorSetLayout& descriptorSetLayout,
     const VkDescriptorPool& descriptorPool,
     const VkBuffer& uniformBuffer,
+    const size_t uniformBufferSize,
     const VkImageView& textureImageView,
     const VkSampler& textureSampler,
     const VkDevice& device)
 {
     assert(descriptorSetPtr);
     VkDescriptorSet& descriptorSet = *descriptorSetPtr;
+
+    DescriptorTypeAssertOnInvalid(descriptorType);
+    assert(uniformBufferSize > 0);
 
     VkDescriptorSetLayout layouts[] = { descriptorSetLayout };
     VkDescriptorSetAllocateInfo allocInfo = {};
@@ -1091,7 +1129,7 @@ void CreateDescriptorSet(
     VkDescriptorBufferInfo bufferInfo = {};
     bufferInfo.buffer = uniformBuffer;
     bufferInfo.offset = 0;
-    bufferInfo.range = sizeof(UniformBufferObject);
+    bufferInfo.range = uniformBufferSize;
 
     VkDescriptorImageInfo imageInfo = {};
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1105,7 +1143,7 @@ void CreateDescriptorSet(
     descriptorWrites[0].dstSet = descriptorSet;
     descriptorWrites[0].dstBinding = 0;
     descriptorWrites[0].dstArrayElement = 0;//descriptor is not an array
-    descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    descriptorWrites[0].descriptorType = descriptorType;
     descriptorWrites[0].descriptorCount = 1;
     descriptorWrites[0].pNext = nullptr;//no extension
 
@@ -1587,8 +1625,16 @@ void CreateFrameSyncPrimitives(
 }
 
 ///@todo: use push constants instead, since it's more efficient
-void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExtent2D& swapChainExtent, const VkDevice& device)
+void UpdateUniformBuffer(
+    void*const uniformBufferCpuMemory,
+    const VkDeviceMemory& uniformBufferGpuMemory, 
+    const VkDeviceSize uniformBufferSize, 
+    const VkExtent2D& swapChainExtent, 
+    const VkDevice& device)
 {
+    assert(uniformBufferCpuMemory);
+    assert(uniformBufferSize);
+
     static auto startTime = std::chrono::high_resolution_clock::now();
 
     auto currentTime = std::chrono::high_resolution_clock::now();
@@ -1604,12 +1650,16 @@ void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExte
 
     UniformBufferObject ubo = {};
     ubo.modelToClip = viewToClip*worldToView*modelToWorld;
+    
+    memcpy(uniformBufferCpuMemory, &ubo, sizeof(ubo));
 
-    //don't use staging buffer, since the uniform buffer will be copied every frame, which means the staging overhead would probably degrade perf
-    void* data;
-    vkMapMemory(device, uniformBufferMemory, 0, sizeof(ubo), 0, &data);
-    memcpy(data, &ubo, sizeof(ubo));
-    vkUnmapMemory(device, uniformBufferMemory);
+    VkMappedMemoryRange mappedMemoryRange;
+    mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+    mappedMemoryRange.pNext = nullptr;
+    mappedMemoryRange.memory = uniformBufferGpuMemory;
+    mappedMemoryRange.offset = 0;
+    mappedMemoryRange.size = uniformBufferSize;
+    vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange);
 }
 
 void AcquireNextImage(

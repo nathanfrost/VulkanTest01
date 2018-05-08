@@ -238,7 +238,7 @@ void CreateLogicalDevice(
     const VkSurfaceKHR& surface,
     const VkPhysicalDevice& physicalDevice);
 
-void CreateDescriptorSetLayout(VkDescriptorSetLayout*const descriptorSetLayoutPtr, const VkDevice& device);
+void CreateDescriptorSetLayout(VkDescriptorSetLayout*const descriptorSetLayoutPtr, const VkDescriptorType descriptorType, const VkDevice& device);
 void CreateGraphicsPipeline(
     VkPipelineLayout*const pipelineLayoutPtr,
     VkPipeline*const graphicsPipelinePtr,
@@ -278,18 +278,23 @@ void FillCommandBuffer(
     const uint32_t& indicesNum,
     const VkDevice& device);
 
+VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferSize, const VkPhysicalDevice& physicalDevice);
 void CreateUniformBuffer(
     VkBuffer*const uniformBufferPtr,
-    VkDeviceMemory*const uniformBufferMemoryPtr,
+    VkDeviceMemory*const uniformBufferGpuMemoryPtr,
+    void**const uniformBufferCpuMemoryPtr,
+    const VkDeviceSize bufferSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
-void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDevice& device);
+void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDescriptorType descriptorType, const VkDevice& device);
 
 void CreateDescriptorSet(
     VkDescriptorSet*const descriptorSetPtr,
+    const VkDescriptorType descriptorType,
     const VkDescriptorSetLayout& descriptorSetLayout,
     const VkDescriptorPool& descriptorPool,
     const VkBuffer& uniformBuffer,
+    const size_t uniformBufferSize,
     const VkImageView& textureImageView,
     const VkSampler& textureSampler,
     const VkDevice& device);
@@ -363,7 +368,12 @@ void CreateFrameSyncPrimitives(
     const size_t framesNum,
     const VkDevice& device);
 
-void UpdateUniformBuffer(const VkDeviceMemory& uniformBufferMemory, const VkExtent2D& swapChainExtent, const VkDevice& device);
+void UpdateUniformBuffer(
+    void*const uniformBufferCpuMemory,
+    const VkDeviceMemory& uniformBufferGpuMemory, 
+    const VkDeviceSize uniformBufferSize,
+    const VkExtent2D& swapChainExtent, 
+    const VkDevice& device);
 
 void DrawFrame(
     //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
