@@ -132,9 +132,10 @@ private:
         vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
         
+        //@todo: No seriously todo this
         //@todo: BEG_DestroyUniformBuffer()
         vkUnmapMemory(m_device, m_uniformBufferGpuMemory);
-        m_uniformBufferCpuMemory = nullptr;
+        m_uniformBufferCpuMemory.Reset();
         vkDestroyBuffer(m_device, m_uniformBuffer, nullptr);
         vkFreeMemory(m_device, m_uniformBufferGpuMemory, nullptr);        
         //@todo: END_DestroyUniformBuffer()
@@ -324,7 +325,7 @@ private:
     VkDeviceMemory m_indexBufferMemory;
     VkBuffer m_uniformBuffer;
     VkDeviceMemory m_uniformBufferGpuMemory;
-    void* m_uniformBufferCpuMemory;
+    ArraySafeRef<uint8_t> m_uniformBufferCpuMemory;
     size_t m_uniformBufferSize;
     VkDescriptorPool m_descriptorPool;
     VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed

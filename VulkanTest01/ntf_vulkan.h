@@ -282,7 +282,7 @@ VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferSize, c
 void CreateUniformBuffer(
     VkBuffer*const uniformBufferPtr,
     VkDeviceMemory*const uniformBufferGpuMemoryPtr,
-    void**const uniformBufferCpuMemoryPtr,
+    ArraySafeRef<uint8_t>*const uniformBufferCpuMemoryPtr,
     const VkDeviceSize bufferSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
@@ -369,7 +369,7 @@ void CreateFrameSyncPrimitives(
     const VkDevice& device);
 
 void UpdateUniformBuffer(
-    void*const uniformBufferCpuMemory,
+    ArraySafeRef<uint8_t> uniformBufferCpuMemory,
     const VkDeviceMemory& uniformBufferGpuMemory, 
     const VkDeviceSize uniformBufferSize,
     const VkExtent2D& swapChainExtent, 

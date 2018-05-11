@@ -26,6 +26,13 @@ inline void AlignedFree(void* mem)
     _aligned_free(mem);
 }
 
+inline size_t Cast_size_t(const uint64_t sizeMax)
+{
+    const size_t sizeMax_size_t = static_cast<size_t>(sizeMax);
+    assert(sizeMax_size_t == sizeMax);
+    return sizeMax_size_t;
+}
+
 template<class T, size_t kSize>
 class VectorSafe;
 
@@ -180,7 +187,7 @@ public:
     //    MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
     //}
 
-    void MemcpyFromStart(const T*const input, const size_t inputBytesNum)
+    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
     {
         AssertValid();
 #if NTF_ARRAY_SAFE_DEBUG
@@ -354,6 +361,276 @@ public:
         AssertValid();
         return *m_sizeCurrent == 0;
     }
+};
+
+
+///@todo: unit tests for entire class
+template<class T>
+class ArraySafeRef
+{
+public:
+    typedef ArraySafeRef<T> ThisDataType;
+    typedef T* iterator;
+    typedef const T* const_iterator;
+    typedef T& reference;
+    typedef const T& const_reference;
+    typedef size_t size_type;
+
+private:
+    void SetArray(T* p)
+    {
+        assert(p);
+        m_array = p;
+#if NTF_ARRAY_SAFE_DEBUG
+        m_arraySet = true;
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+    }
+    void SetSizeMax(const size_t sizeMax)
+    {
+        assert(sizeMax > 0);
+#if NTF_ARRAY_SAFE_DEBUG
+        m_sizeMax = sizeMax;
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+    }
+
+    ///@todo: reduce code duplication with VectorSafe
+    T* m_array;
+#if NTF_ARRAY_SAFE_DEBUG
+    size_t m_sizeMax;
+    bool m_arraySet;
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+
+public:
+    //this would be a non-const pointer to non-const -- this class is for const pointer to non-const
+    //    ArraySafeRef()
+    //    {
+    //#if NTF_ARRAY_SAFE_DEBUG
+    //        m_arraySet = m_sizeCurrentSet = false;
+    //        m_sizeMax = 0;
+    //#endif//#if NTF_ARRAY_SAFE_DEBUG
+    //    }
+    ///@todo
+    //ArraySafeRef(T*const pointer, const std::initializer_list<T>& initializerList, const size_t maxSize)
+    //{
+    //    SetArray(pointer);
+    //    SetSizeMax(maxSize);
+    //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
+    //    AssertValid();
+    //}
+    template<size_t kSizeMax>
+    ArraySafeRef(VectorSafe<T, kSizeMax>*const arraySafe)
+    {
+        assert(arraySafe);
+
+        SetSizeCurrentPtr(
+            &arraySafe->m_sizeCurrent
+#if NTF_ARRAY_SAFE_DEBUG
+            , &arraySafe->m_sizeCurrentSet
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+            );
+        SetSizeMax(arraySafe->SizeMax());
+        SetArray(arraySafe->begin());
+    }
+
+    ///@todo: unit tests
+    ArraySafeRef(T*const p, const size_t sizeMax, const size_t alignment)
+    {
+        assert((uintptr_t)p % alignment == 0);
+        assert(sizeMax % alignment == 0);
+
+        SetSizeMax(sizeMax);
+        SetArray(p);
+    }
+
+    ///@todo: unit tests
+    ArraySafeRef()
+    {
+        Reset();
+    }
+    ///@todo: unit tests
+    ///<use Reset() to set this array to null, not this function
+    void SetArray(T* p, const size_t sizeMax)
+    {
+        SetArray(p);
+        SetSizeMax(sizeMax);
+        AssertValid();
+    }
+    ///@todo: unit tests
+    void Reset()
+    {
+        m_array = nullptr;
+
+#if NTF_ARRAY_SAFE_DEBUG
+        m_arraySet = false;
+        m_sizeMax = 0;
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+    }
+
+    ///@todo: AssertCurrentSufficient() //m_sizeMax - m_sizeCurrent >= elementsNum
+    void AssertSufficient(const size_t elementsNum) const
+    {
+#if NTF_ARRAY_SAFE_DEBUG
+        AssertValid();
+        assert(m_sizeMax >= elementsNum);
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+    }
+
+    void AssertValid() const
+    {
+#if NTF_ARRAY_SAFE_DEBUG
+        assert(m_arraySet);
+        assert(m_sizeMax > 0);
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+    }
+
+    ///@todo: have to pass in number of bytes explicitly
+    //void Copy(const ArraySafeRef<T>& vectorSafeOther)
+    //{
+    //    MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
+    //}
+
+    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
+    {
+        AssertValid();
+#if NTF_ARRAY_SAFE_DEBUG
+        assert(inputBytesNum <= SizeMaxInBytes());
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+
+        assert(input);
+        assert(inputBytesNum > 0);
+        assert(inputBytesNum % sizeof(T) == 0);
+
+        memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
+        AssertValid();
+    }
+
+    size_type size() const noexcept
+    {
+        AssertValid();
+        return *m_sizeMax;
+    }
+    void size(const size_t size)
+    {
+        SetSizeMax(size);
+        AssertValid();
+    }
+    size_t SizeMaxInBytes() const
+    {
+        AssertValid();
+        return m_sizeMax*sizeof(T);
+    }
+    const T* data() const
+    {
+        return GetAddressOfUnderlyingArray();
+    }
+    T* data()
+    {
+        return GetAddressOfUnderlyingArray();
+    }
+    const T* GetAddressOfUnderlyingArray() const
+    {
+        AssertValid();
+        return &m_array[0];
+    }
+    T* GetAddressOfUnderlyingArray()
+    {
+        return const_cast<T*>(static_cast<const ThisDataType*>(this)->GetAddressOfUnderlyingArray());
+    }
+    const_reference GetChecked(const size_type pos) const
+    {
+        AssertValid();
+        assert(pos < *m_sizeCurrent);
+        return m_array[pos];
+    }
+    reference GetChecked(const size_type pos)
+    {
+        return const_cast<reference>(static_cast<const ThisDataType*>(this)->GetChecked(pos));
+    }
+    size_t GetLastValidIndex() const
+    {
+        AssertValid();
+        return *m_sizeMax - 1;
+    }
+    size_t GetOneAfterLastValidIndex() const
+    {
+        return GetLastValidIndex() + 1;
+    }
+
+    reference operator[](size_type pos)
+    {
+        return GetChecked(pos);
+    }
+    const_reference operator[](size_type pos) const
+    {
+        return GetChecked(pos);
+    }
+
+    reference at(size_type pos)
+    {
+        return GetChecked(pos);
+    }
+    const_reference at(size_type pos) const
+    {
+        return GetChecked(pos);
+    }
+
+    reference front()
+    {
+        return GetChecked(0);
+    }
+    const_reference front() const
+    {
+        return GetChecked(0);
+    }
+
+    reference back()
+    {
+        return GetChecked(GetLastValidIndex());
+    }
+    const_reference back() const
+    {
+        return GetChecked(GetLastValidIndex());
+    }
+
+    iterator begin() noexcept
+    {
+        return GetAddressOfUnderlyingArray();
+    }
+    const_iterator begin() const noexcept
+    {
+        return GetAddressOfUnderlyingArray();
+    }
+    const_iterator cbegin() const noexcept
+    {
+        return end();
+    }
+
+    iterator end() noexcept
+    {
+        return const_cast<iterator>(static_cast<const ThisDataType*>(this)->end());
+    }
+    const_iterator end() const noexcept
+    {
+        return const_iterator(GetAddressOfUnderlyingArray() + GetOneAfterLastValidIndex());
+    }
+    const_iterator cend() const noexcept
+    {
+        return end();
+    }
+
+    //reverse_iterator rbegin() noexcept 
+    //{
+    //    return reverse_iterator(end());
+    //}
+    //const_reverse_iterator rbegin() const noexcept 
+    //{
+    //    return const_reverse_iterator(end());
+    //}
+    //const_reverse_iterator crbegin() const noexcept 
+    //{
+    //    return rbegin();
+    //}
+    //iterator rend() and crend() not implemented
 };
 
 ///NOTE: the caller is responsible for freeing this memory with AlignedFree(); VectorSafeRef is only a reference
@@ -568,7 +845,7 @@ public:
         MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
     }
 
-    void MemcpyFromStart(const T*const input, const size_t inputBytesNum)///@todo: rename to make obvious that the semantics of this is to CLEAR the Array and replace with the contents of input
+    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)///@todo: rename to make obvious that the semantics of this is to CLEAR the Array and replace with the contents of input
     {
         assert(input);
         assert(inputBytesNum > 0);

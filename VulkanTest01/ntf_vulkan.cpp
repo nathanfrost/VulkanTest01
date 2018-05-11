@@ -1045,7 +1045,7 @@ VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferSize, c
 void CreateUniformBuffer(
     VkBuffer*const uniformBufferPtr,
     VkDeviceMemory*const uniformBufferGpuMemoryPtr,
-    void**const uniformBufferCpuMemoryPtr,
+    ArraySafeRef<uint8_t>*const uniformBufferCpuMemoryPtr,
     const VkDeviceSize bufferSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
@@ -1070,7 +1070,9 @@ void CreateUniformBuffer(
         device,
         physicalDevice);
 
-    vkMapMemory(device, uniformBufferGpuMemory, 0, bufferSize, 0, &uniformBufferCpuMemory);
+    void* uniformBufferCpuMemoryCPtr;
+    vkMapMemory(device, uniformBufferGpuMemory, 0, bufferSize, 0, &uniformBufferCpuMemoryCPtr);
+    uniformBufferCpuMemory.SetArray(reinterpret_cast<uint8_t*>(uniformBufferCpuMemoryCPtr), Cast_size_t(bufferSize));
 }
 
 void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDescriptorType descriptorType, const VkDevice& device)
@@ -1626,13 +1628,12 @@ void CreateFrameSyncPrimitives(
 
 ///@todo: use push constants instead, since it's more efficient
 void UpdateUniformBuffer(
-    void*const uniformBufferCpuMemory,
+    ArraySafeRef<uint8_t> uniformBufferCpuMemory,
     const VkDeviceMemory& uniformBufferGpuMemory, 
     const VkDeviceSize uniformBufferSize, 
     const VkExtent2D& swapChainExtent, 
     const VkDevice& device)
 {
-    assert(uniformBufferCpuMemory);
     assert(uniformBufferSize);
 
     static auto startTime = std::chrono::high_resolution_clock::now();
@@ -1651,7 +1652,7 @@ void UpdateUniformBuffer(
     UniformBufferObject ubo = {};
     ubo.modelToClip = viewToClip*worldToView*modelToWorld;
     
-    memcpy(uniformBufferCpuMemory, &ubo, sizeof(ubo));
+    uniformBufferCpuMemory.MemcpyFromStart(&ubo, sizeof(ubo));
 
     VkMappedMemoryRange mappedMemoryRange;
     mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
