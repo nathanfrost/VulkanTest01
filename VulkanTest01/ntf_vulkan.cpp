@@ -1043,9 +1043,9 @@ VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferSize, c
 }
 
 void CreateUniformBuffer(
-    VkBuffer*const uniformBufferPtr,
-    VkDeviceMemory*const uniformBufferGpuMemoryPtr,
     ArraySafeRef<uint8_t>*const uniformBufferCpuMemoryPtr,
+    VkDeviceMemory*const uniformBufferGpuMemoryPtr,
+    VkBuffer*const uniformBufferPtr,
     const VkDeviceSize bufferSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
@@ -1073,6 +1073,18 @@ void CreateUniformBuffer(
     void* uniformBufferCpuMemoryCPtr;
     vkMapMemory(device, uniformBufferGpuMemory, 0, bufferSize, 0, &uniformBufferCpuMemoryCPtr);
     uniformBufferCpuMemory.SetArray(reinterpret_cast<uint8_t*>(uniformBufferCpuMemoryCPtr), Cast_size_t(bufferSize));
+}
+
+void DestroyUniformBuffer(
+    ArraySafeRef<uint8_t> uniformBufferCpuMemory,
+    const VkDeviceMemory uniformBufferGpuMemory,
+    const VkBuffer uniformBuffer,
+    const VkDevice& device)
+{
+    vkUnmapMemory(device, uniformBufferGpuMemory);
+    uniformBufferCpuMemory.Reset();
+    vkDestroyBuffer(device, uniformBuffer, nullptr);
+    vkFreeMemory(device, uniformBufferGpuMemory, nullptr);
 }
 
 void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDescriptorType descriptorType, const VkDevice& device)

@@ -280,12 +280,17 @@ void FillCommandBuffer(
 
 VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferSize, const VkPhysicalDevice& physicalDevice);
 void CreateUniformBuffer(
-    VkBuffer*const uniformBufferPtr,
-    VkDeviceMemory*const uniformBufferGpuMemoryPtr,
     ArraySafeRef<uint8_t>*const uniformBufferCpuMemoryPtr,
+    VkDeviceMemory*const uniformBufferGpuMemoryPtr,
+    VkBuffer*const uniformBufferPtr,
     const VkDeviceSize bufferSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
+void DestroyUniformBuffer(
+    ArraySafeRef<uint8_t> uniformBufferCpuMemory,
+    const VkDeviceMemory uniformBufferGpuMemory,
+    const VkBuffer uniformBuffer,
+    const VkDevice& device);
 void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDescriptorType descriptorType, const VkDevice& device);
 
 void CreateDescriptorSet(

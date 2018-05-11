@@ -132,13 +132,7 @@ private:
         vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
         
-        //@todo: No seriously todo this
-        //@todo: BEG_DestroyUniformBuffer()
-        vkUnmapMemory(m_device, m_uniformBufferGpuMemory);
-        m_uniformBufferCpuMemory.Reset();
-        vkDestroyBuffer(m_device, m_uniformBuffer, nullptr);
-        vkFreeMemory(m_device, m_uniformBufferGpuMemory, nullptr);        
-        //@todo: END_DestroyUniformBuffer()
+        DestroyUniformBuffer(m_uniformBufferCpuMemory, m_uniformBufferGpuMemory, m_uniformBuffer, m_device);
 
         vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
         vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
@@ -218,9 +212,9 @@ private:
         m_uniformBufferSize = sizeof(UniformBufferObject);
         const VkDeviceSize uniformBufferCpuAlignment = UniformBufferCpuAlignmentCalculate(m_uniformBufferSize, m_physicalDevice);
         CreateUniformBuffer(
+            &m_uniformBufferCpuMemory,
+            &m_uniformBufferGpuMemory,
             &m_uniformBuffer, 
-            &m_uniformBufferGpuMemory, 
-            &m_uniformBufferCpuMemory, 
             uniformBufferCpuAlignment*1/**<@todo NTF:have more than one object*/,
             m_device, 
             m_physicalDevice);
