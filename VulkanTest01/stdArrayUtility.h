@@ -5,6 +5,7 @@
 #include<initializer_list>
 #include<string.h>
 
+
 #if !NDEBUG
 #define NTF_ARRAY_SAFE_DEBUG 1 ///@todo: rename NTF_ARRAY_SAFE_DEBUG
 #endif//#if _DEBUG
@@ -26,11 +27,19 @@ inline void AlignedFree(void* mem)
     _aligned_free(mem);
 }
 
-inline size_t Cast_size_t(const uint64_t sizeMax)
+///@todo: unit test
+inline size_t Cast_uint64_t_size_t(const uint64_t num)
 {
-    const size_t sizeMax_size_t = static_cast<size_t>(sizeMax);
-    assert(sizeMax_size_t == sizeMax);
-    return sizeMax_size_t;
+    const size_t num_size_t = static_cast<size_t>(num);
+    assert(num_size_t == num);
+    return num_size_t;
+}
+///@todo: unit test
+inline uint32_t Cast_size_t_uint32_t(const size_t num)
+{
+    const uint32_t num_uint32_t = static_cast<uint32_t>(num);
+    assert(num_uint32_t == num);
+    return num_uint32_t;
 }
 
 template<class T, size_t kSize>
@@ -488,20 +497,25 @@ public:
     //{
     //    MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
     //}
-
+    ///@todo: unit tests
     void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
+    {
+        MemcpyFromIndex(input, 0, inputBytesNum);
+    }
+    ///@todo: unit tests
+    void MemcpyFromIndex(const void*const input, const size_t index, const size_t inputBytesNum)
     {
         AssertValid();
 #if NTF_ARRAY_SAFE_DEBUG
-        assert(inputBytesNum <= SizeMaxInBytes());
+        assert(index*sizeof(T) + inputBytesNum <= SizeMaxInBytes());
 #endif//#if NTF_ARRAY_SAFE_DEBUG
 
         assert(input);
+        assert(index >= 0);
         assert(inputBytesNum > 0);
         assert(inputBytesNum % sizeof(T) == 0);
 
-        memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
-        AssertValid();
+        memcpy(&GetAddressOfUnderlyingArray()[index], input, inputBytesNum);
     }
 
     size_type size() const noexcept

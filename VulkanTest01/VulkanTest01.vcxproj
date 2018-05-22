@@ -332,6 +332,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ntf_vulkan.h" />
+    <ClInclude Include="ntf_vulkan_utility.h" />
     <ClInclude Include="stdArrayUtility.h" />
     <ClInclude Include="VDeleter.h" />
   </ItemGroup>

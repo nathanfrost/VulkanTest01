@@ -74,6 +74,10 @@ public:
     }
 
 private:
+    VkDeviceSize UniformBufferSizeCalculate()
+    {
+        return sm_objectNum*m_uniformBufferCpuAlignment;
+    }
     void initWindow(GLFWwindow**const windowPtrPtr)
     {
         assert(windowPtrPtr);
@@ -209,13 +213,12 @@ private:
         CreateVertexBuffer(&m_vertexBuffer, &m_vertexBufferMemory, m_vertices, m_commandPool, m_graphicsQueue, m_device, m_physicalDevice);
         CreateIndexBuffer(&m_indexBuffer, &m_indexBufferMemory, m_indices, m_commandPool, m_graphicsQueue, m_device, m_physicalDevice);
         
-        m_uniformBufferSize = sizeof(UniformBufferObject);
-        const VkDeviceSize uniformBufferCpuAlignment = UniformBufferCpuAlignmentCalculate(m_uniformBufferSize, m_physicalDevice);
+        m_uniformBufferCpuAlignment = UniformBufferCpuAlignmentCalculate(sm_uniformBufferElementSize, m_physicalDevice);
         CreateUniformBuffer(
             &m_uniformBufferCpuMemory,
             &m_uniformBufferGpuMemory,
             &m_uniformBuffer, 
-            uniformBufferCpuAlignment*1/**<@todo NTF:have more than one object*/,
+            UniformBufferSizeCalculate(),
             m_device, 
             m_physicalDevice);
 
@@ -226,7 +229,7 @@ private:
             m_descriptorSetLayout, 
             m_descriptorPool, 
             m_uniformBuffer, 
-            m_uniformBufferSize, 
+            sm_uniformBufferElementSize, 
             m_textureImageView, 
             m_textureSampler, 
             m_device);
@@ -246,7 +249,14 @@ private:
         {
             glfwPollEvents();
 
-            UpdateUniformBuffer(m_uniformBufferCpuMemory, m_uniformBufferGpuMemory, m_uniformBufferSize, m_swapChainExtent, m_device);
+            UpdateUniformBuffer(
+                m_uniformBufferCpuMemory, 
+                m_uniformBufferCpuAlignment, 
+                m_uniformBufferGpuMemory, 
+                sm_objectNum,
+                UniformBufferSizeCalculate(), 
+                m_swapChainExtent, 
+                m_device);
             
             const VkSemaphore imageAvailableSemaphore = m_imageAvailableSemaphore[frameIndex];
             uint32_t acquiredImageIndex;
@@ -255,6 +265,8 @@ private:
             FillCommandBuffer(
                 m_commandBuffers[acquiredImageIndex],
                 m_descriptorSet,
+                m_uniformBufferCpuAlignment,
+                sm_objectNum,
                 m_swapChainFramebuffers[acquiredImageIndex],
                 m_renderPass,
                 m_swapChainExtent,
@@ -282,6 +294,9 @@ private:
         vkDeviceWaitIdle(m_device);
     }
 
+
+    const size_t sm_objectNum = 2;//number of models to draw
+    const size_t sm_uniformBufferElementSize = sizeof(UniformBufferObject);
 
     GLFWwindow* m_window;
     VkInstance m_instance;
@@ -320,7 +335,7 @@ private:
     VkBuffer m_uniformBuffer;
     VkDeviceMemory m_uniformBufferGpuMemory;
     ArraySafeRef<uint8_t> m_uniformBufferCpuMemory;
-    size_t m_uniformBufferSize;
+    VkDeviceSize m_uniformBufferCpuAlignment;
     VkDescriptorPool m_descriptorPool;
     VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffers;//automatically freed when VkCommandPool is destroyed

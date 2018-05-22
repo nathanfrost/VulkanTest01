@@ -1,4 +1,5 @@
 #include"ntf_vulkan.h"
+#include"ntf_vulkan_utility.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include"stb_image.h"
@@ -971,6 +972,8 @@ void AllocateCommandBuffers(
 void FillCommandBuffer(
     const VkCommandBuffer& vkCommandBuffer,
     const VkDescriptorSet& descriptorSet,
+    const VkDeviceSize& uniformBufferCpuAlignment,
+    const size_t objectNum,
     const VkFramebuffer& swapChainFramebuffer,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
@@ -981,6 +984,10 @@ void FillCommandBuffer(
     const uint32_t& indicesNum,
     const VkDevice& device)
 {
+    assert(uniformBufferCpuAlignment > 0);
+    assert(objectNum > 0);
+    assert(indicesNum > 0);
+
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT; /* options: * VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded right after executing it once
@@ -1016,25 +1023,27 @@ void FillCommandBuffer(
 
     //note that with shader lines like the following, multiple descriptors can be passed such that per-object descriptors and shared descriptors can be passed in separate descriptor sets, so shared descriptors can be bound only once
     //layout(set = 0, binding = 0) uniform UniformBufferObject { ... }
-    const uint32_t dynamicOffset = 0;
-    vkCmdBindDescriptorSets(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 1, &dynamicOffset);
-
-    vkCmdDrawIndexed(vkCommandBuffer, indicesNum, 1, 0, 0, 0);
+    for (uint32_t objectIndex = 0; objectIndex < 2; ++objectIndex)
+    {
+        const uint32_t dynamicOffset = objectIndex*Cast_VkDeviceSize_uint32_t(uniformBufferCpuAlignment);
+        vkCmdBindDescriptorSets(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 1, &dynamicOffset);
+        vkCmdDrawIndexed(vkCommandBuffer, indicesNum, 1, 0, 0, 0);
+    }
     vkCmdEndRenderPass(vkCommandBuffer);
 
     const VkResult endCommandBufferResult = vkEndCommandBuffer(vkCommandBuffer);
     NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
 }
 
-VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferSize, const VkPhysicalDevice& physicalDevice)
+VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferElementSize, const VkPhysicalDevice& physicalDevice)
 {
-    assert(bufferSize > 0);
+    assert(bufferElementSize > 0);
 
     VkPhysicalDeviceProperties physicalDeviceProperties;
     vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
     const VkDeviceSize minUniformBufferOffsetAlignment = physicalDeviceProperties.limits.minUniformBufferOffsetAlignment;
 
-    VkDeviceSize uniformBufferAlignment = bufferSize;
+    VkDeviceSize uniformBufferAlignment = bufferElementSize;
     if (minUniformBufferOffsetAlignment > 0)
     {
         uniformBufferAlignment = (uniformBufferAlignment + minUniformBufferOffsetAlignment - 1) & ~(minUniformBufferOffsetAlignment - 1);
@@ -1072,7 +1081,7 @@ void CreateUniformBuffer(
 
     void* uniformBufferCpuMemoryCPtr;
     vkMapMemory(device, uniformBufferGpuMemory, 0, bufferSize, 0, &uniformBufferCpuMemoryCPtr);
-    uniformBufferCpuMemory.SetArray(reinterpret_cast<uint8_t*>(uniformBufferCpuMemoryCPtr), Cast_size_t(bufferSize));
+    uniformBufferCpuMemory.SetArray(reinterpret_cast<uint8_t*>(uniformBufferCpuMemoryCPtr), Cast_VkDeviceSize_size_t(bufferSize));
 }
 
 void DestroyUniformBuffer(
@@ -1119,7 +1128,7 @@ void CreateDescriptorSet(
     const VkDescriptorSetLayout& descriptorSetLayout,
     const VkDescriptorPool& descriptorPool,
     const VkBuffer& uniformBuffer,
-    const size_t uniformBufferSize,
+    const size_t uniformBufferElementSize,
     const VkImageView& textureImageView,
     const VkSampler& textureSampler,
     const VkDevice& device)
@@ -1128,7 +1137,7 @@ void CreateDescriptorSet(
     VkDescriptorSet& descriptorSet = *descriptorSetPtr;
 
     DescriptorTypeAssertOnInvalid(descriptorType);
-    assert(uniformBufferSize > 0);
+    assert(uniformBufferElementSize > 0);
 
     VkDescriptorSetLayout layouts[] = { descriptorSetLayout };
     VkDescriptorSetAllocateInfo allocInfo = {};
@@ -1143,7 +1152,7 @@ void CreateDescriptorSet(
     VkDescriptorBufferInfo bufferInfo = {};
     bufferInfo.buffer = uniformBuffer;
     bufferInfo.offset = 0;
-    bufferInfo.range = uniformBufferSize;
+    bufferInfo.range = uniformBufferElementSize;
 
     VkDescriptorImageInfo imageInfo = {};
     imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1161,7 +1170,7 @@ void CreateDescriptorSet(
     descriptorWrites[0].descriptorCount = 1;
     descriptorWrites[0].pNext = nullptr;//no extension
 
-                                        //one of the following three must be non-null
+    //one of the following three must be non-null
     descriptorWrites[0].pBufferInfo = &bufferInfo;//if buffer data
     descriptorWrites[0].pImageInfo = nullptr; //if image data
     descriptorWrites[0].pTexelBufferView = nullptr; //if render view
@@ -1174,7 +1183,7 @@ void CreateDescriptorSet(
     descriptorWrites[1].descriptorCount = 1;
     descriptorWrites[1].pNext = nullptr;//no extension
 
-                                        //one of the following three must be non-null
+    //one of the following three must be non-null
     descriptorWrites[1].pBufferInfo = nullptr;//if buffer data
     descriptorWrites[1].pImageInfo = &imageInfo;
     descriptorWrites[1].pTexelBufferView = nullptr; //if render view
@@ -1641,11 +1650,15 @@ void CreateFrameSyncPrimitives(
 ///@todo: use push constants instead, since it's more efficient
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
+    const VkDeviceSize& uniformBufferCpuAlignment,
     const VkDeviceMemory& uniformBufferGpuMemory, 
+    const size_t objectNum,
     const VkDeviceSize uniformBufferSize, 
     const VkExtent2D& swapChainExtent, 
     const VkDevice& device)
 {
+    assert(uniformBufferCpuAlignment > 0);
+    assert(objectNum > 0);
     assert(uniformBufferSize);
 
     static auto startTime = std::chrono::high_resolution_clock::now();
@@ -1654,17 +1667,20 @@ void UpdateUniformBuffer(
     float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0f;
 
     const glm::mat4 worldRotation = glm::rotate(glm::mat4(), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    const glm::mat4 worldTranslation = glm::translate(glm::mat4(), glm::vec3(-1.f, -1.f, 0.f));
-    const glm::mat4 modelToWorld = worldTranslation*worldRotation;
-    const glm::mat4 worldToView = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-
-    glm::mat4 viewToClip = glm::perspective(glm::radians(45.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
-    viewToClip[1][1] *= -1;//OpenGL's clipspace y-axis points in opposite direction of Vulkan's y-axis; doing this requires counterclockwise vertex winding
 
     UniformBufferObject ubo = {};
-    ubo.modelToClip = viewToClip*worldToView*modelToWorld;
-    
-    uniformBufferCpuMemory.MemcpyFromStart(&ubo, sizeof(ubo));
+    for (VkDeviceSize objectIndex = 0; objectIndex < objectNum; ++objectIndex)
+    {
+        const glm::mat4 worldTranslation = glm::translate(glm::mat4(), glm::vec3(-1.f, -1.f, 0.f) + glm::vec3(0.f,2.f,0.f)*static_cast<float>(objectIndex));
+        const glm::mat4 modelToWorld = worldTranslation*worldRotation;
+        const glm::mat4 worldToView = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(-2.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+        glm::mat4 viewToClip = glm::perspective(glm::radians(45.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
+        viewToClip[1][1] *= -1;//OpenGL's clipspace y-axis points in opposite direction of Vulkan's y-axis; doing this requires counterclockwise vertex winding
+
+        ubo.modelToClip = viewToClip*worldToView*modelToWorld;
+        uniformBufferCpuMemory.MemcpyFromIndex(&ubo, Cast_VkDeviceSize_size_t(objectIndex*uniformBufferCpuAlignment), sizeof(ubo));
+    }
 
     VkMappedMemoryRange mappedMemoryRange;
     mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;

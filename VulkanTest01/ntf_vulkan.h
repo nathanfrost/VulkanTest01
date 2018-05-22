@@ -1,4 +1,5 @@
 #pragma once
+
 #include "WinTimer.h"//has to be #included before glfw*.h
 
 #define GLFW_INCLUDE_VULKAN
@@ -20,7 +21,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 
-#include"VDeleter.h"
 #include"stdArrayUtility.h"
 
 
@@ -268,6 +268,8 @@ void AcquireNextImage(
 void FillCommandBuffer(
     const VkCommandBuffer& commandBuffer,
     const VkDescriptorSet& descriptorSet,
+    const VkDeviceSize& uniformBufferElementSize,
+    const size_t objectNum,
     const VkFramebuffer& swapChainFramebuffers,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
@@ -375,7 +377,9 @@ void CreateFrameSyncPrimitives(
 
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
+    const VkDeviceSize& uniformBufferElementSize,
     const VkDeviceMemory& uniformBufferGpuMemory, 
+    const size_t objectNum,
     const VkDeviceSize uniformBufferSize,
     const VkExtent2D& swapChainExtent, 
     const VkDevice& device);
