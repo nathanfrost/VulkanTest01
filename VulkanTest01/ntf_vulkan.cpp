@@ -975,7 +975,7 @@ void AllocateCommandBuffers(
 }
 
 void FillCommandBuffer(
-    const VkCommandBuffer& vkCommandBuffer,
+    const VkCommandBuffer& commandBuffer,
     const VkDescriptorSet& descriptorSet,
     const VkDeviceSize& uniformBufferCpuAlignment,
     const size_t objectNum,
@@ -999,7 +999,7 @@ void FillCommandBuffer(
                                                                                 * VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: This is a secondary command buffer that will be entirely within a single render pass.
                                                                                 * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also already pending execution. */
     beginInfo.pInheritanceInfo = nullptr; //specifies what state a secondary buffer should inherit from the primary buffer
-    vkBeginCommandBuffer(vkCommandBuffer, &beginInfo);  //implicitly resets the command buffer (you can't append commands to an existing buffer)
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);  //implicitly resets the command buffer (you can't append commands to an existing buffer)
 
     VkRenderPassBeginInfo renderPassInfo = {};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1018,26 +1018,26 @@ void FillCommandBuffer(
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
-    vkCmdBeginRenderPass(vkCommandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
-    vkCmdBindPipeline(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
+    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
     VkBuffer vertexBuffers[] = { vertexBuffer };
     VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(vkCommandBuffer, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(vkCommandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+    vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
-    vkCmdBindDescriptorSets(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
 
     //note that with shader lines like the following, multiple descriptors can be passed such that per-object descriptors and shared descriptors can be passed in separate descriptor sets, so shared descriptors can be bound only once
     //layout(set = 0, binding = 0) uniform UniformBufferObject { ... }
     for (uint32_t objectIndex = 0; objectIndex < 2; ++objectIndex)
     {
-        vkCmdPushConstants(vkCommandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
-        vkCmdDrawIndexed(vkCommandBuffer, indicesNum, 1, 0, 0, 0);
+        vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
+        vkCmdDrawIndexed(commandBuffer, indicesNum, 1, 0, 0, 0);
     }
-    vkCmdEndRenderPass(vkCommandBuffer);
+    vkCmdEndRenderPass(commandBuffer);
 
-    const VkResult endCommandBufferResult = vkEndCommandBuffer(vkCommandBuffer);
+    const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBuffer);
     NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
 }
 
