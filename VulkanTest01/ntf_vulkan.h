@@ -58,6 +58,8 @@ static const uint32_t s_kHeight = 600;
 const char*const sk_ModelPath = "models/chalet.obj";
 const char*const sk_texturePath = "textures/chalet.jpg";
 
+typedef uint32_t PushConstantBindIndexType;
+
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device);
 void CopyBufferToImage(
     const VkBuffer& buffer,
@@ -377,7 +379,6 @@ void CreateFrameSyncPrimitives(
 
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
-    const VkDeviceSize& uniformBufferElementSize,
     const VkDeviceMemory& uniformBufferGpuMemory, 
     const size_t objectNum,
     const VkDeviceSize uniformBufferSize,

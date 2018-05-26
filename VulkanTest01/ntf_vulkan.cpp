@@ -746,7 +746,7 @@ void CreateGraphicsPipeline(
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;  //any other setting (eg wireframe or point rendering) requires enabling the corresponding GPU feature
     rasterizer.lineWidth = 1.0f;                    //any setting greater than 1 requires enabling the wideLines GPU feature
 
-                                                    //standard backface culling
+    //standard backface culling
     rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
@@ -796,8 +796,8 @@ void CreateGraphicsPipeline(
     //colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
 
     /*  implements the following:
-    finalColor.rgb = (srcColorBlendFactor * newColor.rgb) <colorBlendOp> (dstColorBlendFactor * oldColor.rgb);
-    finalColor.a = (srcAlphaBlendFactor * newColor.a) <alphaBlendOp> (dstAlphaBlendFactor * oldColor.a);*/
+        finalColor.rgb = (srcColorBlendFactor * newColor.rgb) <colorBlendOp> (dstColorBlendFactor * oldColor.rgb);
+        finalColor.a = (srcAlphaBlendFactor * newColor.a) <alphaBlendOp> (dstAlphaBlendFactor * oldColor.a);*/
     //colorBlendAttachment.blendEnable = VK_TRUE;
     //colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
     //colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
@@ -838,12 +838,17 @@ void CreateGraphicsPipeline(
     //dynamicState.pDynamicStates = dynamicStates;
 
     //allows setting of uniform values across all shaders, like local-to-world matrix for vertex shader and texture samplers for fragment shader
+    VkPushConstantRange pushConstantRange;
+    pushConstantRange.offset = 0;
+    pushConstantRange.size = sizeof(PushConstantBindIndexType);
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
-    pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
-    pipelineLayoutInfo.pPushConstantRanges = 0; // Optional
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+    pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
     const VkResult createPipelineLayoutResult = vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout);
     NTF_VK_ASSERT_SUCCESS(createPipelineLayoutResult);
@@ -1021,12 +1026,13 @@ void FillCommandBuffer(
     vkCmdBindVertexBuffers(vkCommandBuffer, 0, 1, vertexBuffers, offsets);
     vkCmdBindIndexBuffer(vkCommandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
 
+    vkCmdBindDescriptorSets(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
     //note that with shader lines like the following, multiple descriptors can be passed such that per-object descriptors and shared descriptors can be passed in separate descriptor sets, so shared descriptors can be bound only once
     //layout(set = 0, binding = 0) uniform UniformBufferObject { ... }
     for (uint32_t objectIndex = 0; objectIndex < 2; ++objectIndex)
     {
-        const uint32_t dynamicOffset = objectIndex*Cast_VkDeviceSize_uint32_t(uniformBufferCpuAlignment);
-        vkCmdBindDescriptorSets(vkCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 1, &dynamicOffset);
+        vkCmdPushConstants(vkCommandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
         vkCmdDrawIndexed(vkCommandBuffer, indicesNum, 1, 0, 0, 0);
     }
     vkCmdEndRenderPass(vkCommandBuffer);
@@ -1650,14 +1656,12 @@ void CreateFrameSyncPrimitives(
 ///@todo: use push constants instead, since it's more efficient
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
-    const VkDeviceSize& uniformBufferCpuAlignment,
     const VkDeviceMemory& uniformBufferGpuMemory, 
     const size_t objectNum,
     const VkDeviceSize uniformBufferSize, 
     const VkExtent2D& swapChainExtent, 
     const VkDevice& device)
 {
-    assert(uniformBufferCpuAlignment > 0);
     assert(objectNum > 0);
     assert(uniformBufferSize);
 
@@ -1679,7 +1683,8 @@ void UpdateUniformBuffer(
         viewToClip[1][1] *= -1;//OpenGL's clipspace y-axis points in opposite direction of Vulkan's y-axis; doing this requires counterclockwise vertex winding
 
         ubo.modelToClip = viewToClip*worldToView*modelToWorld;
-        uniformBufferCpuMemory.MemcpyFromIndex(&ubo, Cast_VkDeviceSize_size_t(objectIndex*uniformBufferCpuAlignment), sizeof(ubo));
+        const size_t sizeofUbo = sizeof(ubo);
+        uniformBufferCpuMemory.MemcpyFromIndex(&ubo, Cast_VkDeviceSize_size_t(objectIndex)*sizeofUbo, sizeofUbo);
     }
 
     VkMappedMemoryRange mappedMemoryRange;

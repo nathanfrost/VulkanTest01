@@ -1,9 +1,13 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
+layout (push_constant) uniform PushConstants
+{
+    uint objectIndex;
+} pushConstants;
 layout(binding = 0) uniform UniformBufferObject 
 {
-    mat4 modelToClip;
+    mat4 modelToClip[2];
 } ubo;
 
 layout(location = 0) in vec3 inPosition;
@@ -20,7 +24,7 @@ out gl_PerVertex
 
 void main() 
 {
-    gl_Position = ubo.modelToClip * vec4(inPosition, 1.0);
+    gl_Position = ubo.modelToClip[pushConstants.objectIndex] * vec4(inPosition, 1.0);
     fragColor = inColor;    
     fragTexCoord = inTexCoord;
 }

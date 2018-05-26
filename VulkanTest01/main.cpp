@@ -192,7 +192,7 @@ private:
         CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
         CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
         
-        const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         CreateDescriptorSetLayout(&m_descriptorSetLayout, descriptorType, m_device);
         CreateGraphicsPipeline(&m_pipelineLayout, &m_graphicsPipeline, m_renderPass, m_descriptorSetLayout, m_swapChainExtent, m_device);
         CreateCommandPool(&m_commandPool, m_surface, m_device, m_physicalDevice);
@@ -251,7 +251,6 @@ private:
 
             UpdateUniformBuffer(
                 m_uniformBufferCpuMemory, 
-                m_uniformBufferCpuAlignment, 
                 m_uniformBufferGpuMemory, 
                 sm_objectNum,
                 UniformBufferSizeCalculate(), 
