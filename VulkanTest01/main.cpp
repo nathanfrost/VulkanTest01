@@ -1,11 +1,36 @@
+//#Threading
+#include <thread>
+//#Threading
 #include"ntf_vulkan.h"
-
 
 VectorSafe<const char*, NTF_VALIDATION_LAYERS_SIZE> s_validationLayers;
 
 //don't complain about scanf being unsafe
 #pragma warning(disable : 4996)
 ///@todo: figure out which libraries I'm linking that trigger LNK4098 (seems like some libraries are linking /MD and /MDd and others are linking /MT and /MTd for C-runtime) -- for now, pass /IGNORE:4098 to the linker
+
+//#Threading
+struct CommandBufferThreadArguments
+{
+    VkCommandBuffer commandBuffer;
+    VkPipelineLayout pipelineLayout;
+    uint32_t objectIndex;
+    uint32_t indicesNum;
+
+    CommandBufferThreadArguments(   const VkCommandBuffer& CommandBuffer,
+                                    const VkPipelineLayout& PipelineLayout,
+                                    const uint32_t ObjectIndex,
+                                    const uint32_t& IndicesNum):
+        commandBuffer(CommandBuffer), pipelineLayout(PipelineLayout), objectIndex(ObjectIndex), indicesNum(IndicesNum)
+    {}
+};
+
+//DWORD WINAPI CommandBufferThread(void* arg)
+//{
+//    vkCmdPushConstants(commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
+//    vkCmdDrawIndexed(commandBuffer, indicesNum, 1, 0, 0, 0);
+//}
+//#Threading
 
 
 class VulkanRendererNTF 
@@ -17,6 +42,26 @@ public:
 	{
         initWindow(&m_window);
         initVulkan();
+
+        //#Threading
+        //const unsigned int threadsHardwareNum = std::thread::hardware_concurrency();
+        //assert(threadsHardwareNum > 0);
+        //const unsigned int commandBufferThreadsNum = min(min(threadsHardwareNum, sm_objectNum), kSwapChainImagesNumMax);
+        //for (int threadIndex = 0; threadIndex < sm_objectNum; ++threadIndex)
+        //{
+        //    auto& threadHandle = m_threadHandles[threadIndex];
+        //    threadHandle = CreateThread(
+        //        nullptr,                                        //child processes irrelevant
+        //        0,                                              //default stack size
+        //        CommandBufferThread,                            //starting address to execute
+        //        &m_commandBufferThreadArguments[threadIndex],   //argument
+        //        0,                                              //run immediately; "commit" (eg map) stack memory for immediate use
+        //        nullptr);                                       //ignore thread id
+        //    assert(threadHandle);///@todo: investigate SetThreadPriority() if default priority (THREAD_PRIORITY_NORMAL) seems inefficient
+        //}
+        /////@todo: CloseHandle() cleanup
+        //#Threading
+
         mainLoop(m_window);
         cleanup();
 
@@ -30,7 +75,8 @@ public:
         vkDeviceWaitIdle(m_device);
 
         CleanupSwapChain(
-            &m_commandBuffers,
+            &m_commandBuffersPrimary,
+            &m_commandBuffersSecondary,
             m_device,
             m_depthImageView,
             m_depthImage,
@@ -67,8 +113,15 @@ public:
             m_physicalDevice);
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         AllocateCommandBuffers(
-            &m_commandBuffers,
+            &m_commandBuffersPrimary,
             m_commandPool,
+            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            static_cast<uint32_t>(m_swapChainFramebuffers.size()),
+            m_device);
+        AllocateCommandBuffers(
+            &m_commandBuffersSecondary,
+            m_commandPool,
+            VK_COMMAND_BUFFER_LEVEL_SECONDARY,
             static_cast<uint32_t>(m_swapChainFramebuffers.size()),
             m_device);
     }
@@ -114,7 +167,8 @@ private:
     void cleanup()
     {
         CleanupSwapChain(
-            &m_commandBuffers,
+            &m_commandBuffersPrimary,
+            &m_commandBuffersSecondary,
             m_device,
             m_depthImageView,
             m_depthImage,
@@ -234,8 +288,15 @@ private:
             m_textureSampler, 
             m_device);
         AllocateCommandBuffers(
-            &m_commandBuffers,
+            &m_commandBuffersPrimary,
             m_commandPool,
+            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            static_cast<uint32_t>(m_swapChainFramebuffers.size()),
+            m_device);
+        AllocateCommandBuffers(
+            &m_commandBuffersSecondary,
+            m_commandPool,
+            VK_COMMAND_BUFFER_LEVEL_SECONDARY,
             static_cast<uint32_t>(m_swapChainFramebuffers.size()),
             m_device);
         CreateFrameSyncPrimitives(&m_imageAvailableSemaphore, &m_renderFinishedSemaphore, &m_fence, NTF_FRAMES_IN_FLIGHT_NUM, m_device);
@@ -262,7 +323,8 @@ private:
             AcquireNextImage(&acquiredImageIndex, m_swapChain, imageAvailableSemaphore, m_device);
 
             FillCommandBuffer(
-                m_commandBuffers[acquiredImageIndex],
+                m_commandBuffersPrimary[acquiredImageIndex],
+                m_commandBuffersSecondary[acquiredImageIndex],
                 m_descriptorSet,
                 m_uniformBufferCpuAlignment,
                 sm_objectNum,
@@ -278,7 +340,7 @@ private:
             DrawFrame(
                 /*this,///#TODO_CALLBACK*/ 
                 m_swapChain, 
-                m_commandBuffers, 
+                m_commandBuffersPrimary, 
                 acquiredImageIndex,
                 m_graphicsQueue, 
                 m_presentQueue, 
@@ -337,7 +399,12 @@ private:
     VkDeviceSize m_uniformBufferCpuAlignment;
     VkDescriptorPool m_descriptorPool;
     VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed
-    VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffers;//automatically freed when VkCommandPool is destroyed
+    VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
+    VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersSecondary;//automatically freed when VkCommandPool is destroyed
+    //#Threading
+    //VectorSafe<HANDLE, kSwapChainImagesNumMax> m_threadHandles;
+    //VectorSafe<CommandBufferThreadArguments, kSwapChainImagesNumMax> m_commandBufferThreadArguments;
+    //#Threading
 
     /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 
         used to synchronize operations within or across command queues */
