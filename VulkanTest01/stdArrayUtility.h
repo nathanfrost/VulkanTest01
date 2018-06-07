@@ -45,6 +45,9 @@ inline uint32_t Cast_size_t_uint32_t(const size_t num)
 template<class T, size_t kSize>
 class VectorSafe;
 
+template<class T, size_t kSize>
+class ArraySafe;
+
 template<class T>
 class VectorSafeRef
 {
@@ -124,18 +127,18 @@ public:
     //    AssertValid();
     //}
     template<size_t kSizeMax>
-    VectorSafeRef(VectorSafe<T, kSizeMax>*const arraySafe)
+    VectorSafeRef(VectorSafe<T, kSizeMax>*const vectorSafe)
     {
-        assert(arraySafe);
+        assert(vectorSafe);
 
         SetSizeCurrentPtr(
-            &arraySafe->m_sizeCurrent
+            &vectorSafe->m_sizeCurrent
 #if NTF_ARRAY_SAFE_DEBUG
-            ,&arraySafe->m_sizeCurrentSet
+            ,&vectorSafe->m_sizeCurrentSet
 #endif//#if NTF_ARRAY_SAFE_DEBUG
             );
-        SetSizeMax(arraySafe->SizeMax());
-        SetArray(arraySafe->begin());
+        SetSizeMax(vectorSafe->SizeMax());
+        SetArray(vectorSafe->begin());
     }
 
     ///@todo: unit tests
@@ -426,18 +429,26 @@ public:
     //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     //    AssertValid();
     //}
+
     template<size_t kSizeMax>
-    ArraySafeRef(VectorSafe<T, kSizeMax>*const arraySafe)
+    ArraySafeRef(VectorSafe<T, kSizeMax>*const vectorSafe)
+    {
+        assert(vectorSafe);
+        SetSizeMax(vectorSafe->size());
+        SetArray(vectorSafe->begin());
+    }
+    ArraySafeRef(VectorSafeRef<T>*const vectorSafe)
+    {
+        assert(vectorSafe);
+        SetSizeMax(vectorSafe->size());
+        SetArray(vectorSafe->begin());
+    }
+
+    template<size_t kSizeMax>
+    ArraySafeRef(ArraySafe<T, kSizeMax>*const arraySafe)
     {
         assert(arraySafe);
-
-        SetSizeCurrentPtr(
-            &arraySafe->m_sizeCurrent
-#if NTF_ARRAY_SAFE_DEBUG
-            , &arraySafe->m_sizeCurrentSet
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-            );
-        SetSizeMax(arraySafe->SizeMax());
+        SetSizeMax(arraySafe->size());
         SetArray(arraySafe->begin());
     }
 
@@ -518,21 +529,18 @@ public:
         memcpy(&GetAddressOfUnderlyingArray()[index], input, inputBytesNum);
     }
 
+#if NTF_ARRAY_SAFE_DEBUG
     size_type size() const noexcept
     {
         AssertValid();
-        return *m_sizeMax;
-    }
-    void size(const size_t size)
-    {
-        SetSizeMax(size);
-        AssertValid();
+        return m_sizeMax;
     }
     size_t SizeMaxInBytes() const
     {
         AssertValid();
-        return m_sizeMax*sizeof(T);
+        return size()*sizeof(T);
     }
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     const T* data() const
     {
         return GetAddressOfUnderlyingArray();
@@ -553,7 +561,7 @@ public:
     const_reference GetChecked(const size_type pos) const
     {
         AssertValid();
-        assert(pos < *m_sizeCurrent);
+        assert(pos < size());
         return m_array[pos];
     }
     reference GetChecked(const size_type pos)
@@ -795,6 +803,176 @@ public:
         AssertValid();
         return m_sizeMax == 0;
     }
+};
+
+template<class T, size_t kSize>
+class ArraySafe
+{
+public:
+    typedef ArraySafe<T, kSize> ThisDataType;
+    typedef T* iterator;
+    typedef const T* const_iterator;
+    typedef T& reference;
+    typedef const T& const_reference;
+    typedef size_t size_type;
+
+private:
+    T m_array[kSize];
+public:
+    ArraySafe()
+    {
+    }
+    ArraySafe(const std::initializer_list<T>& initializerList)
+    {
+        MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
+    }
+    ArraySafe(ConstVectorSafeRef<T> r)
+    {
+        MemcpyFromStart(r.begin(), r.size()*sizeof(T));
+    }
+    template<class T, size_t kSize>
+    operator ArraySafeRef<T>()
+    {
+        return ArraySafeRef(this);
+    }
+
+    template<size_t kSizeOther>
+    void Copy(const ArraySafe<T, kSizeOther>& arraySafeOther)
+    {
+        MemcpyFromStart(arraySafeOther.GetAddressOfUnderlyingArray(), arraySafeOther.SizeInBytes());
+    }
+
+    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)///@todo: rename to make obvious that the semantics of this is to CLEAR the Array and replace with the contents of input
+    {
+        assert(input);
+        assert(inputBytesNum > 0);
+        size(inputBytesNum / sizeof(T));
+        assert(inputBytesNum <= SizeInBytes());
+        assert(inputBytesNum % sizeof(T) == 0);
+
+        memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
+        AssertValid();
+    }
+
+    size_type size() const noexcept
+    {
+        return kSize;
+    }
+    size_t SizeInBytes() const
+    {
+        return size()*sizeof(T);
+    }
+    const T* data() const
+    {
+        return GetAddressOfUnderlyingArray();
+    }
+    T* data()
+    {
+        return GetAddressOfUnderlyingArray();
+    }
+    const T* GetAddressOfUnderlyingArray() const
+    {
+        return &m_array[0];
+    }
+    T* GetAddressOfUnderlyingArray()
+    {
+        return const_cast<T*>(static_cast<const ThisDataType*>(this)->GetAddressOfUnderlyingArray());
+    }
+    const_reference GetChecked(const size_type pos) const
+    {
+        AssertValid();
+        assert(pos < m_sizeCurrent);
+        assert(pos < kSize);
+        return m_array[pos];
+    }
+    reference GetChecked(const size_type pos)
+    {
+        return const_cast<reference>(static_cast<const ThisDataType*>(this)->GetChecked(pos));
+    }
+    size_t GetLastValidIndex() const
+    {
+        return kSize - 1;
+    }
+    size_t GetOneAfterLastValidIndex() const
+    {
+        return GetLastValidIndex() + 1;
+    }
+
+    reference operator[](size_type pos)
+    {
+        return GetChecked(pos);
+    }
+    const_reference operator[](size_type pos) const
+    {
+        return GetChecked(pos);
+    }
+
+    reference at(size_type pos)
+    {
+        return GetChecked(pos);
+    }
+    const_reference at(size_type pos) const
+    {
+        return GetChecked(pos);
+    }
+
+    reference front()
+    {
+        return GetChecked(0);
+    }
+    const_reference front() const
+    {
+        return GetChecked(0);
+    }
+
+    reference back()
+    {
+        return GetChecked(GetLastValidIndex());
+    }
+    const_reference back() const
+    {
+        return GetChecked(GetLastValidIndex());
+    }
+
+    iterator begin() noexcept
+    {
+        return GetAddressOfUnderlyingArray();
+    }
+    const_iterator begin() const noexcept
+    {
+        return GetAddressOfUnderlyingArray();
+    }
+    const_iterator cbegin() const noexcept
+    {
+        return end();
+    }
+
+    iterator end() noexcept
+    {
+        return const_cast<iterator>(static_cast<const ThisDataType*>(this)->end());
+    }
+    const_iterator end() const noexcept
+    {
+        return const_iterator(GetAddressOfUnderlyingArray() + GetOneAfterLastValidIndex());
+    }
+    const_iterator cend() const noexcept
+    {
+        return end();
+    }
+
+    //reverse_iterator rbegin() noexcept 
+    //{
+    //    return reverse_iterator(end());
+    //}
+    //const_reverse_iterator rbegin() const noexcept 
+    //{
+    //    return const_reverse_iterator(end());
+    //}
+    //const_reverse_iterator crbegin() const noexcept 
+    //{
+    //    return rbegin();
+    //}
+    //iterator rend() and crend() not implemented
 };
 
 template<class T, size_t kSizeMax>

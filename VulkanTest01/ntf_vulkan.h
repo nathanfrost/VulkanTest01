@@ -200,7 +200,7 @@ void CreateSwapChain(
 
 void CleanupSwapChain(
     VectorSafeRef<VkCommandBuffer> commandBuffersPrimary,
-    VectorSafeRef<VkCommandBuffer> commandBuffersSecondary,
+    VectorSafeRef<ArraySafe<VkCommandBuffer, 2>> commandBuffersSecondary,
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
@@ -257,10 +257,10 @@ void CreateRenderPass(
     );
 
 void AllocateCommandBuffers(
-    VectorSafeRef<VkCommandBuffer> commandBuffers,
+    ArraySafeRef<VkCommandBuffer> commandBuffers,
     const VkCommandPool& commandPool,
     const VkCommandBufferLevel& commandBufferLevel,
-    const int commandBuffersNum,
+    const uint32_t commandBuffersNum,
     const VkDevice& device);
 
 void AcquireNextImage(
@@ -271,7 +271,7 @@ void AcquireNextImage(
 
 void FillCommandBuffer(
     const VkCommandBuffer& commandBufferPrimary,
-    const VkCommandBuffer& commandBufferSecondary,
+    ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
     const VkDescriptorSet& descriptorSet,
     const VkDeviceSize& uniformBufferElementSize,
     const size_t objectNum,

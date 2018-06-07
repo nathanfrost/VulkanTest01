@@ -957,19 +957,19 @@ void CreateRenderPass(
 }
 
 void AllocateCommandBuffers(
-    VectorSafeRef<VkCommandBuffer> commandBuffers,
+    ArraySafeRef<VkCommandBuffer> commandBuffers,
     const VkCommandPool& commandPool,
     const VkCommandBufferLevel& commandBufferLevel,
-    const int commandBuffersNum,
+    const uint32_t commandBuffersNum,
     const VkDevice& device)
 {
-    commandBuffers.size(commandBuffersNum);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
+    assert(commandBuffersNum > 0);
 
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;//only value allowed
     allocInfo.commandPool = commandPool;
     allocInfo.level = commandBufferLevel;//primary can submit to execution queue, but not be submitted to other command buffers; secondary can't be submitted to execution queue but can be submitted to other command buffers (for example, to factor out common sequences of commands)
-    allocInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
+    allocInfo.commandBufferCount = commandBuffersNum;
 
     const VkResult allocateCommandBuffersResult = vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data());
     NTF_VK_ASSERT_SUCCESS(allocateCommandBuffersResult);
@@ -977,10 +977,10 @@ void AllocateCommandBuffers(
 
 void FillCommandBuffer(
     const VkCommandBuffer& commandBufferPrimary,
-    const VkCommandBuffer& commandBufferSecondary,
+    ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
     const VkDescriptorSet& descriptorSet,
     const VkDeviceSize& uniformBufferCpuAlignment,
-    const size_t objectNum,
+    const size_t objectNum,///<@todo NTF: rename objectsNum
     const VkFramebuffer& swapChainFramebuffer,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
@@ -994,31 +994,6 @@ void FillCommandBuffer(
     assert(uniformBufferCpuAlignment > 0);
     assert(objectNum > 0);
     assert(indicesNum > 0);
-
-    //#SecondaryCommandBuffer
-    //{
-    //    VkCommandBufferInheritanceInfo commandBufferInheritanceInfo;
-    //    commandBufferInheritanceInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO; //only option
-    //    commandBufferInheritanceInfo.pNext = nullptr;                                           //only option
-    //    commandBufferInheritanceInfo.renderPass = renderPass;                                   //only executes in this renderpass
-    //    commandBufferInheritanceInfo.subpass = 0;                                               //only executes in this subpass
-    //    commandBufferInheritanceInfo.framebuffer = swapChainFramebuffer;                        //framebuffer to execute in
-    //    commandBufferInheritanceInfo.occlusionQueryEnable = VK_FALSE;                           //can't execute in an occlusion query
-    //    commandBufferInheritanceInfo.queryFlags = 0;                                            //no occlusion query flags
-    //    commandBufferInheritanceInfo.pipelineStatistics = TODO;
-
-    //    VkCommandBufferBeginInfo beginInfo = {};
-    //    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    //    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-    //    beginInfo.pInheritanceInfo = nullptr;
-    //    for (uint32_t objectIndex = 0; objectIndex < objectNum; ++objectIndex)
-    //    {
-    //        vkCmdPushConstants(commandBufferSecondary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
-    //        vkCmdDrawIndexed(commandBufferSecondary, indicesNum, 1, 0, 0, 0);
-    //    }
-
-    //}
-    //#SecondaryCommandBuffer
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1045,27 +1020,44 @@ void FillCommandBuffer(
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
-    vkCmdBeginRenderPass(commandBufferPrimary, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
-    vkCmdBindPipeline(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-
-    VkBuffer vertexBuffers[] = { vertexBuffer };
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(commandBufferPrimary, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBufferPrimary, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-    vkCmdBindDescriptorSets(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-
-    //#SecondaryCommandBuffer: old; remove soon
-    for (uint32_t objectIndex = 0; objectIndex < 2; ++objectIndex)
     {
-        vkCmdPushConstants(commandBufferPrimary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
-        vkCmdDrawIndexed(commandBufferPrimary, indicesNum, 1, 0, 0, 0);
+        VkCommandBufferInheritanceInfo commandBufferInheritanceInfo;
+        commandBufferInheritanceInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO; //only option
+        commandBufferInheritanceInfo.pNext = nullptr;                                           //only option
+        commandBufferInheritanceInfo.renderPass = renderPass;                                   //only executes in this renderpass
+        commandBufferInheritanceInfo.subpass = 0;                                               //only executes in this subpass
+        commandBufferInheritanceInfo.framebuffer = swapChainFramebuffer;                        //framebuffer to execute in
+        commandBufferInheritanceInfo.occlusionQueryEnable = VK_FALSE;                           //can't execute in an occlusion query
+        commandBufferInheritanceInfo.queryFlags = 0;                                            //no occlusion query flags
+        commandBufferInheritanceInfo.pipelineStatistics = 0;                                    //no query counter operations
+
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+        beginInfo.pInheritanceInfo = &commandBufferInheritanceInfo;
+
+        const VkBuffer vertexBuffers[] = { vertexBuffer };
+        const VkDeviceSize offsets[] = { 0 };
+        for (size_t objectIndex = 0; objectIndex < objectNum; ++objectIndex)
+        {
+            auto& commandBufferSecondary = commandBuffersSecondary[objectIndex];
+            
+            vkBeginCommandBuffer(commandBufferSecondary, &beginInfo);  //implicitly resets the command buffer (you can't append commands to an existing buffer)
+            vkCmdBindPipeline(commandBufferSecondary, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+            vkCmdBindVertexBuffers(commandBufferSecondary, 0, 1, vertexBuffers, offsets);
+            vkCmdBindIndexBuffer(commandBufferSecondary, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+            vkCmdBindDescriptorSets(commandBufferSecondary, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
+            vkCmdPushConstants(commandBufferSecondary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
+            vkCmdDrawIndexed(commandBufferSecondary, indicesNum, 1, 0, 0, 0);
+
+            const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBufferSecondary);
+            NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
+        }
     }
-    //#SecondaryCommandBuffer: old; remove soon
 
-    //#SecondaryCommandBuffer
-    //#SecondaryCommandBuffer
-
+    vkCmdBeginRenderPass(commandBufferPrimary, &renderPassInfo, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS/**<VK_SUBPASS_CONTENTS_INLINE=no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
+    vkCmdExecuteCommands(commandBufferPrimary, Cast_size_t_uint32_t(objectNum), commandBuffersSecondary.data());
     vkCmdEndRenderPass(commandBufferPrimary);
 
     const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBufferPrimary);
@@ -2135,14 +2127,15 @@ void CreateSwapChain(
     swapChainExtent = extent;
 }
 
-void FreeCommandBuffers(VectorSafeRef<VkCommandBuffer> commandBuffers, const VkDevice& device, const VkCommandPool& commandPool)
+void FreeCommandBuffers(ArraySafeRef<VkCommandBuffer> commandBuffers, const uint32_t commandBuffersNum, const VkDevice& device, const VkCommandPool& commandPool)
 {
-    vkFreeCommandBuffers(device, commandPool, static_cast<uint32_t>(commandBuffers.size()), commandBuffers.data());
+    assert(commandBuffersNum > 0);
+    vkFreeCommandBuffers(device, commandPool, commandBuffersNum, commandBuffers.data());
 }
 
 void CleanupSwapChain(
     VectorSafeRef<VkCommandBuffer> commandBuffersPrimary,
-    VectorSafeRef<VkCommandBuffer> commandBuffersSecondary,
+    VectorSafeRef<ArraySafe<VkCommandBuffer, 2>> commandBuffersSecondary,///<@todo NTF: refactor out magic number 2 (meant to be NTF_OBJECTS_NUM) and either support VectorSafeRef<ArraySafeRef<T>> or repeatedly call FreeCommandBuffers on each VectorSafe outside of this function
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
@@ -2169,8 +2162,11 @@ void CleanupSwapChain(
     }
 
     //return command buffers to the pool from whence they came
-    FreeCommandBuffers(commandBuffersPrimary, device, commandPool);
-    FreeCommandBuffers(commandBuffersSecondary, device, commandPool);
+    FreeCommandBuffers(&commandBuffersPrimary, Cast_size_t_uint32_t(commandBuffersPrimary.size()), device, commandPool);
+    for (auto&commandBuffersSecondaryArray : commandBuffersSecondary)
+    {
+        FreeCommandBuffers(&commandBuffersSecondaryArray, static_cast<uint32_t>(commandBuffersSecondaryArray.size()), device, commandPool);
+    }
 
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
     vkDestroyPipelineLayout(device, pipelineLayout, nullptr);

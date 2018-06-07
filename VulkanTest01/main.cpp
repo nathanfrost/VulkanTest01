@@ -46,8 +46,8 @@ public:
         //#Threading
         //const unsigned int threadsHardwareNum = std::thread::hardware_concurrency();
         //assert(threadsHardwareNum > 0);
-        //const unsigned int commandBufferThreadsNum = min(min(threadsHardwareNum, sm_objectNum), kSwapChainImagesNumMax);
-        //for (int threadIndex = 0; threadIndex < sm_objectNum; ++threadIndex)
+        //const unsigned int commandBufferThreadsNum = min(min(threadsHardwareNum, NTF_OBJECTS_NUM), kSwapChainImagesNumMax);
+        //for (int threadIndex = 0; threadIndex < NTF_OBJECTS_NUM; ++threadIndex)
         //{
         //    auto& threadHandle = m_threadHandles[threadIndex];
         //    threadHandle = CreateThread(
@@ -112,24 +112,33 @@ public:
             m_device,
             m_physicalDevice);
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
+
+        const uint32_t swapChainFramebuffersSize = Cast_size_t_uint32_t(m_swapChainFramebuffers.size());
+        m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
         AllocateCommandBuffers(
             &m_commandBuffersPrimary,
             m_commandPool,
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            static_cast<uint32_t>(m_swapChainFramebuffers.size()),
+            swapChainFramebuffersSize,
             m_device);
-        AllocateCommandBuffers(
-            &m_commandBuffersSecondary,
-            m_commandPool,
-            VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-            static_cast<uint32_t>(m_swapChainFramebuffers.size()),
-            m_device);
+        m_commandBuffersSecondary.size(swapChainFramebuffersSize);
+        for (auto& secondaryCommandBuffers : m_commandBuffersSecondary)
+        {
+            AllocateCommandBuffers(
+                &secondaryCommandBuffers,
+                m_commandPool,
+                VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+                swapChainFramebuffersSize,
+                m_device);
+        }
     }
 
 private:
+    #define NTF_OBJECTS_NUM 2//number of models to draw
+
     VkDeviceSize UniformBufferSizeCalculate()
     {
-        return sm_objectNum*m_uniformBufferCpuAlignment;
+        return NTF_OBJECTS_NUM*m_uniformBufferCpuAlignment;
     }
     void initWindow(GLFWwindow**const windowPtrPtr)
     {
@@ -287,18 +296,25 @@ private:
             m_textureImageView, 
             m_textureSampler, 
             m_device);
+
+        const uint32_t swapChainFramebuffersSize = Cast_size_t_uint32_t(m_swapChainFramebuffers.size());
+        m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
         AllocateCommandBuffers(
             &m_commandBuffersPrimary,
             m_commandPool,
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            static_cast<uint32_t>(m_swapChainFramebuffers.size()),
+            swapChainFramebuffersSize,
             m_device);
-        AllocateCommandBuffers(
-            &m_commandBuffersSecondary,
-            m_commandPool,
-            VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-            static_cast<uint32_t>(m_swapChainFramebuffers.size()),
-            m_device);
+        m_commandBuffersSecondary.size(swapChainFramebuffersSize);
+        for (auto& secondaryCommandBuffer : m_commandBuffersSecondary)
+        {
+            AllocateCommandBuffers(
+                &secondaryCommandBuffer,
+                m_commandPool,
+                VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+                swapChainFramebuffersSize,
+                m_device);
+        }
         CreateFrameSyncPrimitives(&m_imageAvailableSemaphore, &m_renderFinishedSemaphore, &m_fence, NTF_FRAMES_IN_FLIGHT_NUM, m_device);
     }
 
@@ -313,7 +329,7 @@ private:
             UpdateUniformBuffer(
                 m_uniformBufferCpuMemory, 
                 m_uniformBufferGpuMemory, 
-                sm_objectNum,
+                NTF_OBJECTS_NUM,
                 UniformBufferSizeCalculate(), 
                 m_swapChainExtent, 
                 m_device);
@@ -324,10 +340,10 @@ private:
 
             FillCommandBuffer(
                 m_commandBuffersPrimary[acquiredImageIndex],
-                m_commandBuffersSecondary[acquiredImageIndex],
+                &m_commandBuffersSecondary[acquiredImageIndex],
                 m_descriptorSet,
                 m_uniformBufferCpuAlignment,
-                sm_objectNum,
+                NTF_OBJECTS_NUM,
                 m_swapChainFramebuffers[acquiredImageIndex],
                 m_renderPass,
                 m_swapChainExtent,
@@ -355,8 +371,6 @@ private:
         vkDeviceWaitIdle(m_device);
     }
 
-
-    const size_t sm_objectNum = 2;//number of models to draw
     const size_t sm_uniformBufferElementSize = sizeof(UniformBufferObject);
 
     GLFWwindow* m_window;
@@ -400,7 +414,8 @@ private:
     VkDescriptorPool m_descriptorPool;
     VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
-    VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersSecondary;//automatically freed when VkCommandPool is destroyed
+    VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondary;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kSizeMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kSizeMax>& vectorSafe) -- not sure why
+    
     //#Threading
     //VectorSafe<HANDLE, kSwapChainImagesNumMax> m_threadHandles;
     //VectorSafe<CommandBufferThreadArguments, kSwapChainImagesNumMax> m_commandBufferThreadArguments;
@@ -420,4 +435,3 @@ int main()
     app.run();
     return EXIT_SUCCESS;
 }
-
