@@ -274,7 +274,7 @@ void FillCommandBuffer(
     ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
     const VkDescriptorSet& descriptorSet,
     const VkDeviceSize& uniformBufferElementSize,
-    const size_t objectNum,
+    const size_t objectsNum,
     const VkFramebuffer& swapChainFramebuffers,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
@@ -383,7 +383,7 @@ void CreateFrameSyncPrimitives(
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
     const VkDeviceMemory& uniformBufferGpuMemory, 
-    const size_t objectNum,
+    const size_t objectsNum,
     const VkDeviceSize uniformBufferSize,
     const VkExtent2D& swapChainExtent, 
     const VkDevice& device);

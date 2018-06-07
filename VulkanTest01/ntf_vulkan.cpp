@@ -980,7 +980,7 @@ void FillCommandBuffer(
     ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
     const VkDescriptorSet& descriptorSet,
     const VkDeviceSize& uniformBufferCpuAlignment,
-    const size_t objectNum,///<@todo NTF: rename objectsNum
+    const size_t objectsNum,///<@todo NTF: rename objectsNum
     const VkFramebuffer& swapChainFramebuffer,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
@@ -992,7 +992,7 @@ void FillCommandBuffer(
     const VkDevice& device)
 {
     assert(uniformBufferCpuAlignment > 0);
-    assert(objectNum > 0);
+    assert(objectsNum > 0);
     assert(indicesNum > 0);
 
     VkCommandBufferBeginInfo beginInfo = {};
@@ -1038,7 +1038,7 @@ void FillCommandBuffer(
 
         const VkBuffer vertexBuffers[] = { vertexBuffer };
         const VkDeviceSize offsets[] = { 0 };
-        for (size_t objectIndex = 0; objectIndex < objectNum; ++objectIndex)
+        for (size_t objectIndex = 0; objectIndex < objectsNum; ++objectIndex)
         {
             auto& commandBufferSecondary = commandBuffersSecondary[objectIndex];
             
@@ -1057,7 +1057,7 @@ void FillCommandBuffer(
     }
 
     vkCmdBeginRenderPass(commandBufferPrimary, &renderPassInfo, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS/**<VK_SUBPASS_CONTENTS_INLINE=no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
-    vkCmdExecuteCommands(commandBufferPrimary, Cast_size_t_uint32_t(objectNum), commandBuffersSecondary.data());
+    vkCmdExecuteCommands(commandBufferPrimary, Cast_size_t_uint32_t(objectsNum), commandBuffersSecondary.data());
     vkCmdEndRenderPass(commandBufferPrimary);
 
     const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBufferPrimary);
@@ -1680,12 +1680,12 @@ void CreateFrameSyncPrimitives(
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
     const VkDeviceMemory& uniformBufferGpuMemory, 
-    const size_t objectNum,
+    const size_t objectsNum,
     const VkDeviceSize uniformBufferSize, 
     const VkExtent2D& swapChainExtent, 
     const VkDevice& device)
 {
-    assert(objectNum > 0);
+    assert(objectsNum > 0);
     assert(uniformBufferSize);
 
     static auto startTime = std::chrono::high_resolution_clock::now();
@@ -1696,7 +1696,7 @@ void UpdateUniformBuffer(
     const glm::mat4 worldRotation = glm::rotate(glm::mat4(), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
     UniformBufferObject ubo = {};
-    for (VkDeviceSize objectIndex = 0; objectIndex < objectNum; ++objectIndex)
+    for (VkDeviceSize objectIndex = 0; objectIndex < objectsNum; ++objectIndex)
     {
         const glm::mat4 worldTranslation = glm::translate(glm::mat4(), glm::vec3(-1.f, -1.f, 0.f) + glm::vec3(0.f,2.f,0.f)*static_cast<float>(objectIndex));
         const glm::mat4 modelToWorld = worldTranslation*worldRotation;
