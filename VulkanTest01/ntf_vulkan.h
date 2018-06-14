@@ -207,6 +207,7 @@ void CleanupSwapChain(
     const VkDeviceMemory& depthImageMemory,
     ConstVectorSafeRef<VkFramebuffer> swapChainFramebuffers,
     const VkCommandPool& commandPool,
+    ConstVectorSafeRef<ArraySafe<VkCommandPool, 2>> commandPoolsSecondary,///<@todo NTF: refactor out magic number 2 (meant to be NTF_OBJECTS_NUM) and either support VectorSafeRef<ArraySafeRef<T>> or repeatedly call FreeCommandBuffers on each VectorSafe outside of this function
     const VkPipeline& graphicsPipeline,
     const VkPipelineLayout& pipelineLayout,
     const VkRenderPass& renderPass,

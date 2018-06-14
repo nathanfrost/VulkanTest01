@@ -41,6 +41,13 @@ inline uint32_t Cast_size_t_uint32_t(const size_t num)
     assert(num_uint32_t == num);
     return num_uint32_t;
 }
+///@todo: unit test
+inline uint8_t Cast_size_t_uint8_t(const size_t num)
+{
+    const uint8_t num_uint8_t = static_cast<uint8_t>(num);
+    assert(num_uint8_t == num);
+    return num_uint8_t;
+}
 
 template<class T, size_t kSize>
 class VectorSafe;
@@ -450,6 +457,13 @@ public:
         assert(arraySafe);
         SetSizeMax(arraySafe->size());
         SetArray(arraySafe->begin());
+    }
+
+    ///@todo: unit tests
+    ArraySafeRef(T*const p, const size_t sizeMax)
+    {
+        SetSizeMax(sizeMax);
+        SetArray(p);
     }
 
     ///@todo: unit tests
@@ -880,8 +894,6 @@ public:
     }
     const_reference GetChecked(const size_type pos) const
     {
-        AssertValid();
-        assert(pos < m_sizeCurrent);
         assert(pos < kSize);
         return m_array[pos];
     }
