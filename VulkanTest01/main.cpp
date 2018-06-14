@@ -472,7 +472,6 @@ private:
             const size_t threadNum = NTF_OBJECTS_NUM;
             for (size_t threadIndex = 0; threadIndex < threadNum; ++threadIndex)
             {
-                ///@todo: wrong: make these pointers (that persist, including the sizes!) so these actually make it to the threads
                 auto& commandBufferThreadArguments = m_commandBufferThreadArguments[acquiredImageIndex][threadIndex];
                 commandBufferThreadArguments.commandBuffer = &m_commandBuffersSecondary[acquiredImageIndex][threadIndex];
                 commandBufferThreadArguments.descriptorSet = &m_descriptorSet;
@@ -500,18 +499,10 @@ private:
             FillCommandBuffer(
                 m_commandBuffersPrimary[acquiredImageIndex],
                 &m_commandBuffersSecondary[acquiredImageIndex],
-                m_descriptorSet,
-                m_uniformBufferCpuAlignment,
                 NTF_OBJECTS_NUM,
                 m_swapChainFramebuffers[acquiredImageIndex],
                 m_renderPass,
-                m_swapChainExtent,
-                m_pipelineLayout,
-                m_graphicsPipeline,
-                m_vertexBuffer,
-                m_indexBuffer,
-                static_cast<uint32_t>(m_indices.size()),
-                m_device);
+                m_swapChainExtent);
             DrawFrame(
                 /*this,///#TODO_CALLBACK*/ 
                 m_swapChain, 
@@ -578,6 +569,7 @@ private:
     VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondary;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kSizeMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kSizeMax>& vectorSafe) -- not sure why
 
     //#Threading
+    ///@todo: only figure out how many secondary buffer threads could be active at max, only make that many threads and command pools
     ///@todo: collapse SoA into AoS
     VectorSafe<ArraySafe<HANDLE, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBufferThreadsDone;
     VectorSafe<ArraySafe<HANDLE, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBufferThreadHandles;

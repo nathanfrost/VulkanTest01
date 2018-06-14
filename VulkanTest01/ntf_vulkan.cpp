@@ -975,26 +975,15 @@ void AllocateCommandBuffers(
     NTF_VK_ASSERT_SUCCESS(allocateCommandBuffersResult);
 }
 
-///@todo: remove redundant params
 void FillCommandBuffer(
     const VkCommandBuffer& commandBufferPrimary,
     ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
-    const VkDescriptorSet& descriptorSet,
-    const VkDeviceSize& uniformBufferCpuAlignment,
     const size_t objectsNum,///<@todo NTF: rename objectsNum
     const VkFramebuffer& swapChainFramebuffer,
     const VkRenderPass& renderPass,
-    const VkExtent2D& swapChainExtent,
-    const VkPipelineLayout& pipelineLayout,
-    const VkPipeline& graphicsPipeline,
-    const VkBuffer& vertexBuffer,
-    const VkBuffer& indexBuffer,
-    const uint32_t& indicesNum,
-    const VkDevice& device)
+    const VkExtent2D& swapChainExtent)
 {
-    assert(uniformBufferCpuAlignment > 0);
     assert(objectsNum > 0);
-    assert(indicesNum > 0);
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
