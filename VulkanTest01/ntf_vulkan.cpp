@@ -11,6 +11,16 @@
 FILE* s_winTimer;
 #endif//NTF_WIN_TIMER
 
+HANDLE ThreadSignalingEventCreate()
+{
+    return CreateEvent(
+        NULL,               // default security attributes
+        FALSE,              // auto-reset; after signaling immediately set to nonsignaled
+        FALSE,              // initial state is nonsignaled
+        NULL                // no name -- if you have two events with the same name, the more recent one stomps the less recent one
+    );
+}
+
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device)
 {
     assert(textureImageViewPtr);

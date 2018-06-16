@@ -60,6 +60,7 @@ const char*const sk_texturePath = "textures/chalet.jpg";
 
 typedef uint32_t PushConstantBindIndexType;
 
+HANDLE ThreadSignalingEventCreate();
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device);
 void CopyBufferToImage(
     const VkBuffer& buffer,

@@ -116,21 +116,11 @@ public:
             auto& commandBufferThreadArguments = m_commandBufferThreadArguments[threadIndex];
 
             auto& commandBufferThreadWake = m_commandBufferThreadWake[threadIndex];
-            commandBufferThreadWake = CreateEvent(///<@todo NTF: wrap this Windows function and unduplicate below
-                NULL,               // default security attributes
-                FALSE,              // auto-reset; after signaling immediately set to nonsignaled
-                FALSE,              // initial state is nonsignaled
-                NULL                // no name -- if you have two events with the same name, the more recent one stomps the less recent one
-                );
+            commandBufferThreadWake = ThreadSignalingEventCreate();
             commandBufferThreadArguments.commandBufferThreadWake = &commandBufferThreadWake;
 
             auto& commandBufferThreadDone = m_commandBufferThreadsDone[threadIndex];
-            commandBufferThreadDone = CreateEvent(
-                NULL,               // default security attributes
-                FALSE,              // auto-reset; after signaling immediately set to nonsignaled
-                FALSE,              // initial state is nonsignaled
-                NULL                // no name -- if you have two events with the same name, the more recent one stomps the less recent one
-                );
+            commandBufferThreadDone = ThreadSignalingEventCreate();
             commandBufferThreadArguments.commandBufferThreadDone = &commandBufferThreadDone;
 
             threadHandle = CreateThread(
