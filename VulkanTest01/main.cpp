@@ -106,50 +106,41 @@ public:
         //BEG_THREADING_HACK
         ///@todo: cleanly handle any number of nonzero threads
         //const unsigned int commandBufferThreadsNum = min(min(threadsHardwareNum, NTF_OBJECTS_NUM), kSwapChainImagesNumMax);
-        const size_t threadGroupsNum = m_swapChainFramebuffers.size();
-        const size_t threadsPerGroup = NTF_OBJECTS_NUM;
-        assert(threadsHardwareNum >= threadsPerGroup*threadGroupsNum);
+        const size_t threadsNum = NTF_OBJECTS_NUM;
+        assert(threadsHardwareNum >= threadsNum);
         //END_THREADING_HACK
         
-        m_commandBufferThreadArguments.size(threadGroupsNum);
-        m_commandBufferThreadHandles.size(threadGroupsNum);
-        m_commandBufferThreadWake.size(threadGroupsNum);
-        m_commandBufferThreadsDone.size(threadGroupsNum);
-        m_threadIndex.size(threadGroupsNum);
-        for (size_t threadGroupIndex = 0; threadGroupIndex < threadGroupsNum; ++threadGroupIndex)
+        for (size_t threadIndex = 0; threadIndex < threadsNum; ++threadIndex)
         {
-            for (size_t threadIndex = 0; threadIndex < threadsPerGroup; ++threadIndex)
-            {
-                auto& threadHandle = m_commandBufferThreadHandles[threadGroupIndex][threadIndex];
-                auto& commandBufferThreadArguments = m_commandBufferThreadArguments[threadGroupIndex][threadIndex];
+            auto& threadHandle = m_commandBufferThreadHandles[threadIndex];
+            auto& commandBufferThreadArguments = m_commandBufferThreadArguments[threadIndex];
 
-                auto& commandBufferThreadWake = m_commandBufferThreadWake[threadGroupIndex][threadIndex];
-                commandBufferThreadWake = CreateEvent(
-                    NULL,               // default security attributes
-                    FALSE,              // auto-reset; after signaling immediately set to nonsignaled
-                    FALSE,              // initial state is nonsignaled
-                    NULL                // no name -- if you have two events with the same name, the more recent one stomps the less recent one
-                    );
-                commandBufferThreadArguments.commandBufferThreadWake = &commandBufferThreadWake;
+            auto& commandBufferThreadWake = m_commandBufferThreadWake[threadIndex];
+            commandBufferThreadWake = CreateEvent(///<@todo NTF: wrap this Windows function and unduplicate below
+                NULL,               // default security attributes
+                FALSE,              // auto-reset; after signaling immediately set to nonsignaled
+                FALSE,              // initial state is nonsignaled
+                NULL                // no name -- if you have two events with the same name, the more recent one stomps the less recent one
+                );
+            commandBufferThreadArguments.commandBufferThreadWake = &commandBufferThreadWake;
 
-                auto& commandBufferThreadDone = m_commandBufferThreadsDone[threadGroupIndex][threadIndex];
-                commandBufferThreadDone = CreateEvent(
-                    NULL,               // default security attributes
-                    FALSE,              // auto-reset; after signaling immediately set to nonsignaled
-                    FALSE,              // initial state is nonsignaled
-                    NULL                // no name -- if you have two events with the same name, the more recent one stomps the less recent one
-                    );
-                commandBufferThreadArguments.commandBufferThreadDone = &commandBufferThreadDone;
+            auto& commandBufferThreadDone = m_commandBufferThreadsDone[threadIndex];
+            commandBufferThreadDone = CreateEvent(
+                NULL,               // default security attributes
+                FALSE,              // auto-reset; after signaling immediately set to nonsignaled
+                FALSE,              // initial state is nonsignaled
+                NULL                // no name -- if you have two events with the same name, the more recent one stomps the less recent one
+                );
+            commandBufferThreadArguments.commandBufferThreadDone = &commandBufferThreadDone;
 
-                threadHandle = CreateThread(
-                    nullptr,                                        //child processes irrelevant; no suspending or resuming privileges
-                    0,                                              //default stack size
-                    CommandBufferThread,                            //starting address to execute
-                    &commandBufferThreadArguments,                  //argument
-                    0,                                              //run immediately; "commit" (eg map) stack memory for immediate use
-                    nullptr);                                       //ignore thread id
-                assert(threadHandle);///@todo: investigate SetThreadPriority() if default priority (THREAD_PRIORITY_NORMAL) seems inefficient
-            }
+            threadHandle = CreateThread(
+                nullptr,                                        //child processes irrelevant; no suspending or resuming privileges
+                0,                                              //default stack size
+                CommandBufferThread,                            //starting address to execute
+                &commandBufferThreadArguments,                  //argument
+                0,                                              //run immediately; "commit" (eg map) stack memory for immediate use
+                nullptr);                                       //ignore thread id
+            assert(threadHandle);///@todo: investigate SetThreadPriority() if default priority (THREAD_PRIORITY_NORMAL) seems inefficient
         }
         ///@todo: CloseHandle() cleanup
         //#Threading
@@ -216,18 +207,17 @@ public:
             swapChainFramebuffersSize,
             m_device);
 
-        const size_t threadGroupsNum = swapChainFramebuffersSize;
-        const size_t threadsPerGroup = NTF_OBJECTS_NUM;
+        const size_t commandBuffersSecondaryPerFrame = NTF_OBJECTS_NUM;
         const size_t commandBufferSecondaryPerCreateCall = 1;
-        m_commandBuffersSecondary.size(threadGroupsNum);
-        m_commandPoolsSecondary.size(threadGroupsNum);
-        for (size_t threadGroupsIndex = 0; threadGroupsIndex < threadGroupsNum; ++threadGroupsIndex)
+        m_commandBuffersSecondary.size(swapChainFramebuffersSize);
+        m_commandPoolsSecondary.size(swapChainFramebuffersSize);
+        for (size_t frameBufferIndex = 0; frameBufferIndex < swapChainFramebuffersSize; ++frameBufferIndex)
         {
-            for (size_t threadIndex = 0; threadIndex < threadsPerGroup; ++threadIndex)
+            for (size_t commandBufferSecondaryIndex = 0; commandBufferSecondaryIndex < commandBuffersSecondaryPerFrame; ++commandBufferSecondaryIndex)
             {
                 AllocateCommandBuffers(
-                    ArraySafeRef<VkCommandBuffer>(&m_commandBuffersSecondary[threadGroupsIndex][threadIndex], commandBufferSecondaryPerCreateCall),
-                    m_commandPoolsSecondary[threadGroupsIndex][threadIndex],
+                    ArraySafeRef<VkCommandBuffer>(&m_commandBuffersSecondary[frameBufferIndex][commandBufferSecondaryIndex], commandBufferSecondaryPerCreateCall),
+                    m_commandPoolsSecondary[frameBufferIndex][commandBufferSecondaryIndex],
                     VK_COMMAND_BUFFER_LEVEL_SECONDARY,
                     commandBufferSecondaryPerCreateCall,
                     m_device);
@@ -427,18 +417,17 @@ private:
             swapChainFramebuffersSize,
             m_device);
 
-        const size_t threadGroupsNum = swapChainFramebuffersSize;
-        const size_t threadsPerGroup = NTF_OBJECTS_NUM;
+        const size_t commandBuffersSecondaryPerFrame = NTF_OBJECTS_NUM;
         const size_t commandBufferSecondaryPerCreateCall = 1;
-        m_commandBuffersSecondary.size(threadGroupsNum);
-        m_commandPoolsSecondary.size(threadGroupsNum);
-        for (size_t threadGroupsIndex = 0; threadGroupsIndex < threadGroupsNum; ++threadGroupsIndex)
+        m_commandBuffersSecondary.size(swapChainFramebuffersSize);
+        m_commandPoolsSecondary.size(swapChainFramebuffersSize);
+        for (size_t frameBufferIndex = 0; frameBufferIndex < swapChainFramebuffersSize; ++frameBufferIndex)
         {
-            for (size_t threadIndex = 0; threadIndex < threadsPerGroup; ++threadIndex)
+            for (size_t commandBufferSecondaryIndex = 0; commandBufferSecondaryIndex < commandBuffersSecondaryPerFrame; ++commandBufferSecondaryIndex)
             {
                 AllocateCommandBuffers(
-                    ArraySafeRef<VkCommandBuffer>(&m_commandBuffersSecondary[threadGroupsIndex][threadIndex], commandBufferSecondaryPerCreateCall),
-                    m_commandPoolsSecondary[threadGroupsIndex][threadIndex],
+                    ArraySafeRef<VkCommandBuffer>(&m_commandBuffersSecondary[frameBufferIndex][commandBufferSecondaryIndex], commandBufferSecondaryPerCreateCall),
+                    m_commandPoolsSecondary[frameBufferIndex][commandBufferSecondaryIndex],
                     VK_COMMAND_BUFFER_LEVEL_SECONDARY,
                     commandBufferSecondaryPerCreateCall,
                     m_device);
@@ -472,15 +461,15 @@ private:
             const size_t threadNum = NTF_OBJECTS_NUM;
             for (size_t threadIndex = 0; threadIndex < threadNum; ++threadIndex)
             {
-                auto& commandBufferThreadArguments = m_commandBufferThreadArguments[acquiredImageIndex][threadIndex];
+                auto& commandBufferThreadArguments = m_commandBufferThreadArguments[threadIndex];
                 commandBufferThreadArguments.commandBuffer = &m_commandBuffersSecondary[acquiredImageIndex][threadIndex];
                 commandBufferThreadArguments.descriptorSet = &m_descriptorSet;
                 commandBufferThreadArguments.graphicsPipeline = &m_graphicsPipeline;
                 commandBufferThreadArguments.indexBuffer = &m_indexBuffer;
                 commandBufferThreadArguments.indicesNum = &m_indicesSize;
 
-                m_threadIndex[acquiredImageIndex][threadIndex] = Cast_size_t_uint32_t(threadIndex);
-                commandBufferThreadArguments.objectIndex = &m_threadIndex[acquiredImageIndex][threadIndex];
+                m_threadIndex[threadIndex] = Cast_size_t_uint32_t(threadIndex);
+                commandBufferThreadArguments.objectIndex = &m_threadIndex[threadIndex];
 
                 commandBufferThreadArguments.pipelineLayout = &m_pipelineLayout;
                 commandBufferThreadArguments.renderPass = &m_renderPass;
@@ -490,10 +479,10 @@ private:
 
                 //#Wait
                 //WakeByAddressSingle(commandBufferThreadArguments.signalMemory);//#SynchronizationWindows8+Only
-                const BOOL setEventResult = SetEvent(m_commandBufferThreadWake[acquiredImageIndex][threadIndex]);
+                const BOOL setEventResult = SetEvent(m_commandBufferThreadWake[threadIndex]);
                 assert(setEventResult);
             }
-            WaitForMultipleObjects(threadNum, m_commandBufferThreadsDone[acquiredImageIndex].begin(), TRUE, INFINITE);
+            WaitForMultipleObjects(threadNum, m_commandBufferThreadsDone.begin(), TRUE, INFINITE);
             //#Threading
 
             FillCommandBuffer(
@@ -571,11 +560,11 @@ private:
     //#Threading
     ///@todo: only figure out how many secondary buffer threads could be active at max, only make that many threads and command pools
     ///@todo: collapse SoA into AoS
-    VectorSafe<ArraySafe<HANDLE, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBufferThreadsDone;
-    VectorSafe<ArraySafe<HANDLE, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBufferThreadHandles;
-    VectorSafe<ArraySafe<CommandBufferThreadArguments, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBufferThreadArguments;
-    VectorSafe<ArraySafe<HANDLE, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBufferThreadWake;
-    VectorSafe<ArraySafe<uint32_t, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_threadIndex;
+    ArraySafe<HANDLE, NTF_OBJECTS_NUM> m_commandBufferThreadsDone;
+    ArraySafe<HANDLE, NTF_OBJECTS_NUM> m_commandBufferThreadHandles;
+    ArraySafe<CommandBufferThreadArguments, NTF_OBJECTS_NUM> m_commandBufferThreadArguments;
+    ArraySafe<HANDLE, NTF_OBJECTS_NUM> m_commandBufferThreadWake;
+    ArraySafe<uint32_t, NTF_OBJECTS_NUM> m_threadIndex;
     //#Threading
 
     /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 

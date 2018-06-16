@@ -200,7 +200,7 @@ void CreateSwapChain(
 
 void CleanupSwapChain(
     VectorSafeRef<VkCommandBuffer> commandBuffersPrimary,
-    VectorSafeRef<ArraySafe<VkCommandBuffer, 2>> commandBuffersSecondary,
+    VectorSafeRef<ArraySafe<VkCommandBuffer, 2>> commandBuffersSecondary,///<@todo NTF: refactor out magic number 2 (meant to be NTF_OBJECTS_NUM) and either support VectorSafeRef<ArraySafeRef<T>> or repeatedly call FreeCommandBuffers on each VectorSafe outside of this function
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
