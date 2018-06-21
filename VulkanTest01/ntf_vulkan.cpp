@@ -21,6 +21,104 @@ HANDLE ThreadSignalingEventCreate()
     );
 }
 
+void CommandBufferSecondaryThreadsCreate(
+    ArraySafeRef<CommandBufferSecondaryThread> threadData,
+    ArraySafeRef<HANDLE> threadDoneEvents,
+    ArraySafeRef<CommandBufferThreadArguments> threadArguments,
+    const size_t threadsNum)
+{
+    const unsigned int threadsHardwareNum = std::thread::hardware_concurrency();
+    assert(threadsHardwareNum > 0);
+    //BEG_THREADING_HACK
+    ///@todo: cleanly handle any number of nonzero threads
+    assert(threadsHardwareNum >= threadsNum);
+    //END_THREADING_HACK
+
+    for (size_t threadIndex = 0; threadIndex < threadsNum; ++threadIndex)
+    {
+        auto& threadHandle = threadData[threadIndex].threadHandle;
+        auto& commandBufferThreadArguments = threadArguments[threadIndex];
+
+        auto& commandBufferThreadWake = threadData[threadIndex].wakeEventHandle;
+        commandBufferThreadWake = ThreadSignalingEventCreate();
+        commandBufferThreadArguments.commandBufferThreadWake = &commandBufferThreadWake;
+
+        auto& commandBufferThreadDone = threadDoneEvents[threadIndex];
+        commandBufferThreadDone = ThreadSignalingEventCreate();
+        commandBufferThreadArguments.commandBufferThreadDone = &commandBufferThreadDone;
+
+        threadHandle = CreateThread(
+            nullptr,                                        //child processes irrelevant; no suspending or resuming privileges
+            0,                                              //default stack size
+            CommandBufferThread,                            //starting address to execute
+            &commandBufferThreadArguments,                  //argument
+            0,                                              //run immediately; "commit" (eg map) stack memory for immediate use
+            nullptr);                                       //ignore thread id
+        assert(threadHandle);///@todo: investigate SetThreadPriority() if default priority (THREAD_PRIORITY_NORMAL) seems inefficient
+    }
+    ///@todo: CloseHandle() cleanup
+}
+
+DWORD WINAPI CommandBufferThread(void* arg)
+{
+    auto& commandBufferThreadArguments = *reinterpret_cast<CommandBufferThreadArguments*>(arg);
+    for (;;)
+    {
+        HANDLE& commandBufferThreadWake = *commandBufferThreadArguments.commandBufferThreadWake;
+
+        //#Wait
+        //WaitOnAddress(&signalMemory, &undesiredValue, sizeof(CommandBufferThreadArguments::SignalMemoryType), INFINITE);//#SynchronizationWindows8+Only
+        DWORD waitForSingleObjectResult = WaitForSingleObject(commandBufferThreadWake, INFINITE);
+        assert(waitForSingleObjectResult == WAIT_OBJECT_0);
+
+        VkCommandBuffer& commandBufferSecondary = *commandBufferThreadArguments.commandBuffer;
+        VkDescriptorSet& descriptorSet = *commandBufferThreadArguments.descriptorSet;
+        VkRenderPass& renderPass = *commandBufferThreadArguments.renderPass;
+        VkExtent2D& swapChainExtent = *commandBufferThreadArguments.swapChainExtent;
+        VkPipelineLayout& pipelineLayout = *commandBufferThreadArguments.pipelineLayout;
+        VkBuffer& vertexBuffer = *commandBufferThreadArguments.vertexBuffer;
+        VkBuffer& indexBuffer = *commandBufferThreadArguments.indexBuffer;
+        VkFramebuffer& swapChainFramebuffer = *commandBufferThreadArguments.swapChainFramebuffer;
+        uint32_t& objectIndex = *commandBufferThreadArguments.objectIndex;
+        uint32_t& indicesNum = *commandBufferThreadArguments.indicesNum;
+        VkPipeline& graphicsPipeline = *commandBufferThreadArguments.graphicsPipeline;
+        HANDLE& commandBufferThreadDone = *commandBufferThreadArguments.commandBufferThreadDone;
+
+        VkCommandBufferInheritanceInfo commandBufferInheritanceInfo;
+        commandBufferInheritanceInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO; //only option
+        commandBufferInheritanceInfo.pNext = nullptr;                                           //only option
+        commandBufferInheritanceInfo.renderPass = renderPass;                                   //only executes in this renderpass
+        commandBufferInheritanceInfo.subpass = 0;                                               //only executes in this subpass
+        commandBufferInheritanceInfo.framebuffer = swapChainFramebuffer;                        //framebuffer to execute in
+        commandBufferInheritanceInfo.occlusionQueryEnable = VK_FALSE;                           //can't execute in an occlusion query
+        commandBufferInheritanceInfo.queryFlags = 0;                                            //no occlusion query flags
+        commandBufferInheritanceInfo.pipelineStatistics = 0;                                    //no query counter operations
+
+        VkCommandBufferBeginInfo beginInfo = {};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+        beginInfo.pInheritanceInfo = &commandBufferInheritanceInfo;
+
+        const VkBuffer vertexBuffers[] = { vertexBuffer };
+        const VkDeviceSize offsets[] = { 0 };
+
+        vkBeginCommandBuffer(commandBufferSecondary, &beginInfo);  //implicitly resets the command buffer (you can't append commands to an existing buffer)
+        vkCmdBindPipeline(commandBufferSecondary, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+        vkCmdBindVertexBuffers(commandBufferSecondary, 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(commandBufferSecondary, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindDescriptorSets(commandBufferSecondary, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
+        vkCmdPushConstants(commandBufferSecondary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
+        vkCmdDrawIndexed(commandBufferSecondary, indicesNum, 1, 0, 0, 0);
+
+        const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBufferSecondary);
+        NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
+
+        const BOOL setEventResult = SetEvent(commandBufferThreadDone);
+        assert(setEventResult);
+    }
+}
+
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device)
 {
     assert(textureImageViewPtr);
@@ -985,7 +1083,65 @@ void AllocateCommandBuffers(
     NTF_VK_ASSERT_SUCCESS(allocateCommandBuffersResult);
 }
 
-void FillCommandBuffer(
+void FillSecondaryCommandBuffers(
+    ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
+    ArraySafeRef<CommandBufferSecondaryThread> commandBuffersSecondaryThreads,
+    ArraySafeRef<HANDLE> commandBufferThreadDoneEvents,
+    ArraySafeRef<CommandBufferThreadArguments> commandBufferThreadArgumentsArray,
+    VkDescriptorSet*const descriptorSet,
+    VkFramebuffer*const swapChainFramebuffer,
+    VkRenderPass*const renderPass,
+    VkExtent2D*const swapChainExtent,
+    VkPipelineLayout*const pipelineLayout,
+    VkPipeline*const graphicsPipeline,
+    VkBuffer*const vertexBuffer,
+    VkBuffer*const indexBuffer,
+    uint32_t*const indicesSize,
+    ArraySafeRef<uint32_t> objectIndex,
+    const size_t objectsNum)
+{
+    assert(descriptorSet);
+    assert(swapChainFramebuffer);
+    assert(renderPass);
+    assert(swapChainExtent);
+    assert(pipelineLayout);
+    assert(graphicsPipeline);
+    assert(vertexBuffer);
+    assert(indexBuffer);
+
+    assert(indicesSize);
+    assert(*indicesSize > 0);
+
+    assert(objectsNum > 0);
+
+    const size_t threadNum = objectsNum;
+    for (size_t threadIndex = 0; threadIndex < threadNum; ++threadIndex)
+    {
+        auto& commandBufferThreadArguments = commandBufferThreadArgumentsArray[threadIndex];
+        commandBufferThreadArguments.commandBuffer = &commandBuffersSecondary[threadIndex];
+        commandBufferThreadArguments.descriptorSet = descriptorSet;
+        commandBufferThreadArguments.graphicsPipeline = graphicsPipeline;
+        commandBufferThreadArguments.indexBuffer = indexBuffer;
+        commandBufferThreadArguments.indicesNum = indicesSize;
+
+        objectIndex[threadIndex] = Cast_size_t_uint32_t(threadIndex);
+        commandBufferThreadArguments.objectIndex = &objectIndex[threadIndex];
+
+        commandBufferThreadArguments.pipelineLayout = pipelineLayout;
+        commandBufferThreadArguments.renderPass = renderPass;
+        commandBufferThreadArguments.swapChainExtent = swapChainExtent;
+        commandBufferThreadArguments.swapChainFramebuffer = swapChainFramebuffer;
+        commandBufferThreadArguments.vertexBuffer = vertexBuffer;
+
+        //#Wait
+        //WakeByAddressSingle(commandBufferThreadArguments.signalMemory);//#SynchronizationWindows8+Only
+        const BOOL setEventResult = SetEvent(commandBuffersSecondaryThreads[threadIndex].wakeEventHandle);
+        assert(setEventResult);
+    }
+    WaitForMultipleObjects(Cast_size_t_DWORD(threadNum), commandBufferThreadDoneEvents.begin(), TRUE, INFINITE);
+}
+
+void FillPrimaryCommandBuffer(
     const VkCommandBuffer& commandBufferPrimary,
     ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
     const size_t objectsNum,///<@todo NTF: rename objectsNum

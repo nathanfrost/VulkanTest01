@@ -4,6 +4,7 @@
 #include<assert.h>
 #include<initializer_list>
 #include<string.h>
+#include<windows.h>//for DWORD
 
 
 #if !NDEBUG
@@ -31,6 +32,13 @@ inline void AlignedFree(void* mem)
 inline size_t Cast_uint64_t_size_t(const uint64_t num)
 {
     const size_t num_size_t = static_cast<size_t>(num);
+    assert(num_size_t == num);
+    return num_size_t;
+}
+///@todo: unit test
+inline DWORD Cast_size_t_DWORD(const size_t num)
+{
+    const DWORD num_size_t = static_cast<DWORD>(num);
     assert(num_size_t == num);
     return num_size_t;
 }

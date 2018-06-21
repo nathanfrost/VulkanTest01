@@ -5,6 +5,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+///@todo: alphabetize and place immediately below WinTimer.h
 #include<iostream>
 #include<fstream>
 #include<stdexcept>
@@ -14,6 +15,7 @@
 #include <unordered_map>
 #include<algorithm>
 #include <chrono>
+#include <thread>
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -153,6 +155,31 @@ struct UniformBufferObject
     glm::mat4 modelToClip;
 };
 
+struct CommandBufferSecondaryThread
+{
+    HANDLE threadHandle;
+    HANDLE wakeEventHandle;
+};
+
+struct CommandBufferThreadArguments
+{
+    VkCommandBuffer* commandBuffer;
+    VkDescriptorSet* descriptorSet;
+    VkRenderPass* renderPass;
+    VkExtent2D* swapChainExtent;
+    VkPipelineLayout* pipelineLayout;
+    VkBuffer* vertexBuffer;
+    VkBuffer* indexBuffer;
+    VkFramebuffer* swapChainFramebuffer;
+    VkPipeline* graphicsPipeline;
+    uint32_t* objectIndex;
+    uint32_t* indicesNum;
+    HANDLE* commandBufferThreadDone;
+    HANDLE* commandBufferThreadWake;
+};
+
+DWORD WINAPI CommandBufferThread(void* arg);
+
 void GetRequiredExtensions(VectorSafeRef<const char*>*const requiredExtensions);
 
 VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers);
@@ -271,7 +298,24 @@ void AcquireNextImage(
     const VkSemaphore& imageAvailableSemaphore,
     const VkDevice& device);
 
-void FillCommandBuffer(
+void FillSecondaryCommandBuffers(
+    ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
+    ArraySafeRef<CommandBufferSecondaryThread> commandBuffersSecondaryThreads,
+    ArraySafeRef<HANDLE> commandBufferThreadDoneEvents,
+    ArraySafeRef<CommandBufferThreadArguments> commandBufferThreadArgumentsArray,
+    VkDescriptorSet*const descriptorSet,
+    VkFramebuffer*const swapChainFramebuffer,
+    VkRenderPass*const renderPass,
+    VkExtent2D*const swapChainExtent,
+    VkPipelineLayout*const pipelineLayout,
+    VkPipeline*const graphicsPipeline,
+    VkBuffer*const vertexBuffer,
+    VkBuffer*const indexBuffer,
+    uint32_t*const indicesSize,
+    ArraySafeRef<uint32_t> objectIndex,
+    const size_t objectsNum);
+
+void FillPrimaryCommandBuffer(
     const VkCommandBuffer& commandBufferPrimary,
     ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
     const size_t objectsNum,///<@todo NTF: rename objectsNum
@@ -393,3 +437,9 @@ void DrawFrame(
     const VkSemaphore& imageAvailableSemaphore,
     const VkSemaphore& renderFinishedSemaphore,
     const VkDevice& device);
+
+void CommandBufferSecondaryThreadsCreate(
+    ArraySafeRef<CommandBufferSecondaryThread> threadData,
+    ArraySafeRef<HANDLE> threadDoneEvents,
+    ArraySafeRef<CommandBufferThreadArguments> threadArguments,
+    const size_t threadsNum);
