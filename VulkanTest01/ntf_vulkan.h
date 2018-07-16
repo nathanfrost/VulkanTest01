@@ -462,84 +462,18 @@ public:
     }
     ///@todo: default constructors
 
-    ///@todo: move to cpp
     bool Initialize(
         const VkMemoryPropertyFlags properties,
         const VkDevice& device,
-        const VkPhysicalDevice& physicalDevice)
-    {
-#if NTF_DEBUG
-        assert(!m_initialized);
-        m_initialized = true;
-#endif//#if NTF_DEBUG
-        m_firstByteFree = 0;
+        const VkPhysicalDevice& physicalDevice);
 
-        VkMemoryAllocateInfo allocInfo = {};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = m_memoryMax;
-        allocInfo.memoryTypeIndex = /*BEG_HAC*/8/*END_HAC*/;//FindMemoryType(~0, properties, physicalDevice);//assume the first heap that fits the user's VkMemoryPropertyFlags is the only one
-        allocInfo.pNext = nullptr;
+    void Destroy(const VkDevice& device);
 
-#if NTF_DEBUG
-        m_memoryTypeIndex = allocInfo.memoryTypeIndex;
-        m_heapIndex = FindMemoryHeapIndex(properties, physicalDevice);
-#endif//#if NTF_DEBUG
-
-        const VkResult allocateMemoryResult = vkAllocateMemory(device, &allocInfo, nullptr, &m_memory);
-        NTF_VK_ASSERT_SUCCESS(allocateMemoryResult);
-        return NTF_VK_SUCCESS(allocateMemoryResult);
-    }
-
-    ///@todo: move to cpp
-    void Destroy(const VkDevice& device)
-    {
-#if NTF_DEBUG
-        assert(m_initialized);
-        m_initialized = false;
-#endif//#if NTF_DEBUG
-
-        vkFreeMemory(device, m_memory, nullptr);
-    }
-
-    ///@todo: move to cpp
-    ///@todo: unit test
     bool PushAlloc(
-        VkDeviceSize* memoryOffsetPtr, 
+        VkDeviceSize* memoryOffsetPtr,
         const VkMemoryRequirements& memRequirements,
-        const VkMemoryPropertyFlags& properties, 
-        const VkPhysicalDevice& physicalDevice)
-    {
-        assert(memoryOffsetPtr);
-        auto& memoryOffset = *memoryOffsetPtr;
-
-        assert(memRequirements.size > 0);
-        assert(memRequirements.alignment > 0);
-        assert(memRequirements.alignment % 2 == 0);
-
-#if NTF_DEBUG
-        const uint32_t memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties, physicalDevice);
-        VkPhysicalDeviceMemoryProperties memProperties;
-        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-        assert(memoryTypeIndex == m_memoryTypeIndex);
-        assert(memProperties.memoryTypes[memoryTypeIndex].heapIndex == m_heapIndex);
-#endif//#if NTF_DEBUG
-
-        const VkDeviceSize firstByteReturnedProposed = RoundToNearest(m_firstByteFree, memRequirements.alignment);
-        if (firstByteReturnedProposed >= m_memoryMax)
-        {
-            return false;
-        }
-
-        const VkDeviceSize firstByteFreeProposed = firstByteReturnedProposed + memRequirements.size;
-        if (firstByteFreeProposed >= m_memoryMax)
-        {
-            return false;
-        }
-
-        memoryOffset = firstByteReturnedProposed;
-        m_firstByteFree = firstByteFreeProposed;
-        return true;
-    }
+        const VkMemoryPropertyFlags& properties,
+        const VkPhysicalDevice& physicalDevice);
 
     inline VkDeviceMemory GetMemory() const
     {
