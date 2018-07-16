@@ -1,4 +1,4 @@
-#include"ntf_vulkan.h"
+﻿#include"ntf_vulkan.h"
 #include"ntf_vulkan_utility.h"
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -242,6 +242,7 @@ void TransitionImageLayout(
 void CreateImage(
     VkImage*const imagePtr,
     VkDeviceMemory*const imageMemoryPtr,
+    VulkanStackAllocator*const allocatorPtr,
     const uint32_t width,
     const uint32_t height,
     const VkFormat& format,
@@ -256,6 +257,9 @@ void CreateImage(
 
     assert(imageMemoryPtr);
     auto& imageMemory = *imageMemoryPtr;
+
+    assert(allocatorPtr);
+    auto& allocator = *allocatorPtr;
 
     VkImageCreateInfo imageInfo = {};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -278,15 +282,11 @@ void CreateImage(
     VkMemoryRequirements memRequirements;
     vkGetImageMemoryRequirements(device, image, &memRequirements);
 
-    VkMemoryAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties, physicalDevice);
+    VkDeviceSize memoryOffset;
+    const bool allocateMemoryResult = allocator.PushAlloc(&memoryOffset,memRequirements,properties, physicalDevice);
+    assert(allocateMemoryResult);
 
-    const VkResult allocateMemoryResult = vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory);
-    NTF_VK_ASSERT_SUCCESS(allocateMemoryResult);
-
-    vkBindImageMemory(device, image, imageMemory, 0);
+    vkBindImageMemory(device, image, allocator.GetMemory(), memoryOffset);
 }
 
 void CopyBuffer(
@@ -307,7 +307,13 @@ void CopyBuffer(
     EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue, device);
 }
 
-//returns memoryTypeIndex that satisfies the constraints passed
+/* Heap classification:
+1. vkGetPhysicalDeviceMemoryProperties​() returns memoryHeapCount, memoryTypes (what types of memory are supported by each heap), and the memoryHeaps themselves
+2. vkGetImageMemoryRequirements() or vkGetBufferMemoryRequirements​() return a bitmask for each resource.  If this bitmask shares a bit with the index of a 
+   given memoryTypes::propertyFlags, then the heap indexed by the corresponding memoryTypes::heapIndex supports this resource
+3. of the subset of heaps defined by step 2., you can choose the heap that contains the desired memoryTypes::propertyFlags​(eg 
+   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, etc)​ */
+///@ret: index of of VkPhysicalDeviceMemoryProperties::memProperties.memoryTypes that maps to the user's arguments
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice)
 {
     VkPhysicalDeviceMemoryProperties memProperties;
@@ -322,7 +328,23 @@ uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& 
     }
 
     assert(false);//failed to find suitable memory type
-    return 0;
+    return -1;
+}
+uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice)
+{
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+    for (uint32_t memoryTypeIndex = 0; memoryTypeIndex < memProperties.memoryTypeCount; ++memoryTypeIndex)
+    {
+        auto& memoryType = memProperties.memoryTypes[memoryTypeIndex];
+        if (memoryType.propertyFlags & properties)
+        {
+            return memoryType.heapIndex;//assume the first heap found that satisfies properties is the only one
+        }
+    }
+
+    assert(false);//failed to find heap
+    return -1;
 }
 
 void CreateBuffer(
@@ -357,6 +379,7 @@ void CreateBuffer(
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
     allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties, physicalDevice);
+    allocInfo.pNext = nullptr;
 
     ///@todo: don't use vkAllocateMemory for individual buffers; instead use a custom allocator that splits up a single allocation among many different objects by using offset parameters (VulkanMemoryAllocator is an open source example).   We could also store multiple buffers, like the vertex and index buffer, into a single VkBuffer for cache.  It is even possible to reuse the same chunk of memory for multiple resources if they are not used during the same render operations, provided that their data is refreshed, of course. This is known as aliasing and some Vulkan functions have explicit flags to specify that you want to do this
     const VkResult allocateMemoryResult = vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory);
@@ -1195,7 +1218,7 @@ VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferElement
     VkDeviceSize uniformBufferAlignment = bufferElementSize;
     if (minUniformBufferOffsetAlignment > 0)
     {
-        uniformBufferAlignment = (uniformBufferAlignment + minUniformBufferOffsetAlignment - 1) & ~(minUniformBufferOffsetAlignment - 1);
+        uniformBufferAlignment = RoundToNearest(uniformBufferAlignment, minUniformBufferOffsetAlignment);
     }
     return uniformBufferAlignment;
 }
@@ -1533,6 +1556,7 @@ void CreateDepthResources(
     VkImage*const depthImagePtr,
     VkDeviceMemory*const depthImageMemoryPtr,
     VkImageView*const depthImageViewPtr,
+    VulkanStackAllocator*const allocatorPtr,
     const VkExtent2D& swapChainExtent,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
@@ -1548,11 +1572,15 @@ void CreateDepthResources(
     assert(depthImageViewPtr);
     auto& depthImageView = *depthImageViewPtr;
 
+    assert(allocatorPtr);
+    auto& allocator = *allocatorPtr;
+
     VkFormat depthFormat = FindDepthFormat(physicalDevice);
 
     CreateImage(
         &depthImage,
         &depthImageMemory,
+        &allocator,
         swapChainExtent.width,
         swapChainExtent.height,
         depthFormat,
@@ -1613,6 +1641,7 @@ bool HasStencilComponent(VkFormat format)
 void CreateTextureImage(
     VkImage*const textureImagePtr,
     VkDeviceMemory*const textureImageMemoryPtr,
+    VulkanStackAllocator*const allocatorPtr,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
     const VkDevice& device,
@@ -1623,6 +1652,9 @@ void CreateTextureImage(
 
     assert(textureImageMemoryPtr);
     auto& textureImageMemory = *textureImageMemoryPtr;
+
+    assert(allocatorPtr);
+    auto& allocator = *allocatorPtr;
 
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load(sk_texturePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -1651,6 +1683,7 @@ void CreateTextureImage(
     CreateImage(
         &textureImage,
         &textureImageMemory,
+        &allocator,
         texWidth,
         texHeight,
         VK_FORMAT_R8G8B8A8_UNORM,
@@ -2259,7 +2292,6 @@ void CleanupSwapChain(
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
-    const VkDeviceMemory& depthImageMemory,
     ConstVectorSafeRef<VkFramebuffer> swapChainFramebuffers,
     const VkCommandPool& commandPoolPrimary,
     ConstVectorSafeRef<ArraySafe<VkCommandPool, 2>> commandPoolsSecondary,///<@todo NTF: refactor out magic number 2 (meant to be NTF_OBJECTS_NUM) and either support VectorSafeRef<ArraySafeRef<T>> or repeatedly call FreeCommandBuffers on each VectorSafe outside of this function
@@ -2272,10 +2304,9 @@ void CleanupSwapChain(
     assert(commandBuffersPrimary.size() == swapChainFramebuffers.size());
     assert(swapChainFramebuffers.size() == swapChainImageViews.size());
     assert(commandBuffersSecondary.size() > 0);
-
+    
     vkDestroyImageView(device, depthImageView, nullptr);
     vkDestroyImage(device, depthImage, nullptr);
-    vkFreeMemory(device, depthImageMemory, nullptr);
 
     for (const VkFramebuffer vkFramebuffer : swapChainFramebuffers)
     {

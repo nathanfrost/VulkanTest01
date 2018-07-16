@@ -331,6 +331,7 @@
     <ClCompile Include="ntf_vulkan.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="ntf_compileTimeDefines.h" />
     <ClInclude Include="ntf_vulkan.h" />
     <ClInclude Include="ntf_vulkan_utility.h" />
     <ClInclude Include="stdArrayUtility.h" />

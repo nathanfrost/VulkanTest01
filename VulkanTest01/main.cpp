@@ -26,6 +26,7 @@ public:
         scanf("%i", &i);
     }
 
+    ///@todo: unit test
     void recreateSwapChain()
     {
         vkDeviceWaitIdle(m_device);
@@ -36,7 +37,6 @@ public:
             m_device,
             m_depthImageView,
             m_depthImage,
-            m_depthImageMemory,
             m_swapChainFramebuffers,
             m_commandPoolPrimary,
             m_commandPoolsSecondary,
@@ -45,6 +45,9 @@ public:
             m_renderPass,
             m_swapChainImageViews,
             m_swapChain);
+
+        m_deviceLocalMemory.Destroy(m_device);
+        m_deviceLocalMemory.Initialize(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_device, m_physicalDevice);
 
         CreateSwapChain(
             m_window, 
@@ -63,6 +66,7 @@ public:
             &m_depthImage,
             &m_depthImageMemory,
             &m_depthImageView,
+            &m_deviceLocalMemory,
             m_swapChainExtent,
             m_commandPoolPrimary,
             m_graphicsQueue,
@@ -100,7 +104,7 @@ public:
     }
 
 private:
-    VkDeviceSize UniformBufferSizeCalculate()
+    VkDeviceSize UniformBufferSizeCalculate() const
     {
         return NTF_OBJECTS_NUM*m_uniformBufferCpuAlignment;
     }
@@ -145,7 +149,6 @@ private:
             m_device,
             m_depthImageView,
             m_depthImage,
-            m_depthImageMemory,
             m_swapChainFramebuffers,
             m_commandPoolPrimary,
             m_commandPoolsSecondary,
@@ -159,7 +162,6 @@ private:
         vkDestroyImageView(m_device, m_textureImageView, nullptr);
 
         vkDestroyImage(m_device, m_textureImage, nullptr);
-        vkFreeMemory(m_device, m_textureImageMemory, nullptr);
 
         vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
         vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
@@ -171,7 +173,6 @@ private:
 
         vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
         vkFreeMemory(m_device, m_vertexBufferMemory, nullptr);
-
 
         for (size_t frameIndex = 0; frameIndex < NTF_FRAMES_IN_FLIGHT_NUM; ++frameIndex)
         {
@@ -189,6 +190,7 @@ private:
             }
         }
 
+        m_deviceLocalMemory.Destroy(m_device);
         vkDestroyDevice(m_device, nullptr);
         DestroyDebugReportCallbackEXT(m_instance, m_callback, nullptr);
         vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
@@ -231,10 +233,14 @@ private:
         CreateDescriptorSetLayout(&m_descriptorSetLayout, descriptorType, m_device);
         CreateGraphicsPipeline(&m_pipelineLayout, &m_graphicsPipeline, m_renderPass, m_descriptorSetLayout, m_swapChainExtent, m_device);
         CreateCommandPool(&m_commandPoolPrimary, m_surface, m_device, m_physicalDevice);
+
+        m_deviceLocalMemory.Initialize(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_device, m_physicalDevice);
+
         CreateDepthResources(
             &m_depthImage, 
             &m_depthImageMemory, 
             &m_depthImageView, 
+            &m_deviceLocalMemory,
             m_swapChainExtent, 
             m_commandPoolPrimary, 
             m_graphicsQueue, 
@@ -252,7 +258,14 @@ private:
             }
         }
 
-        CreateTextureImage(&m_textureImage, &m_textureImageMemory, m_commandPoolPrimary, m_graphicsQueue, m_device, m_physicalDevice);
+        CreateTextureImage(
+            &m_textureImage, 
+            &m_textureImageMemory, 
+            &m_deviceLocalMemory, 
+            m_commandPoolPrimary, 
+            m_graphicsQueue, 
+            m_device, 
+            m_physicalDevice);
         CreateTextureImageView(&m_textureImageView, m_textureImage, m_device);
         CreateTextureSampler(&m_textureSampler, m_device);
         LoadModel(&m_vertices, &m_indices);
@@ -432,6 +445,8 @@ private:
     VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_imageAvailableSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
     VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_renderFinishedSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
     VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_fence = VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a true ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
+
+    VulkanStackAllocator m_deviceLocalMemory = VulkanStackAllocator(1024*1024*128);
 };
 
 int main() 

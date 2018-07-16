@@ -2,14 +2,20 @@
 
 #include<algorithm>
 #include<assert.h>
+#include"ntf_compileTimeDefines.h"
 #include<initializer_list>
 #include<string.h>
 #include<windows.h>//for DWORD
 
-
-#if !NDEBUG
-#define NTF_ARRAY_SAFE_DEBUG 1 ///@todo: rename NTF_ARRAY_SAFE_DEBUG
+#if NTF_DEBUG
+#define NTF_ARRAY_SAFE_DEBUG 1
 #endif//#if _DEBUG
+
+template<class T>
+inline T RoundToNearest(const T i, const T alignment)
+{
+    return (i + alignment - 1) & ~(alignment - 1);
+}
 
 inline void* AlignedMalloc(size_t size, size_t alignment)
 {
