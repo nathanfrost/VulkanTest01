@@ -242,7 +242,7 @@ void TransitionImageLayout(
 void CreateImage(
     VkImage*const imagePtr,
     VkDeviceMemory*const imageMemoryPtr,
-    VulkanStackAllocator*const allocatorPtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
     const uint32_t width,
     const uint32_t height,
     const VkFormat& format,
@@ -1556,7 +1556,7 @@ void CreateDepthResources(
     VkImage*const depthImagePtr,
     VkDeviceMemory*const depthImageMemoryPtr,
     VkImageView*const depthImageViewPtr,
-    VulkanStackAllocator*const allocatorPtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
     const VkExtent2D& swapChainExtent,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
@@ -1641,7 +1641,7 @@ bool HasStencilComponent(VkFormat format)
 void CreateTextureImage(
     VkImage*const textureImagePtr,
     VkDeviceMemory*const textureImageMemoryPtr,
-    VulkanStackAllocator*const allocatorPtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
     const VkDevice& device,
@@ -2362,7 +2362,7 @@ void CreateImageViews(
 }
 
 
-bool VulkanStackAllocator::Initialize(
+bool VulkanPagedStackAllocator::Initialize(
     const VkMemoryPropertyFlags properties,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
@@ -2389,7 +2389,7 @@ bool VulkanStackAllocator::Initialize(
     return NTF_VK_SUCCESS(allocateMemoryResult);
 }
 
-void VulkanStackAllocator::Destroy(const VkDevice& device)
+void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
 {
 #if NTF_DEBUG
     assert(m_initialized);
@@ -2400,7 +2400,7 @@ void VulkanStackAllocator::Destroy(const VkDevice& device)
 }
 
 ///@todo: unit test
-bool VulkanStackAllocator::PushAlloc(
+bool VulkanPagedStackAllocator::PushAlloc(
     VkDeviceSize* memoryOffsetPtr,
     const VkMemoryRequirements& memRequirements,
     const VkMemoryPropertyFlags& properties,

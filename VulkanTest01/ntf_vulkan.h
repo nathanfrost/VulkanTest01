@@ -55,7 +55,7 @@ const bool s_enableValidationLayers = false;
 
 #define NTF_DEVICE_EXTENSIONS_NUM 1
 
-class VulkanStackAllocator;
+class VulkanPagedStackAllocator;
 
 static const uint32_t s_kWidth = 800;
 static const uint32_t s_kHeight = 600;
@@ -86,7 +86,7 @@ void TransitionImageLayout(
 void CreateImage(
     VkImage*const imagePtr,
     VkDeviceMemory*const imageMemoryPtr,
-    VulkanStackAllocator*const allocatorPtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
     const uint32_t width,
     const uint32_t height,
     const VkFormat& format,
@@ -379,7 +379,7 @@ void CreateDepthResources(
     VkImage*const depthImagePtr,
     VkDeviceMemory*const depthImageMemoryPtr,
     VkImageView*const depthImageViewPtr,
-    VulkanStackAllocator*const allocatorPtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
     const VkExtent2D& swapChainExtent,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
@@ -402,7 +402,7 @@ bool HasStencilComponent(VkFormat format);
 void CreateTextureImage(
     VkImage*const textureImagePtr,
     VkDeviceMemory*const textureImageMemoryPtr,
-    VulkanStackAllocator*const allocatorPtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
     const VkDevice& device,
@@ -450,10 +450,10 @@ void CommandBufferSecondaryThreadsCreate(
     ArraySafeRef<CommandBufferThreadArguments> threadArguments,
     const size_t threadsNum);
 
-class VulkanStackAllocator
+class VulkanPagedStackAllocator
 {
 public:
-    VulkanStackAllocator(const VkDeviceSize memoryMax) :
+    VulkanPagedStackAllocator(const VkDeviceSize memoryMax) :
         m_memoryMax(memoryMax)
     {
 #if NTF_DEBUG
