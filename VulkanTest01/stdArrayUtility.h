@@ -92,26 +92,12 @@ private:
     void SetSizeCurrent(const size_t sizeCurrent)
     {
         assert(m_sizeCurrent);
-        
         *m_sizeCurrent = sizeCurrent;
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(m_sizeCurrentSet);
-        *m_sizeCurrentSet = true;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
-    void SetSizeCurrentPtr(size_t* const sizeCurrentPtr
-#if NTF_ARRAY_SAFE_DEBUG
-        ,bool* sizeCurrentSetPtr
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-        )
+    void SetSizeCurrentPtr(size_t* const sizeCurrentPtr)
     {
         assert(sizeCurrentPtr);
         m_sizeCurrent = sizeCurrentPtr;
-
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(sizeCurrentSetPtr);
-        m_sizeCurrentSet = sizeCurrentSetPtr;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
     void SetSizeMax(const size_t sizeMax)
     {
@@ -125,7 +111,6 @@ private:
     T* m_array;
     size_t* m_sizeCurrent;
 #if NTF_ARRAY_SAFE_DEBUG
-    bool* m_sizeCurrentSet;
     size_t m_sizeMax;
     bool m_arraySet;
 #endif//#if NTF_ARRAY_SAFE_DEBUG
@@ -152,12 +137,7 @@ public:
     {
         assert(vectorSafe);
 
-        SetSizeCurrentPtr(
-            &vectorSafe->m_sizeCurrent
-#if NTF_ARRAY_SAFE_DEBUG
-            ,&vectorSafe->m_sizeCurrentSet
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-            );
+        SetSizeCurrentPtr(&vectorSafe->m_sizeCurrent);
         SetSizeMax(vectorSafe->SizeMax());
         SetArray(vectorSafe->begin());
     }
@@ -184,7 +164,6 @@ public:
         m_sizeCurrent = 0;
 
 #if NTF_ARRAY_SAFE_DEBUG
-        m_sizeCurrentSet = nullptr;
         m_arraySet = false;
         m_sizeMax = 0;
 #endif//#if NTF_ARRAY_SAFE_DEBUG
@@ -203,13 +182,8 @@ public:
     {
 #if NTF_ARRAY_SAFE_DEBUG
         assert(m_arraySet);
-        assert(m_sizeCurrentSet);
         assert(m_sizeCurrent);
-        if (*m_sizeCurrentSet)
-        {
-            assert(*m_sizeCurrent <= m_sizeMax);
-        }
-        
+        assert(*m_sizeCurrent <= m_sizeMax);       
         assert(m_sizeMax > 0);
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
@@ -438,7 +412,6 @@ public:
     //    ArraySafeRef()
     //    {
     //#if NTF_ARRAY_SAFE_DEBUG
-    //        m_arraySet = m_sizeCurrentSet = false;
     //        m_sizeMax = 0;
     //#endif//#if NTF_ARRAY_SAFE_DEBUG
     //    }
@@ -1014,10 +987,7 @@ public:
 
 private:
     T m_array[kSizeMax];
-    size_t m_sizeCurrent;///<must be manually managed with methods
-#if NTF_ARRAY_SAFE_DEBUG
-    bool m_sizeCurrentSet;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
+    size_t m_sizeCurrent;
 
     friend class VectorSafeRef<T>;
     friend class ConstVectorSafeRef<T>;
@@ -1025,7 +995,6 @@ private:
     void AssertValid() const
     {
 #if NTF_ARRAY_SAFE_DEBUG
-        assert(m_sizeCurrentSet);
         assert(m_sizeCurrent <= kSizeMax);
 
         static_assert(kSizeMax > 0, "VectorSafe<T>::kSizeMax must be greater than 0");
@@ -1035,9 +1004,7 @@ private:
 public:
     VectorSafe()
     {
-#if NTF_ARRAY_SAFE_DEBUG
-        m_sizeCurrentSet = false;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
+        size(0);
     }
     VectorSafe(const size_t sz)
     {
@@ -1082,11 +1049,7 @@ public:
     }
     void size(const size_t size)
     {
-#if NTF_ARRAY_SAFE_DEBUG
-        m_sizeCurrentSet = true;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
         m_sizeCurrent = size;
-
         AssertValid();
     }
     ///@todo: unit tests

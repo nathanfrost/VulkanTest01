@@ -283,10 +283,11 @@ void CreateImage(
     vkGetImageMemoryRequirements(device, image, &memRequirements);
 
     VkDeviceSize memoryOffset;
-    const bool allocateMemoryResult = allocator.PushAlloc(&memoryOffset,memRequirements,properties, physicalDevice);
+    VkDeviceMemory memoryHandle;
+    const bool allocateMemoryResult = allocator.PushAlloc(&memoryOffset,&memoryHandle,memRequirements,properties,device,physicalDevice);
     assert(allocateMemoryResult);
 
-    vkBindImageMemory(device, image, allocator.GetMemory(), memoryOffset);
+    vkBindImageMemory(device, image, memoryHandle, memoryOffset);
 }
 
 void CopyBuffer(
@@ -2362,31 +2363,23 @@ void CreateImageViews(
 }
 
 
-bool VulkanPagedStackAllocator::Initialize(
-    const VkMemoryPropertyFlags properties,
-    const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice)
+void VulkanPagedStackAllocator::Initialize(const VkDevice& device,const VkPhysicalDevice& physicalDevice)
 {
 #if NTF_DEBUG
     assert(!m_initialized);
     m_initialized = true;
 #endif//#if NTF_DEBUG
-    m_firstByteFree = 0;
 
-    VkMemoryAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = m_memoryMax;
-    allocInfo.memoryTypeIndex = /*BEG_HAC*/8/*END_HAC*/;//FindMemoryType(~0, properties, physicalDevice);//assume the first heap that fits the user's VkMemoryPropertyFlags is the only one
-    allocInfo.pNext = nullptr;
+    m_device = device; 
+    m_physicalDevice = physicalDevice;
 
-#if NTF_DEBUG
-    m_memoryTypeIndex = allocInfo.memoryTypeIndex;
-    m_heapIndex = FindMemoryHeapIndex(properties, physicalDevice);
-#endif//#if NTF_DEBUG
-
-    const VkResult allocateMemoryResult = vkAllocateMemory(device, &allocInfo, nullptr, &m_memory);
-    NTF_VK_ASSERT_SUCCESS(allocateMemoryResult);
-    return NTF_VK_SUCCESS(allocateMemoryResult);
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+    m_vulkanMemoryHeaps.size(memProperties.memoryTypeCount);
+    for (size_t memoryTypeIndex = 0; memoryTypeIndex < memProperties.memoryTypeCount; ++memoryTypeIndex)
+    {
+        m_vulkanMemoryHeaps[memoryTypeIndex].Initialize(Cast_size_t_uint32_t(memoryTypeIndex), 256 * 1024 * 1024);
+    }
 }
 
 void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
@@ -2396,44 +2389,191 @@ void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
     m_initialized = false;
 #endif//#if NTF_DEBUG
 
-    vkFreeMemory(device, m_memory, nullptr);
+    for (auto& heap : m_vulkanMemoryHeaps)
+    {
+        heap.Destroy(m_device);
+    }
 }
 
 ///@todo: unit test
 bool VulkanPagedStackAllocator::PushAlloc(
     VkDeviceSize* memoryOffsetPtr,
+    VkDeviceMemory* memoryHandlePtr,
     const VkMemoryRequirements& memRequirements,
     const VkMemoryPropertyFlags& properties,
+    const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
+    assert(m_initialized);
+
     assert(memoryOffsetPtr);
     auto& memoryOffset = *memoryOffsetPtr;
+
+    assert(memoryHandlePtr);
+    auto& memoryHandle = *memoryHandlePtr;
 
     assert(memRequirements.size > 0);
     assert(memRequirements.alignment > 0);
     assert(memRequirements.alignment % 2 == 0);
 
+    auto& heap = m_vulkanMemoryHeaps[FindMemoryType(memRequirements.memoryTypeBits, properties, physicalDevice)];
+    const bool allocResult = heap.PushAlloc(&memoryOffset, &memoryHandle, memRequirements, properties, device, physicalDevice);
+    assert(allocResult);
+    return allocResult;
+}
+
+void VulkanMemoryHeap::Initialize(const uint32_t memoryTypeIndex, const VkDeviceSize memoryHeapPageSizeBytes)
+{
 #if NTF_DEBUG
-    const uint32_t memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties, physicalDevice);
-    VkPhysicalDeviceMemoryProperties memProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-    assert(memoryTypeIndex == m_memoryTypeIndex);
-    assert(memProperties.memoryTypes[memoryTypeIndex].heapIndex == m_heapIndex);
+    assert(!m_initialized);
+    m_initialized = true;
 #endif//#if NTF_DEBUG
 
-    const VkDeviceSize firstByteReturnedProposed = RoundToNearest(m_firstByteFree, memRequirements.alignment);
-    if (firstByteReturnedProposed >= m_memoryMax)
+    m_memoryTypeIndex = memoryTypeIndex;
+    m_pageSizeBytes = memoryHeapPageSizeBytes;
+    m_pageAllocatedFirst = nullptr;
+
+    const size_t pagesNum = m_pagePool.size();
+    VulkanMemoryHeapPage* pageCurrent = m_pageFreeFirst = &m_pagePool[0];
+    for (size_t pageIndex = 1; pageIndex < pagesNum; ++pageIndex)
+    {
+        pageCurrent->m_next = &m_pagePool[pageIndex];
+        pageCurrent = pageCurrent->m_next;
+    }
+    pageCurrent->m_next = nullptr;
+}
+
+void VulkanMemoryHeap::Destroy(const VkDevice device)
+{
+#if NTF_DEBUG
+    assert(m_initialized);
+    m_initialized = false;
+#endif//#if NTF_DEBUG    
+
+    VulkanMemoryHeapPage* freePage = m_pageFreeFirst;
+    assert(freePage);
+    while (freePage->m_next != nullptr)
+    {
+        freePage = freePage->m_next;
+    }
+
+    VulkanMemoryHeapPage* allocatedPage = m_pageAllocatedFirst;
+    while (allocatedPage)
+    {
+        allocatedPage->Free(device);
+        freePage->m_next = allocatedPage;
+        freePage = allocatedPage;
+        allocatedPage = allocatedPage->m_next;
+    }
+    m_pageAllocatedFirst = nullptr;
+}
+
+bool VulkanMemoryHeap::PushAlloc(
+    VkDeviceSize* memoryOffsetPtr,
+    VkDeviceMemory* memoryHandlePtr,
+    const VkMemoryRequirements& memRequirements,
+    const VkMemoryPropertyFlags& properties,
+    const VkDevice& device,
+    const VkPhysicalDevice& physicalDevice)
+{
+    assert(m_initialized);
+
+    assert(memoryOffsetPtr);
+    auto& memoryOffset = *memoryOffsetPtr;
+
+    assert(memoryHandlePtr);
+    auto& memoryHandle = *memoryHandlePtr;
+
+    VulkanMemoryHeapPage* pageAllocatedCurrent = m_pageAllocatedFirst;
+    VulkanMemoryHeapPage* pageAllocatedPrevious = nullptr;
+    while (pageAllocatedCurrent)
+    {
+        if (pageAllocatedCurrent->SufficientMemory(memRequirements))
+        {
+            break;
+        }
+        else
+        {
+            pageAllocatedPrevious = pageAllocatedCurrent;
+            pageAllocatedCurrent = pageAllocatedCurrent->m_next;
+        }
+    }
+    if (!pageAllocatedCurrent)
+    {
+        VulkanMemoryHeapPage& pageNew = *m_pageFreeFirst;
+        m_pageFreeFirst = m_pageFreeFirst->m_next;
+
+        pageNew.Allocate(m_pageSizeBytes, m_memoryTypeIndex, device);
+        (pageAllocatedPrevious ? pageAllocatedPrevious->m_next : m_pageAllocatedFirst) = pageAllocatedCurrent = &pageNew;
+    }
+    assert(pageAllocatedCurrent);
+    assert(pageAllocatedCurrent->SufficientMemory(memRequirements));
+
+    memoryHandle = pageAllocatedCurrent->GetMemoryHandle();
+    const bool allocResult = pageAllocatedCurrent->PushAlloc(&memoryOffset, memRequirements);
+    assert(allocResult);
+    return allocResult;
+}
+
+bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMax, const uint32_t memoryTypeIndex, const VkDevice& device)
+{
+#if NTF_DEBUG
+    assert(memoryMax > 0);
+    assert(!m_allocated);
+    m_allocated = true;
+#endif//#if NTF_DEBUG
+
+    m_maxOffsetPlusOne = memoryMax;
+    m_firstByteFree = 0;
+    m_next = nullptr;
+
+    VkMemoryAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    allocInfo.allocationSize = memoryMax;
+    allocInfo.memoryTypeIndex = memoryTypeIndex;
+    allocInfo.pNext = nullptr;
+
+    const VkResult allocateMemoryResult = vkAllocateMemory(device, &allocInfo, nullptr, &m_memoryHandle);
+    NTF_VK_ASSERT_SUCCESS(allocateMemoryResult);
+    return NTF_VK_SUCCESS(allocateMemoryResult);
+}
+
+bool VulkanMemoryHeapPage::PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemoryRequirements& memRequirements)
+{
+    assert(m_allocated);
+
+    assert(memoryOffsetPtr);
+    auto& memoryOffset = *memoryOffsetPtr;
+
+    const bool allocateResult = PushAlloc(&m_firstByteFree, &memoryOffset, memRequirements);
+    assert(allocateResult);
+    return allocateResult;
+}
+
+bool VulkanMemoryHeapPage::PushAlloc(
+    VkDeviceSize*const firstByteFreePtr,
+    VkDeviceSize*const firstByteReturnedPtr,
+    const VkMemoryRequirements& memRequirements) const
+{
+    assert(m_allocated);
+
+    assert(firstByteFreePtr);
+    auto& firstByteFree = *firstByteFreePtr;
+
+    assert(firstByteReturnedPtr);
+    auto& firstByteReturned = *firstByteReturnedPtr;
+
+    firstByteReturned = RoundToNearest(m_firstByteFree, memRequirements.alignment);
+    if (firstByteReturned >= m_maxOffsetPlusOne)
     {
         return false;
     }
 
-    const VkDeviceSize firstByteFreeProposed = firstByteReturnedProposed + memRequirements.size;
-    if (firstByteFreeProposed >= m_memoryMax)
+    firstByteFree = firstByteReturned + memRequirements.size;
+    if (firstByteFree >= m_maxOffsetPlusOne)
     {
         return false;
     }
 
-    memoryOffset = firstByteReturnedProposed;
-    m_firstByteFree = firstByteFreeProposed;
     return true;
 }

@@ -47,7 +47,7 @@ public:
             m_swapChain);
 
         m_deviceLocalMemory.Destroy(m_device);
-        m_deviceLocalMemory.Initialize(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_device, m_physicalDevice);
+        m_deviceLocalMemory.Initialize(m_device, m_physicalDevice);
 
         CreateSwapChain(
             m_window, 
@@ -234,7 +234,7 @@ private:
         CreateGraphicsPipeline(&m_pipelineLayout, &m_graphicsPipeline, m_renderPass, m_descriptorSetLayout, m_swapChainExtent, m_device);
         CreateCommandPool(&m_commandPoolPrimary, m_surface, m_device, m_physicalDevice);
 
-        m_deviceLocalMemory.Initialize(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_device, m_physicalDevice);
+        m_deviceLocalMemory.Initialize(m_device, m_physicalDevice);
 
         CreateDepthResources(
             &m_depthImage, 
@@ -446,12 +446,12 @@ private:
     VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_renderFinishedSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
     VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_fence = VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a true ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
 
-    VulkanPagedStackAllocator m_deviceLocalMemory = VulkanPagedStackAllocator(1024*1024*128);
+    VulkanPagedStackAllocator m_deviceLocalMemory;
 };
 
 int main() 
 {
-    VulkanRendererNTF app;
+    static VulkanRendererNTF app;
     app.run();
     return EXIT_SUCCESS;
 }

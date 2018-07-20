@@ -450,43 +450,121 @@ void CommandBufferSecondaryThreadsCreate(
     ArraySafeRef<CommandBufferThreadArguments> threadArguments,
     const size_t threadsNum);
 
+
+class VulkanMemoryHeapPage
+{
+public:
+    VulkanMemoryHeapPage()
+    {
+#if NTF_DEBUG
+        m_allocated = false;
+#endif//#if NTF_DEBUG
+    }
+    ///@todo: all explicit default C++ functions except default constructor
+
+    bool Allocate(const VkDeviceSize memoryMax, const uint32_t memoryTypeIndex, const VkDevice& device);
+    inline void Free(const VkDevice& device)
+    {
+#if NTF_DEBUG
+        assert(m_allocated);
+        m_allocated = false;
+#endif//#if NTF_DEBUG
+        vkFreeMemory(device, m_memoryHandle, nullptr);
+    }
+
+    inline bool SufficientMemory(const VkMemoryRequirements& memRequirements) const
+    {
+        assert(m_allocated);
+        VkDeviceSize dummy0, dummy1;
+        return PushAlloc(&dummy0, &dummy1, memRequirements);
+    }
+    bool PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemoryRequirements& memRequirements);
+    inline VkDeviceMemory GetMemoryHandle() const { assert(m_allocated); return m_memoryHandle; }
+
+    VulkanMemoryHeapPage* m_next;
+private:
+    VkDeviceMemory m_memoryHandle;  ///<to its Vulkan allocation
+    VkDeviceSize m_maxOffsetPlusOne;///<page's first invalid memory address within its allocation
+    VkDeviceSize m_firstByteFree;
+
+#if NTF_DEBUG
+    bool m_allocated;
+#endif//#if NTF_DEBUG
+
+
+    bool PushAlloc(
+        VkDeviceSize*const firstByteFreePtr,
+        VkDeviceSize*const firstByteReturnedPtr,
+        const VkMemoryRequirements& memRequirements) const;
+};
+
+///@todo: unit test
+class VulkanMemoryHeap
+{
+public:
+    VulkanMemoryHeap() 
+    {
+#if NTF_DEBUG
+        m_initialized = false;
+#endif//#if NTF_DEBUG
+    };
+    void Initialize(const uint32_t memoryTypeIndex, const VkDeviceSize memoryHeapPageSizeBytes);
+    ///@todo: all explicit default C++ functions
+
+    void Destroy(const VkDevice device);
+
+    bool PushAlloc(
+        VkDeviceSize* memoryOffsetPtr,
+        VkDeviceMemory* memoryHandlePtr,
+        const VkMemoryRequirements& memRequirements,
+        const VkMemoryPropertyFlags& properties,
+        const VkDevice& device,
+        const VkPhysicalDevice& physicalDevice);
+
+    inline uint32_t GetMemoryTypeIndex() const { return m_memoryTypeIndex; }
+
+private:
+#if NTF_DEBUG
+    bool m_initialized;
+#endif//#if NTF_DEBUG
+    uint32_t m_memoryTypeIndex;
+    VkDeviceSize m_pageSizeBytes;
+    VulkanMemoryHeapPage* m_pageFreeFirst;
+    VulkanMemoryHeapPage* m_pageAllocatedFirst;
+    ArraySafe<VulkanMemoryHeapPage, 32> m_pagePool;
+};
+
+///@todo: unit test
 class VulkanPagedStackAllocator
 {
 public:
-    VulkanPagedStackAllocator(const VkDeviceSize memoryMax) :
-        m_memoryMax(memoryMax)
+    VulkanPagedStackAllocator()
     {
 #if NTF_DEBUG
         m_initialized = false;
 #endif//#if NTF_DEBUG
     }
-    ///@todo: default constructors
+    ///@todo: all explicit default C++ functions
 
-    bool Initialize(
-        const VkMemoryPropertyFlags properties,
-        const VkDevice& device,
-        const VkPhysicalDevice& physicalDevice);
-
+    void Initialize(const VkDevice& device, const VkPhysicalDevice& physicalDevice);
     void Destroy(const VkDevice& device);
 
     bool PushAlloc(
         VkDeviceSize* memoryOffsetPtr,
+        VkDeviceMemory* memoryHandlePtr,
         const VkMemoryRequirements& memRequirements,
         const VkMemoryPropertyFlags& properties,
+        const VkDevice& device,
         const VkPhysicalDevice& physicalDevice);
 
-    inline VkDeviceMemory GetMemory() const
-    {
-        return m_memory;
-    }
+    ///@todo: memreport function
 
 private:
-    const VkDeviceSize m_memoryMax;
-    VkDeviceMemory m_memory;
-    VkDeviceSize m_firstByteFree;
 #if NTF_DEBUG
-    uint32_t m_memoryTypeIndex;
-    uint32_t m_heapIndex;
     bool m_initialized;
 #endif//NTF_DEBUG
+    VectorSafe<VulkanMemoryHeap, 32> m_vulkanMemoryHeaps;
+    VkDevice m_device;
+    VkPhysicalDevice m_physicalDevice;
 };
+
