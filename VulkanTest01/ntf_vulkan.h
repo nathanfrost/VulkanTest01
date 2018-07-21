@@ -93,6 +93,7 @@ void CreateImage(
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
+    const bool residentForever,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 void CopyBuffer(
@@ -502,7 +503,8 @@ private:
 class VulkanMemoryHeap
 {
 public:
-    VulkanMemoryHeap() 
+    VulkanMemoryHeap():
+    m_pageResidentForeverAllocated(false)
     {
 #if NTF_DEBUG
         m_initialized = false;
@@ -518,6 +520,7 @@ public:
         VkDeviceMemory* memoryHandlePtr,
         const VkMemoryRequirements& memRequirements,
         const VkMemoryPropertyFlags& properties,
+        const bool residentForever,
         const VkDevice& device,
         const VkPhysicalDevice& physicalDevice);
 
@@ -529,9 +532,13 @@ private:
 #endif//#if NTF_DEBUG
     uint32_t m_memoryTypeIndex;
     VkDeviceSize m_pageSizeBytes;
+    
     VulkanMemoryHeapPage* m_pageFreeFirst;
     VulkanMemoryHeapPage* m_pageAllocatedFirst;
     ArraySafe<VulkanMemoryHeapPage, 32> m_pagePool;
+
+    VulkanMemoryHeapPage m_pageResidentForever;
+    bool m_pageResidentForeverAllocated;
 };
 
 ///@todo: unit test
@@ -554,6 +561,7 @@ public:
         VkDeviceMemory* memoryHandlePtr,
         const VkMemoryRequirements& memRequirements,
         const VkMemoryPropertyFlags& properties,
+        const bool residentForever,
         const VkDevice& device,
         const VkPhysicalDevice& physicalDevice);
 
