@@ -356,24 +356,17 @@ void CreateDescriptorSet(
 
 void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*const indicesPtr);
 
-void CreateVertexBuffer(
-    VkBuffer*const vertexBufferPtr,
-    VkDeviceMemory*const vertexBufferMemoryPtr,
-    const std::vector<Vertex>& vertices,
+void CreateAndCopyToGpuBuffer(
+    VkBuffer*const gpuBufferPtr,
+    VkDeviceMemory*const gpuBufferMemoryPtr,
+    const void*const cpuBuffer,
+    const VkDeviceSize bufferSize,
+    const VkMemoryPropertyFlags &flags,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
     const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice
-    );
-void CreateIndexBuffer(
-    VkBuffer*const indexBufferPtr,
-    VkDeviceMemory*const indexBufferMemoryPtr,
-    const std::vector<uint32_t>& indices,
-    const VkCommandPool& commandPool,
-    const VkQueue& graphicsQueue,
-    const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice
-    );
+    const VkPhysicalDevice& physicalDevice);
+
 void EndSingleTimeCommands(const VkCommandBuffer& commandBuffer, const VkCommandPool commandPool, const VkQueue& graphicsQueue, const VkDevice& device);
 void CreateCommandPool(VkCommandPool*const commandPoolPtr, const VkSurfaceKHR& surface, const VkDevice& device, const VkPhysicalDevice& physicalDevice);
 void CreateDepthResources(

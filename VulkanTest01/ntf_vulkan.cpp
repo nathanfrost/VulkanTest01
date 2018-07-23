@@ -1427,74 +1427,25 @@ void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*cons
     }
 }
 
-///@todo: refactor with CreateIndexBuffer()
-void CreateVertexBuffer(
-    VkBuffer*const vertexBufferPtr,
-    VkDeviceMemory*const vertexBufferMemoryPtr,
-    const std::vector<Vertex>& vertices,
+void CreateAndCopyToGpuBuffer(
+    VkBuffer*const gpuBufferPtr,
+    VkDeviceMemory*const gpuBufferMemoryPtr,
+    const void*const cpuBuffer,
+    const VkDeviceSize bufferSize,
+    const VkMemoryPropertyFlags &flags,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
     const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice
-    )
+    const VkPhysicalDevice& physicalDevice)
 {
-    assert(vertexBufferPtr);
-    auto& vertexBuffer = *vertexBufferPtr;
+    assert(gpuBufferPtr);
+    auto& gpuBuffer = *gpuBufferPtr;
 
-    assert(vertexBufferMemoryPtr);
-    auto& vertexBufferMemory = *vertexBufferMemoryPtr;
+    assert(gpuBufferMemoryPtr);
+    auto& gpuBufferMemory = *gpuBufferMemoryPtr;
 
-    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    CreateBuffer(&stagingBuffer,
-        &stagingBufferMemory,
-        bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT/*writable from the CPU*/ | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,/*memory will have i/o coherency. If not set, application may need to use vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges to flush/invalidate host cache*/
-        device,
-        physicalDevice
-        );
-
-    void* data;
-    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices.data(), (size_t)bufferSize);
-    vkUnmapMemory(device, stagingBufferMemory);
-
-    CreateBuffer(&vertexBuffer,
-        &vertexBufferMemory,
-        bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//most optimal graphics memory
-        device,
-        physicalDevice
-        );
-
-    CopyBuffer(stagingBuffer, vertexBuffer, bufferSize, commandPool, graphicsQueue, device);
-
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-    vkFreeMemory(device, stagingBufferMemory, nullptr);
-}
-
-///@todo: refactor with CreateVertexBuffer()
-void CreateIndexBuffer(
-    VkBuffer*const indexBufferPtr,
-    VkDeviceMemory*const indexBufferMemoryPtr,
-    const std::vector<uint32_t>& indices,
-    const VkCommandPool& commandPool,
-    const VkQueue& graphicsQueue,
-    const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice
-    )
-{
-    assert(indexBufferPtr);
-    auto& indexBuffer = *indexBufferPtr;
-
-    assert(indexBufferMemoryPtr);
-    auto& indexBufferMemory = *indexBufferMemoryPtr;
-
-    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+    assert(cpuBuffer);
+    assert(bufferSize > 0);
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
@@ -1503,27 +1454,25 @@ void CreateIndexBuffer(
         &stagingBufferMemory,
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT/*writable from the CPU*/ | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,/*memory will have i/o coherency. If not set, application may need to use vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges to flush/invalidate host cache*/
         device,
-        physicalDevice
-        );
+        physicalDevice);
 
     void* data;
     vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, indices.data(), (size_t)bufferSize);
+    memcpy(data, cpuBuffer, static_cast<size_t>(bufferSize));
     vkUnmapMemory(device, stagingBufferMemory);
 
     CreateBuffer(
-        &indexBuffer,
-        &indexBufferMemory,
+        &gpuBuffer,
+        &gpuBufferMemory,
         bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | flags,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//most optimal graphics memory
         device,
-        physicalDevice
-        );
+        physicalDevice);
 
-    CopyBuffer(stagingBuffer, indexBuffer, bufferSize, commandPool, graphicsQueue, device);
+    CopyBuffer(stagingBuffer, gpuBuffer, bufferSize, commandPool, graphicsQueue, device);
 
     vkDestroyBuffer(device, stagingBuffer, nullptr);
     vkFreeMemory(device, stagingBufferMemory, nullptr);
