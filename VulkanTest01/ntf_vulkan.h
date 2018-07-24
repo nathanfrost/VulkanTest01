@@ -108,12 +108,13 @@ uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPh
 void CreateBuffer(
     VkBuffer*const bufferPtr,
     VkDeviceMemory*const bufferMemoryPtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
+    VkDeviceSize*const offsetToAllocatedBlockPtr,
     const VkDeviceSize& size,
     const VkBufferUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
     const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice
-    );
+    const VkPhysicalDevice& physicalDevice);
 VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice);
 void CreateShaderModule(VkShaderModule*const shaderModulePtr, const std::vector<char>& code, const VkDevice& device);
 bool CheckValidationLayerSupport(ConstVectorSafeRef<const char*> validationLayers);
@@ -333,7 +334,10 @@ void CreateUniformBuffer(
     ArraySafeRef<uint8_t>*const uniformBufferCpuMemoryPtr,
     VkDeviceMemory*const uniformBufferGpuMemoryPtr,
     VkBuffer*const uniformBufferPtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
+    VkDeviceSize*const offsetToGpuMemoryPtr,
     const VkDeviceSize bufferSize,
+    const bool residentForever,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 void DestroyUniformBuffer(
@@ -357,11 +361,13 @@ void CreateDescriptorSet(
 void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*const indicesPtr);
 
 void CreateAndCopyToGpuBuffer(
+    VulkanPagedStackAllocator*const allocatorPtr,
     VkBuffer*const gpuBufferPtr,
     VkDeviceMemory*const gpuBufferMemoryPtr,
     const void*const cpuBuffer,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags &flags,
+    const bool residentForever,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
     const VkDevice& device,
@@ -397,6 +403,7 @@ void CreateTextureImage(
     VkImage*const textureImagePtr,
     VkDeviceMemory*const textureImageMemoryPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
+    const bool residentForever,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
     const VkDevice& device,
@@ -420,10 +427,11 @@ void CreateFrameSyncPrimitives(
 
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
-    const VkDeviceMemory& uniformBufferGpuMemory, 
+    const VkDeviceMemory& uniformBufferGpuMemory,
+    const VkDeviceSize& offsetToGpuMemory,
     const size_t objectsNum,
     const VkDeviceSize uniformBufferSize,
-    const VkExtent2D& swapChainExtent, 
+    const VkExtent2D& swapChainExtent,
     const VkDevice& device);
 
 void DrawFrame(

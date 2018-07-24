@@ -167,12 +167,8 @@ private:
         vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
         
         DestroyUniformBuffer(m_uniformBufferCpuMemory, m_uniformBufferGpuMemory, m_uniformBuffer, m_device);
-
         vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
-        vkFreeMemory(m_device, m_indexBufferMemory, nullptr);
-
         vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
-        vkFreeMemory(m_device, m_vertexBufferMemory, nullptr);
 
         for (size_t frameIndex = 0; frameIndex < NTF_FRAMES_IN_FLIGHT_NUM; ++frameIndex)
         {
@@ -262,6 +258,7 @@ private:
             &m_textureImage, 
             &m_textureImageMemory, 
             &m_deviceLocalMemory, 
+            false,
             m_commandPoolPrimary, 
             m_graphicsQueue, 
             m_device, 
@@ -271,21 +268,25 @@ private:
         LoadModel(&m_vertices, &m_indices);
         m_indicesSize = Cast_size_t_uint32_t(m_indices.size());//store since we need secondary buffers to point to this
         CreateAndCopyToGpuBuffer(
+            &m_deviceLocalMemory,
             &m_vertexBuffer,
             &m_vertexBufferMemory,
             m_vertices.data(),
             sizeof(m_vertices[0]) * m_vertices.size(),
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
+            false,
             m_commandPoolPrimary,
             m_graphicsQueue,
             m_device,
             m_physicalDevice);
         CreateAndCopyToGpuBuffer(
+            &m_deviceLocalMemory,
             &m_indexBuffer,
             &m_indexBufferMemory,
             m_indices.data(),
             sizeof(m_indices[0]) * m_indices.size(),
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            false,
             m_commandPoolPrimary,
             m_graphicsQueue,
             m_device,
@@ -296,7 +297,10 @@ private:
             &m_uniformBufferCpuMemory,
             &m_uniformBufferGpuMemory,
             &m_uniformBuffer, 
+            &m_deviceLocalMemory,
+            &m_uniformBufferOffsetToGpuMemory,
             UniformBufferSizeCalculate(),
+            false,
             m_device, 
             m_physicalDevice);
 
@@ -352,6 +356,7 @@ private:
             UpdateUniformBuffer(
                 m_uniformBufferCpuMemory, 
                 m_uniformBufferGpuMemory, 
+                m_uniformBufferOffsetToGpuMemory,
                 NTF_OBJECTS_NUM,
                 UniformBufferSizeCalculate(), 
                 m_swapChainExtent, 
@@ -444,6 +449,7 @@ private:
     VkDeviceMemory m_indexBufferMemory;
     VkBuffer m_uniformBuffer;
     VkDeviceMemory m_uniformBufferGpuMemory;
+    VkDeviceSize m_uniformBufferOffsetToGpuMemory;
     ArraySafeRef<uint8_t> m_uniformBufferCpuMemory;
     VkDeviceSize m_uniformBufferCpuAlignment;
     VkDescriptorPool m_descriptorPool;

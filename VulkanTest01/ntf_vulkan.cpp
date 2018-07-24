@@ -359,18 +359,26 @@ uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPh
 void CreateBuffer(
     VkBuffer*const bufferPtr,
     VkDeviceMemory*const bufferMemoryPtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
+    VkDeviceSize*const offsetToAllocatedBlockPtr,
     const VkDeviceSize& size,
     const VkBufferUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
+    const bool residentForever,
     const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice
-    )
+    const VkPhysicalDevice& physicalDevice)
 {
     assert(bufferPtr);
     VkBuffer& buffer = *bufferPtr;
 
     assert(bufferMemoryPtr);
     auto& bufferMemory = *bufferMemoryPtr;
+
+    assert(allocatorPtr);
+    auto& allocator = *allocatorPtr;
+
+    assert(offsetToAllocatedBlockPtr);
+    auto& offsetToAllocatedBlock = *offsetToAllocatedBlockPtr;
 
     VkBufferCreateInfo bufferInfo = {};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -384,17 +392,17 @@ void CreateBuffer(
     VkMemoryRequirements memRequirements;
     vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
 
-    VkMemoryAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, properties, physicalDevice);
-    allocInfo.pNext = nullptr;
+    const bool allocateMemoryResult = allocator.PushAlloc(
+        &offsetToAllocatedBlock,
+        &bufferMemory,
+        memRequirements,
+        properties,
+        residentForever,
+        device,
+        physicalDevice);
+    assert(allocateMemoryResult);
 
-    ///@todo: don't use vkAllocateMemory for individual buffers; instead use a custom allocator that splits up a single allocation among many different objects by using offset parameters (VulkanMemoryAllocator is an open source example).   We could also store multiple buffers, like the vertex and index buffer, into a single VkBuffer for cache.  It is even possible to reuse the same chunk of memory for multiple resources if they are not used during the same render operations, provided that their data is refreshed, of course. This is known as aliasing and some Vulkan functions have explicit flags to specify that you want to do this
-    const VkResult allocateMemoryResult = vkAllocateMemory(device, &allocInfo, nullptr, &bufferMemory);
-    NTF_VK_ASSERT_SUCCESS(allocateMemoryResult);
-
-    vkBindBufferMemory(device, buffer, bufferMemory, 0);
+    vkBindBufferMemory(device, buffer, bufferMemory, offsetToAllocatedBlock);
 }
 
 VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice)
@@ -1236,7 +1244,10 @@ void CreateUniformBuffer(
     ArraySafeRef<uint8_t>*const uniformBufferCpuMemoryPtr,
     VkDeviceMemory*const uniformBufferGpuMemoryPtr,
     VkBuffer*const uniformBufferPtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
+    VkDeviceSize*const offsetToGpuMemoryPtr,
     const VkDeviceSize bufferSize,
+    const bool residentForever,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -1249,19 +1260,28 @@ void CreateUniformBuffer(
     assert(uniformBufferCpuMemoryPtr);
     auto& uniformBufferCpuMemory = *uniformBufferCpuMemoryPtr;
 
+    assert(allocatorPtr);
+    auto& allocator = *allocatorPtr;
+
+    assert(offsetToGpuMemoryPtr);
+    auto& offsetToGpuMemory = *offsetToGpuMemoryPtr;
+
     assert(bufferSize > 0);
 
     CreateBuffer(
         &uniformBuffer,
         &uniformBufferGpuMemory,
+        &allocator,
+        &offsetToGpuMemory,
         bufferSize,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+        residentForever,
         device,
         physicalDevice);
 
     void* uniformBufferCpuMemoryCPtr;
-    vkMapMemory(device, uniformBufferGpuMemory, 0, bufferSize, 0, &uniformBufferCpuMemoryCPtr);
+    vkMapMemory(device, uniformBufferGpuMemory, offsetToGpuMemory, bufferSize, 0, &uniformBufferCpuMemoryCPtr);
     uniformBufferCpuMemory.SetArray(reinterpret_cast<uint8_t*>(uniformBufferCpuMemoryCPtr), Cast_VkDeviceSize_size_t(bufferSize));
 }
 
@@ -1274,7 +1294,6 @@ void DestroyUniformBuffer(
     vkUnmapMemory(device, uniformBufferGpuMemory);
     uniformBufferCpuMemory.Reset();
     vkDestroyBuffer(device, uniformBuffer, nullptr);
-    vkFreeMemory(device, uniformBufferGpuMemory, nullptr);
 }
 
 void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDescriptorType descriptorType, const VkDevice& device)
@@ -1428,16 +1447,21 @@ void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*cons
 }
 
 void CreateAndCopyToGpuBuffer(
+    VulkanPagedStackAllocator*const allocatorPtr,
     VkBuffer*const gpuBufferPtr,
     VkDeviceMemory*const gpuBufferMemoryPtr,
     const void*const cpuBuffer,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags &flags,
+    const bool residentForever,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
+    assert(allocatorPtr);
+    auto& allocator = *allocatorPtr;
+
     assert(gpuBufferPtr);
     auto& gpuBuffer = *gpuBufferPtr;
 
@@ -1449,33 +1473,40 @@ void CreateAndCopyToGpuBuffer(
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
+    ///@todo: this is leaked!  refactor so this is in global memory and reused #StagingBuffer
+    VkDeviceSize offsetToAllocatedBlock;
     CreateBuffer(
         &stagingBuffer,
         &stagingBufferMemory,
+        &allocator,
+        &offsetToAllocatedBlock,
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT/*writable from the CPU*/ | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,/*memory will have i/o coherency. If not set, application may need to use vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges to flush/invalidate host cache*/
+        false,
         device,
         physicalDevice);
 
     void* data;
-    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+    vkMapMemory(device, stagingBufferMemory, offsetToAllocatedBlock, bufferSize, 0, &data);
     memcpy(data, cpuBuffer, static_cast<size_t>(bufferSize));
     vkUnmapMemory(device, stagingBufferMemory);
 
+    VkDeviceSize dummy;
     CreateBuffer(
         &gpuBuffer,
         &gpuBufferMemory,
+        &allocator,
+        &dummy,
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | flags,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//most optimal graphics memory
+        residentForever,
         device,
         physicalDevice);
 
     CopyBuffer(stagingBuffer, gpuBuffer, bufferSize, commandPool, graphicsQueue, device);
-
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-    vkFreeMemory(device, stagingBufferMemory, nullptr);
+    vkDestroyBuffer(device, stagingBuffer, nullptr);///@todo: this is leaked!  refactor so this is in global memory and reused #StagingBuffer
 }
 
 void EndSingleTimeCommands(const VkCommandBuffer& commandBuffer, const VkCommandPool commandPool, const VkQueue& graphicsQueue, const VkDevice& device)
@@ -1601,6 +1632,7 @@ void CreateTextureImage(
     VkImage*const textureImagePtr,
     VkDeviceMemory*const textureImageMemoryPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
+    const bool residentForever,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
     const VkDevice& device,
@@ -1622,18 +1654,22 @@ void CreateTextureImage(
 
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingBufferMemory;
+    ///@todo: this is leaked!  Put in global memory and reuse #StagingBuffer
+    VkDeviceSize offsetToAllocatedBlock;
     CreateBuffer(
         &stagingBuffer,
         &stagingBufferMemory,
+        &allocator,
+        &offsetToAllocatedBlock,
         imageSize,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        false,
         device,
-        physicalDevice
-        );
+        physicalDevice);
 
     void* data;
-    vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+    vkMapMemory(device, stagingBufferMemory, offsetToAllocatedBlock, imageSize, 0, &data);
     memcpy(data, pixels, static_cast<size_t>(imageSize));
     vkUnmapMemory(device, stagingBufferMemory);
 
@@ -1649,7 +1685,7 @@ void CreateTextureImage(
         VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        false,
+        residentForever,
         device,
         physicalDevice);
 
@@ -1677,9 +1713,7 @@ void CreateTextureImage(
         commandPool,
         graphicsQueue,
         device);
-
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-    vkFreeMemory(device, stagingBufferMemory, nullptr);
+    vkDestroyBuffer(device, stagingBuffer, nullptr);///@todo: this is leaked!  Put in global memory and reuse #StagingBuffer
 }
 
 void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& device)
@@ -1793,13 +1827,14 @@ void CreateFrameSyncPrimitives(
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
     const VkDeviceMemory& uniformBufferGpuMemory, 
+    const VkDeviceSize& offsetToGpuMemory,
     const size_t objectsNum,
     const VkDeviceSize uniformBufferSize, 
     const VkExtent2D& swapChainExtent, 
     const VkDevice& device)
 {
     assert(objectsNum > 0);
-    assert(uniformBufferSize);
+    assert(uniformBufferSize > 0);
 
     static auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -1827,7 +1862,7 @@ void UpdateUniformBuffer(
     mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
     mappedMemoryRange.pNext = nullptr;
     mappedMemoryRange.memory = uniformBufferGpuMemory;
-    mappedMemoryRange.offset = 0;
+    mappedMemoryRange.offset = offsetToGpuMemory;
     mappedMemoryRange.size = uniformBufferSize;
     vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange);
 }
