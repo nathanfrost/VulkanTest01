@@ -186,6 +186,10 @@ private:
             }
         }
 
+        vkUnmapMemory(m_device, m_stagingBufferGpuMemory);
+        vkDestroyBuffer(m_device, m_stagingBufferGpu, nullptr);
+        m_stagingBufferMemoryMapCpuToGpu.Reset();
+
         m_deviceLocalMemory.Destroy(m_device);
         vkDestroyDevice(m_device, nullptr);
         DestroyDebugReportCallbackEXT(m_instance, m_callback, nullptr);
@@ -254,12 +258,32 @@ private:
             }
         }
 
+        VkDeviceSize offsetToAllocatedBlock;
+        const VkDeviceSize stagingBufferSize = 128 * 1024 * 1024;
+        CreateBuffer(
+            &m_stagingBufferGpu,
+            &m_stagingBufferGpuMemory,
+            &m_deviceLocalMemory,
+            &offsetToAllocatedBlock,
+            stagingBufferSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            true,
+            m_device,
+            m_physicalDevice);
+
+        void* stagingBufferMemoryMapCpuToGpu;
+        vkMapMemory(m_device, m_stagingBufferGpuMemory, offsetToAllocatedBlock, stagingBufferSize, 0, &stagingBufferMemoryMapCpuToGpu);
+        m_stagingBufferMemoryMapCpuToGpu.SetArray(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpu), stagingBufferSize);
+
         CreateTextureImage(
             &m_textureImage, 
             &m_textureImageMemory, 
-            &m_deviceLocalMemory, 
+            m_stagingBufferMemoryMapCpuToGpu,
+            &m_deviceLocalMemory,
+            m_stagingBufferGpu,
             false,
-            m_commandPoolPrimary, 
+            m_commandPoolPrimary,
             m_graphicsQueue, 
             m_device, 
             m_physicalDevice);
@@ -271,7 +295,9 @@ private:
             &m_deviceLocalMemory,
             &m_vertexBuffer,
             &m_vertexBufferMemory,
+            m_stagingBufferMemoryMapCpuToGpu,
             m_vertices.data(),
+            m_stagingBufferGpu,
             sizeof(m_vertices[0]) * m_vertices.size(),
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
             false,
@@ -283,7 +309,9 @@ private:
             &m_deviceLocalMemory,
             &m_indexBuffer,
             &m_indexBufferMemory,
+            m_stagingBufferMemoryMapCpuToGpu,
             m_indices.data(),
+            m_stagingBufferGpu,
             sizeof(m_indices[0]) * m_indices.size(),
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             false,
@@ -471,6 +499,9 @@ private:
     VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_fence = VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a true ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
 
     VulkanPagedStackAllocator m_deviceLocalMemory;
+    VkBuffer m_stagingBufferGpu;
+    VkDeviceMemory m_stagingBufferGpuMemory;
+    ArraySafeRef<uint8_t> m_stagingBufferMemoryMapCpuToGpu;
 };
 
 int main() 

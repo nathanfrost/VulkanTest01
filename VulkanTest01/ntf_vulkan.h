@@ -113,6 +113,7 @@ void CreateBuffer(
     const VkDeviceSize& size,
     const VkBufferUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
+    const bool residentForever,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice);
@@ -364,7 +365,9 @@ void CreateAndCopyToGpuBuffer(
     VulkanPagedStackAllocator*const allocatorPtr,
     VkBuffer*const gpuBufferPtr,
     VkDeviceMemory*const gpuBufferMemoryPtr,
-    const void*const cpuBuffer,
+    ArraySafeRef<uint8_t> stagingBufferMemoryMapCpuToGpu,
+    const void*const cpuBufferSource,
+    const VkBuffer& stagingBufferGpu,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags &flags,
     const bool residentForever,
@@ -402,7 +405,9 @@ bool HasStencilComponent(VkFormat format);
 void CreateTextureImage(
     VkImage*const textureImagePtr,
     VkDeviceMemory*const textureImageMemoryPtr,
+    ArraySafeRef<uint8_t> stagingBufferMemoryMapCpuToGpu,
     VulkanPagedStackAllocator*const allocatorPtr,
+    const VkBuffer& stagingBufferGpu,
     const bool residentForever,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,

@@ -1450,7 +1450,9 @@ void CreateAndCopyToGpuBuffer(
     VulkanPagedStackAllocator*const allocatorPtr,
     VkBuffer*const gpuBufferPtr,
     VkDeviceMemory*const gpuBufferMemoryPtr,
-    const void*const cpuBuffer,
+    ArraySafeRef<uint8_t> stagingBufferMemoryMapCpuToGpu,
+    const void*const cpuBufferSource,
+    const VkBuffer& stagingBufferGpu,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags &flags,
     const bool residentForever,
@@ -1468,29 +1470,10 @@ void CreateAndCopyToGpuBuffer(
     assert(gpuBufferMemoryPtr);
     auto& gpuBufferMemory = *gpuBufferMemoryPtr;
 
-    assert(cpuBuffer);
+    assert(cpuBufferSource);
     assert(bufferSize > 0);
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    ///@todo: this is leaked!  refactor so this is in global memory and reused #StagingBuffer
-    VkDeviceSize offsetToAllocatedBlock;
-    CreateBuffer(
-        &stagingBuffer,
-        &stagingBufferMemory,
-        &allocator,
-        &offsetToAllocatedBlock,
-        bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT/*writable from the CPU*/ | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,/*memory will have i/o coherency. If not set, application may need to use vkFlushMappedMemoryRanges and vkInvalidateMappedMemoryRanges to flush/invalidate host cache*/
-        false,
-        device,
-        physicalDevice);
-
-    void* data;
-    vkMapMemory(device, stagingBufferMemory, offsetToAllocatedBlock, bufferSize, 0, &data);
-    memcpy(data, cpuBuffer, static_cast<size_t>(bufferSize));
-    vkUnmapMemory(device, stagingBufferMemory);
+    stagingBufferMemoryMapCpuToGpu.MemcpyFromStart(cpuBufferSource, static_cast<size_t>(bufferSize));
 
     VkDeviceSize dummy;
     CreateBuffer(
@@ -1505,8 +1488,7 @@ void CreateAndCopyToGpuBuffer(
         device,
         physicalDevice);
 
-    CopyBuffer(stagingBuffer, gpuBuffer, bufferSize, commandPool, graphicsQueue, device);
-    vkDestroyBuffer(device, stagingBuffer, nullptr);///@todo: this is leaked!  refactor so this is in global memory and reused #StagingBuffer
+    CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandPool, graphicsQueue, device);
 }
 
 void EndSingleTimeCommands(const VkCommandBuffer& commandBuffer, const VkCommandPool commandPool, const VkQueue& graphicsQueue, const VkDevice& device)
@@ -1631,7 +1613,9 @@ bool HasStencilComponent(VkFormat format)
 void CreateTextureImage(
     VkImage*const textureImagePtr,
     VkDeviceMemory*const textureImageMemoryPtr,
+    ArraySafeRef<uint8_t> stagingBufferMemoryMapCpuToGpu,
     VulkanPagedStackAllocator*const allocatorPtr,
+    const VkBuffer& stagingBufferGpu,
     const bool residentForever,
     const VkCommandPool& commandPool,
     const VkQueue& graphicsQueue,
@@ -1650,29 +1634,9 @@ void CreateTextureImage(
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load(sk_texturePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     assert(pixels);
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
+    const VkDeviceSize imageSize = texWidth * texHeight * 4;
 
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    ///@todo: this is leaked!  Put in global memory and reuse #StagingBuffer
-    VkDeviceSize offsetToAllocatedBlock;
-    CreateBuffer(
-        &stagingBuffer,
-        &stagingBufferMemory,
-        &allocator,
-        &offsetToAllocatedBlock,
-        imageSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        false,
-        device,
-        physicalDevice);
-
-    void* data;
-    vkMapMemory(device, stagingBufferMemory, offsetToAllocatedBlock, imageSize, 0, &data);
-    memcpy(data, pixels, static_cast<size_t>(imageSize));
-    vkUnmapMemory(device, stagingBufferMemory);
-
+    stagingBufferMemoryMapCpuToGpu.MemcpyFromStart(pixels, static_cast<size_t>(imageSize));
     stbi_image_free(pixels);
 
     CreateImage(
@@ -1698,7 +1662,7 @@ void CreateTextureImage(
         graphicsQueue,
         device);
     CopyBufferToImage(
-        stagingBuffer,
+        stagingBufferGpu,
         textureImage,
         static_cast<uint32_t>(texWidth),
         static_cast<uint32_t>(texHeight),
@@ -1713,7 +1677,6 @@ void CreateTextureImage(
         commandPool,
         graphicsQueue,
         device);
-    vkDestroyBuffer(device, stagingBuffer, nullptr);///@todo: this is leaked!  Put in global memory and reuse #StagingBuffer
 }
 
 void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& device)
