@@ -259,13 +259,12 @@ private:
         }
 
         VkDeviceSize offsetToAllocatedBlock;
-        const VkDeviceSize stagingBufferSize = 128 * 1024 * 1024;
         CreateBuffer(
             &m_stagingBufferGpu,
             &m_stagingBufferGpuMemory,
             &m_deviceLocalMemory,
             &offsetToAllocatedBlock,
-            stagingBufferSize,
+            m_kStagingBufferSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             true,
@@ -273,8 +272,8 @@ private:
             m_physicalDevice);
 
         void* stagingBufferMemoryMapCpuToGpu;
-        vkMapMemory(m_device, m_stagingBufferGpuMemory, offsetToAllocatedBlock, stagingBufferSize, 0, &stagingBufferMemoryMapCpuToGpu);
-        m_stagingBufferMemoryMapCpuToGpu.SetArray(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpu), stagingBufferSize);
+        vkMapMemory(m_device, m_stagingBufferGpuMemory, offsetToAllocatedBlock, m_kStagingBufferSize, 0, &stagingBufferMemoryMapCpuToGpu);
+        m_stagingBufferMemoryMapCpuToGpu.SetArray(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpu), m_kStagingBufferSize);
 
         CreateTextureImage(
             &m_textureImage, 
@@ -289,8 +288,12 @@ private:
             m_physicalDevice);
         CreateTextureImageView(&m_textureImageView, m_textureImage, m_device);
         CreateTextureSampler(&m_textureSampler, m_device);
+
+        //BEG_#StreamingMemory
         LoadModel(&m_vertices, &m_indices);
         m_indicesSize = Cast_size_t_uint32_t(m_indices.size());//store since we need secondary buffers to point to this
+        //END_#StreamingMemory
+
         CreateAndCopyToGpuBuffer(
             &m_deviceLocalMemory,
             &m_vertexBuffer,
@@ -468,9 +471,14 @@ private:
     VkDeviceMemory m_textureImageMemory;
     VkImageView m_textureImageView;
     VkSampler m_textureSampler;
-    std::vector<Vertex> m_vertices;///<@todo: streaming memory management
-    std::vector<uint32_t> m_indices;///<@todo: streaming memory management
-    uint32_t m_indicesSize;///<@todo: streaming memory management
+
+    //BEG_#StreamingMemory
+    std::vector<Vertex> m_vertices;
+    std::vector<uint32_t> m_indices;
+    uint32_t m_indicesSize;
+    //END_#StreamingMemory
+
+    //BEG_#StreamingMemory
     VkBuffer m_vertexBuffer;
     VkDeviceMemory m_vertexBufferMemory;
     VkBuffer m_indexBuffer;
@@ -479,9 +487,12 @@ private:
     VkDeviceMemory m_uniformBufferGpuMemory;
     VkDeviceSize m_uniformBufferOffsetToGpuMemory;
     ArraySafeRef<uint8_t> m_uniformBufferCpuMemory;
-    VkDeviceSize m_uniformBufferCpuAlignment;
+    
     VkDescriptorPool m_descriptorPool;
     VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed
+    //END_#StreamingMemory
+
+    VkDeviceSize m_uniformBufferCpuAlignment;
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
     VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondary;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kSizeMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kSizeMax>& vectorSafe) -- not sure why
 
@@ -502,6 +513,7 @@ private:
     VkBuffer m_stagingBufferGpu;
     VkDeviceMemory m_stagingBufferGpuMemory;
     ArraySafeRef<uint8_t> m_stagingBufferMemoryMapCpuToGpu;
+    const size_t m_kStagingBufferSize = 128 * 1024 * 1024;
 };
 
 int main() 

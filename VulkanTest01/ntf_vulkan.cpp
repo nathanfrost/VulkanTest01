@@ -1403,6 +1403,7 @@ void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*cons
     assert(indicesPtr);
     auto& indices = *indicesPtr;
 
+    //BEG_#StreamingMemory: replace OBJ with binary FBX loading
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;///<@todo: streaming memory management
     std::vector<tinyobj::material_t> materials;///<@todo: streaming memory management
@@ -1410,7 +1411,9 @@ void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*cons
 
     const bool loadObjResult = tinyobj::LoadObj(&attrib, &shapes, &materials, &err, sk_ModelPath);
     assert(loadObjResult);
+    //END_#StreamingMemory: replace OBJ with binary FBX loading
 
+    ///@todo: #StreamingMemory: replace this STL with a good, static-memory hashmap
     //build index list and un-duplicate vertices
     std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
 
@@ -2495,14 +2498,7 @@ bool VulkanMemoryHeap::PushAlloc(
 
 bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMax, const uint32_t memoryTypeIndex, const VkDevice& device)
 {
-#if NTF_DEBUG
-    assert(memoryMax > 0);
-    assert(!m_allocated);
-    m_allocated = true;
-#endif//#if NTF_DEBUG
-
-    m_maxOffsetPlusOne = memoryMax;
-    m_firstByteFree = 0;
+    m_stackPage.Allocate(memoryMax);
     m_next = nullptr;
 
     VkMemoryAllocateInfo allocInfo = {};
@@ -2518,12 +2514,10 @@ bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMax, const uint32_t
 
 bool VulkanMemoryHeapPage::PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemoryRequirements& memRequirements)
 {
-    assert(m_allocated);
-
     assert(memoryOffsetPtr);
     auto& memoryOffset = *memoryOffsetPtr;
 
-    const bool allocateResult = PushAlloc(&m_firstByteFree, &memoryOffset, memRequirements);
+    const bool allocateResult = m_stackPage.PushAlloc(&memoryOffset, memRequirements.alignment, memRequirements.size);
     assert(allocateResult);
     return allocateResult;
 }
@@ -2533,6 +2527,39 @@ bool VulkanMemoryHeapPage::PushAlloc(
     VkDeviceSize*const firstByteReturnedPtr,
     const VkMemoryRequirements& memRequirements) const
 {
+    return m_stackPage.PushAllocInternal(firstByteFreePtr, firstByteReturnedPtr, memRequirements.alignment, memRequirements.size);
+}
+
+template<class SizeT>
+bool StackPage<SizeT>::PushAlloc(SizeT* memoryOffsetPtr, const SizeT alignment, const SizeT size)
+{
+    assert(memoryOffsetPtr);
+    auto& memoryOffset = *memoryOffsetPtr;
+
+    assert(alignment > 0);
+    assert(size > 0);
+
+    const bool allocateResult = PushAllocInternal(&m_firstByteFree, &memoryOffset, alignment, size);
+    assert(allocateResult);
+    return allocateResult;
+}
+
+template<class SizeT>
+void StackPage<SizeT>::Allocate(const SizeT memoryMax)
+{
+#if NTF_DEBUG
+    assert(memoryMax > 0);
+    assert(!m_allocated);
+    m_allocated = true;
+#endif//#if NTF_DEBUG
+
+    m_maxOffsetPlusOne = memoryMax;
+    m_firstByteFree = 0;
+}
+
+template<class SizeT>
+bool StackPage<SizeT>::PushAllocInternal(SizeT*const firstByteFreePtr, SizeT*const firstByteReturnedPtr, const SizeT alignment, const SizeT size) const
+{
     assert(m_allocated);
 
     assert(firstByteFreePtr);
@@ -2541,13 +2568,16 @@ bool VulkanMemoryHeapPage::PushAlloc(
     assert(firstByteReturnedPtr);
     auto& firstByteReturned = *firstByteReturnedPtr;
 
-    firstByteReturned = RoundToNearest(m_firstByteFree, memRequirements.alignment);
+    assert(alignment > 0);
+    assert(size > 0);
+
+    firstByteReturned = RoundToNearest(m_firstByteFree, alignment);
     if (firstByteReturned >= m_maxOffsetPlusOne)
     {
         return false;
     }
 
-    firstByteFree = firstByteReturned + memRequirements.size;
+    firstByteFree = firstByteReturned + size;
     if (firstByteFree >= m_maxOffsetPlusOne)
     {
         return false;

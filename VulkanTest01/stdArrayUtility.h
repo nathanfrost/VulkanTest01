@@ -14,6 +14,8 @@
 template<class T>
 inline T RoundToNearest(const T i, const T alignment)
 {
+    assert(alignment > 0);
+    assert(i >= 0);
     return (i + alignment - 1) & ~(alignment - 1);
 }
 

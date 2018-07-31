@@ -457,47 +457,77 @@ void CommandBufferSecondaryThreadsCreate(
     ArraySafeRef<CommandBufferThreadArguments> threadArguments,
     const size_t threadsNum);
 
-
-class VulkanMemoryHeapPage
+template<class SizeT>
+class StackPage
 {
 public:
-    VulkanMemoryHeapPage()
+
+    ///@todo: all explicit default C++ functions except default constructor
+    inline StackPage()
     {
 #if NTF_DEBUG
         m_allocated = false;
 #endif//#if NTF_DEBUG
     }
+
+    void Allocate(const SizeT memoryMax);
+    inline void Free()
+    {
+#if NTF_DEBUG
+        assert(m_allocated);
+        m_allocated = false;
+#endif//#if NTF_DEBUG
+    }
+
+#if NTF_DEBUG
+    inline bool Allocated() const { return m_allocated; }
+#endif//#if NTF_DEBUG
+
+    bool PushAlloc(SizeT* memoryOffsetPtr, const SizeT alignment, const SizeT size);
+    bool PushAllocInternal(SizeT*const firstByteFreePtr, SizeT*const firstByteReturnedPtr, SizeT const alignment, SizeT const size) const;
+
+private:
+    SizeT m_maxOffsetPlusOne;///<page's first invalid memory address within its allocation
+    SizeT m_firstByteFree;
+
+#if NTF_DEBUG
+    bool m_allocated;
+#endif//#if NTF_DEBUG
+};
+
+class VulkanMemoryHeapPage
+{
+public:
     ///@todo: all explicit default C++ functions except default constructor
 
     bool Allocate(const VkDeviceSize memoryMax, const uint32_t memoryTypeIndex, const VkDevice& device);
     inline void Free(const VkDevice& device)
     {
-#if NTF_DEBUG
-        assert(m_allocated);
-        m_allocated = false;
-#endif//#if NTF_DEBUG
+        m_stackPage.Free();
         vkFreeMemory(device, m_memoryHandle, nullptr);
     }
 
     inline bool SufficientMemory(const VkMemoryRequirements& memRequirements) const
     {
-        assert(m_allocated);
+#if NTF_DEBUG
+        assert(m_stackPage.Allocated());
+#endif//#if NTF_DEBUG
         VkDeviceSize dummy0, dummy1;
         return PushAlloc(&dummy0, &dummy1, memRequirements);
     }
     bool PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemoryRequirements& memRequirements);
-    inline VkDeviceMemory GetMemoryHandle() const { assert(m_allocated); return m_memoryHandle; }
+    inline VkDeviceMemory GetMemoryHandle() const 
+    { 
+#if NTF_DEBUG
+        assert(m_stackPage.Allocated()); 
+#endif//#if NTF_DEBUG
+        return m_memoryHandle; 
+    }
 
     VulkanMemoryHeapPage* m_next;
 private:
+    StackPage<VkDeviceSize> m_stackPage;
     VkDeviceMemory m_memoryHandle;  ///<to its Vulkan allocation
-    VkDeviceSize m_maxOffsetPlusOne;///<page's first invalid memory address within its allocation
-    VkDeviceSize m_firstByteFree;
-
-#if NTF_DEBUG
-    bool m_allocated;
-#endif//#if NTF_DEBUG
-
 
     bool PushAlloc(
         VkDeviceSize*const firstByteFreePtr,
