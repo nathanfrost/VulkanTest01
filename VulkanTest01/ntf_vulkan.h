@@ -16,7 +16,7 @@
 #include<algorithm>
 #include <chrono>
 #include <thread>
-#include"StackPage.h"
+#include"StackNTF.h"
 
 
 #define GLM_FORCE_RADIANS
@@ -57,6 +57,7 @@ const bool s_enableValidationLayers = false;
 
 #define NTF_DEVICE_EXTENSIONS_NUM 1
 
+extern StackCpu* g_stbAllocator;
 class VulkanPagedStackAllocator;
 
 static const uint32_t s_kWidth = 800;
@@ -407,6 +408,7 @@ bool HasStencilComponent(VkFormat format);
 void CreateTextureImage(
     VkImage*const textureImagePtr,
     VkDeviceMemory*const textureImageMemoryPtr,
+    StackCpu*const stbAllocatorPtr,
     ArraySafeRef<uint8_t> stagingBufferMemoryMapCpuToGpu,
     VulkanPagedStackAllocator*const allocatorPtr,
     const VkBuffer& stagingBufferGpu,
@@ -464,17 +466,17 @@ class VulkanMemoryHeapPage
 public:
     ///@todo: all explicit default C++ functions except default constructor
 
-    bool Allocate(const VkDeviceSize memoryMax, const uint32_t memoryTypeIndex, const VkDevice& device);
+    bool Allocate(const VkDeviceSize memoryMaxBytes, const uint32_t memoryTypeIndex, const VkDevice& device);
     inline void Free(const VkDevice& device)
     {
-        m_stackPage.Free();
+        m_stack.Free();
         vkFreeMemory(device, m_memoryHandle, nullptr);
     }
 
     inline bool SufficientMemory(const VkMemoryRequirements& memRequirements) const
     {
 #if NTF_DEBUG
-        assert(m_stackPage.Allocated());
+        assert(m_stack.Allocated());
 #endif//#if NTF_DEBUG
         VkDeviceSize dummy0, dummy1;
         return PushAlloc(&dummy0, &dummy1, memRequirements);
@@ -483,14 +485,14 @@ public:
     inline VkDeviceMemory GetMemoryHandle() const 
     { 
 #if NTF_DEBUG
-        assert(m_stackPage.Allocated()); 
+        assert(m_stack.Allocated()); 
 #endif//#if NTF_DEBUG
         return m_memoryHandle; 
     }
 
     VulkanMemoryHeapPage* m_next;
 private:
-    StackPage<VkDeviceSize> m_stackPage;
+    StackNTF<VkDeviceSize> m_stack;
     VkDeviceMemory m_memoryHandle;  ///<to its Vulkan allocation
 
     bool PushAlloc(
@@ -576,3 +578,5 @@ private:
     VkPhysicalDevice m_physicalDevice;
 };
 
+void STBAllocatorCreate();
+void STBAllocatorDestroy();

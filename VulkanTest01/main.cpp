@@ -143,6 +143,8 @@ private:
 
     void cleanup()
     {
+        STBAllocatorDestroy();
+
         CleanupSwapChain(
             &m_commandBuffersPrimary,
             &m_commandBuffersSecondary,
@@ -211,6 +213,8 @@ private:
 
         m_deviceExtensions = VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
 
+        STBAllocatorCreate();
+
         m_instance = CreateInstance(s_validationLayers);
         m_callback = SetupDebugCallback(m_instance);
         CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
@@ -278,6 +282,7 @@ private:
         CreateTextureImage(
             &m_textureImage, 
             &m_textureImageMemory, 
+            g_stbAllocator,
             m_stagingBufferMemoryMapCpuToGpu,
             &m_deviceLocalMemory,
             m_stagingBufferGpu,

@@ -329,14 +329,14 @@
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ntf_vulkan.cpp" />
-    <ClCompile Include="StackPage.cpp" />
+    <ClCompile Include="StackNTF.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MemoryUtil.h" />
     <ClInclude Include="ntf_compileTimeDefines.h" />
     <ClInclude Include="ntf_vulkan.h" />
     <ClInclude Include="ntf_vulkan_utility.h" />
-    <ClInclude Include="StackPage.h" />
+    <ClInclude Include="StackNTF.h" />
     <ClInclude Include="stdArrayUtility.h" />
     <ClInclude Include="VDeleter.h" />
   </ItemGroup>

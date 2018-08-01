@@ -2,7 +2,21 @@
 #include"ntf_vulkan_utility.h"
 
 #define STB_IMAGE_IMPLEMENTATION
+//BEG_STB_IMAGE_MEMORY_MANAGEMENT
+StackCpu* g_stbAllocator;
+void* __cdecl stb_malloc(size_t _Size)
+{ 
+    assert(g_stbAllocator);
+    
+    void* memory;
+    g_stbAllocator->PushAlloc(&memory, _Size);
+    assert(memory);
+    return memory;
+}
+void* __cdecl stb_assertRealloc(void*  _Block, size_t _Size) { assert(false); return nullptr; }
+void __cdecl stb_nullFree(void* const block) {}
 #include"stb_image.h"
+//END_STB_IMAGE_MEMORY_MANAGEMENT
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include"tiny_obj_loader.h"
@@ -10,6 +24,17 @@
 #if NTF_WIN_TIMER
 FILE* s_winTimer;
 #endif//NTF_WIN_TIMER
+
+void STBAllocatorCreate()
+{
+    g_stbAllocator = new StackCpu();
+    g_stbAllocator->Initialize(128 * 1024 * 1024);
+}
+void STBAllocatorDestroy()
+{
+    g_stbAllocator->Destroy();
+    delete g_stbAllocator;
+}
 
 HANDLE ThreadSignalingEventCreate()
 {
@@ -1607,6 +1632,17 @@ bool HasStencilComponent(VkFormat format)
     return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 }
 
+/** use when you're done with the data returned from stbi_load(); never call stbi_image_free() directly; only use this function to clear all stack 
+    allocations stbi made using the (global) stbAllocatorPtr */
+void STBIImageFree(void*const retval_from_stbi_load, StackCpu*const stbAllocatorPtr)
+{
+    assert(stbAllocatorPtr);
+    auto& stbAllocator = *stbAllocatorPtr;
+
+    stbi_image_free(retval_from_stbi_load);
+    stbAllocator.Clear();
+}
+
 /* @todo:   All of the helper functions that submit commands so far have been set up to execute synchronously by
             waiting for the queue to become idle. For practical applications it is recommended to combine these
             operations in a single command buffer and execute them asynchronously for higher throughput, especially
@@ -1616,6 +1652,7 @@ bool HasStencilComponent(VkFormat format)
 void CreateTextureImage(
     VkImage*const textureImagePtr,
     VkDeviceMemory*const textureImageMemoryPtr,
+    StackCpu*const stbAllocatorPtr,
     ArraySafeRef<uint8_t> stagingBufferMemoryMapCpuToGpu,
     VulkanPagedStackAllocator*const allocatorPtr,
     const VkBuffer& stagingBufferGpu,
@@ -1631,6 +1668,9 @@ void CreateTextureImage(
     assert(textureImageMemoryPtr);
     auto& textureImageMemory = *textureImageMemoryPtr;
 
+    assert(stbAllocatorPtr);
+    auto& stbAllocator = *stbAllocatorPtr;
+
     assert(allocatorPtr);
     auto& allocator = *allocatorPtr;
 
@@ -1640,7 +1680,7 @@ void CreateTextureImage(
     const VkDeviceSize imageSize = texWidth * texHeight * 4;
 
     stagingBufferMemoryMapCpuToGpu.MemcpyFromStart(pixels, static_cast<size_t>(imageSize));
-    stbi_image_free(pixels);
+    STBIImageFree(pixels, &stbAllocator);
 
     CreateImage(
         &textureImage,
@@ -2496,14 +2536,14 @@ bool VulkanMemoryHeap::PushAlloc(
     return allocResult;
 }
 
-bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMax, const uint32_t memoryTypeIndex, const VkDevice& device)
+bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMaxBytes, const uint32_t memoryTypeIndex, const VkDevice& device)
 {
-    m_stackPage.Allocate(memoryMax);
+    m_stack.Allocate(memoryMaxBytes);
     m_next = nullptr;
 
     VkMemoryAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    allocInfo.allocationSize = memoryMax;
+    allocInfo.allocationSize = memoryMaxBytes;
     allocInfo.memoryTypeIndex = memoryTypeIndex;
     allocInfo.pNext = nullptr;
 
@@ -2517,7 +2557,7 @@ bool VulkanMemoryHeapPage::PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemo
     assert(memoryOffsetPtr);
     auto& memoryOffset = *memoryOffsetPtr;
 
-    const bool allocateResult = m_stackPage.PushAlloc(&memoryOffset, memRequirements.alignment, memRequirements.size);
+    const bool allocateResult = m_stack.PushAlloc(&memoryOffset, memRequirements.alignment, memRequirements.size);
     assert(allocateResult);
     return allocateResult;
 }
@@ -2527,5 +2567,5 @@ bool VulkanMemoryHeapPage::PushAlloc(
     VkDeviceSize*const firstByteReturnedPtr,
     const VkMemoryRequirements& memRequirements) const
 {
-    return m_stackPage.PushAllocInternal(firstByteFreePtr, firstByteReturnedPtr, memRequirements.alignment, memRequirements.size);
+    return m_stack.PushAllocInternal(firstByteFreePtr, firstByteReturnedPtr, memRequirements.alignment, memRequirements.size);
 }
