@@ -17,7 +17,7 @@ public:
     }
 
     void Allocate(const SizeT memoryMaxBytes);
-    inline void ClearSuballocations() { m_firstByteFree = 0; }
+    inline void ClearSuballocations() { assert(m_allocated); m_firstByteFree = 0; }
     inline void Free()
     {
 #if NTF_DEBUG
@@ -25,6 +25,8 @@ public:
         m_allocated = false;
 #endif//#if NTF_DEBUG
     }
+
+    inline SizeT GetFirstByteFree(){ assert(m_allocated); return m_firstByteFree; }
 
 #if NTF_DEBUG
     inline bool Allocated() const { return m_allocated; }
@@ -59,6 +61,7 @@ public:
     inline void Clear() { m_stack.ClearSuballocations(); }
 
     bool PushAlloc(void**const memoryPtr, const size_t sizeBytes);
+    inline size_t GetFirstByteFree(){ assert(m_initialized); return m_stack.GetFirstByteFree(); }
 
 private:
 #if NTF_DEBUG

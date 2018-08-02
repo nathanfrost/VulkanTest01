@@ -61,7 +61,14 @@ public:
             m_device);
         CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
         CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
-        CreateGraphicsPipeline(&m_pipelineLayout, &m_graphicsPipeline, m_renderPass, m_descriptorSetLayout, m_swapChainExtent, m_device);
+        CreateGraphicsPipeline(
+            &m_pipelineLayout, 
+            &m_graphicsPipeline, 
+            g_stbAllocator, 
+            m_renderPass, 
+            m_descriptorSetLayout, 
+            m_swapChainExtent, 
+            m_device);
         CreateDepthResources(
             &m_depthImage,
             &m_depthImageMemory,
@@ -235,7 +242,14 @@ private:
         
         const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         CreateDescriptorSetLayout(&m_descriptorSetLayout, descriptorType, m_device);
-        CreateGraphicsPipeline(&m_pipelineLayout, &m_graphicsPipeline, m_renderPass, m_descriptorSetLayout, m_swapChainExtent, m_device);
+        CreateGraphicsPipeline(
+            &m_pipelineLayout, 
+            &m_graphicsPipeline, 
+            g_stbAllocator, 
+            m_renderPass, 
+            m_descriptorSetLayout, 
+            m_swapChainExtent, 
+            m_device);
         CreateCommandPool(&m_commandPoolPrimary, m_surface, m_device, m_physicalDevice);
 
         m_deviceLocalMemory.Initialize(m_device, m_physicalDevice);

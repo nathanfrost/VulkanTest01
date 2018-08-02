@@ -120,10 +120,10 @@ void CreateBuffer(
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice);
-void CreateShaderModule(VkShaderModule*const shaderModulePtr, const std::vector<char>& code, const VkDevice& device);
+void CreateShaderModule(VkShaderModule*const shaderModulePtr, char*const code, const size_t codeSizeBytes, const VkDevice& device);
 bool CheckValidationLayerSupport(ConstVectorSafeRef<const char*> validationLayers);
 void CreateImageView(VkImageView*const imageViewPtr, const VkDevice& device, const VkImage& image, const VkFormat& format, const VkImageAspectFlags& aspectFlags);
-std::vector<char> ReadFile(const char*const filename);
+void ReadFile(char**const fileData, StackCpu*const allocatorPtr, size_t*const fileSizeBytesPtr, const char*const filename);
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
     VkDebugReportFlagsEXT flags,
     VkDebugReportObjectTypeEXT objType,
@@ -284,6 +284,7 @@ void CreateDescriptorSetLayout(VkDescriptorSetLayout*const descriptorSetLayoutPt
 void CreateGraphicsPipeline(
     VkPipelineLayout*const pipelineLayoutPtr,
     VkPipeline*const graphicsPipelinePtr,
+    StackCpu*const allocatorPtr,
     const VkRenderPass& renderPass,
     const VkDescriptorSetLayout& descriptorSetLayout,
     const VkExtent2D& swapChainExtent,

@@ -98,6 +98,7 @@ void StackCpu::Destroy()
     m_initialized = false;
 #endif//#if NTF_DEBUG    
 
+    m_stack.Free();
     free(m_memory);
     m_memory = nullptr; 
 }

@@ -441,15 +441,15 @@ VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice)
     return FindSupportedFormat(physicalDevice, candidates, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 }
 
-void CreateShaderModule(VkShaderModule*const shaderModulePtr, const std::vector<char>& code, const VkDevice& device)
+void CreateShaderModule(VkShaderModule*const shaderModulePtr, char*const code, const size_t codeSizeBytes, const VkDevice& device)
 {
     assert(shaderModulePtr);
     VkShaderModule& shaderModule = *shaderModulePtr;
 
     VkShaderModuleCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    createInfo.codeSize = code.size();
-    createInfo.pCode = (uint32_t*)code.data();
+    createInfo.codeSize = codeSizeBytes;
+    createInfo.pCode = reinterpret_cast<uint32_t*>(code);
 
     const VkResult createShaderModuleResult = vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule);
     NTF_VK_ASSERT_SUCCESS(createShaderModuleResult);
@@ -512,19 +512,28 @@ void CreateImageView(VkImageView*const imageViewPtr, const VkDevice& device, con
     NTF_VK_ASSERT_SUCCESS(createImageViewResult);
 }
 
-///@todo: replace with proper allocation strategy for streaming
-std::vector<char> ReadFile(const char*const filename)
+void ReadFile(char**const fileData, StackCpu*const allocatorPtr, size_t*const fileSizeBytesPtr, const char*const filename)
 {
-    std::ifstream file(filename, std::ios::ate | std::ios::binary);
-    assert(file.is_open());
+    assert(fileData);
 
-    size_t fileSize = (size_t)file.tellg();
-    std::vector<char> buffer(fileSize);///<@todo: streaming memory management
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
+    assert(allocatorPtr);
+    auto& allocator = *allocatorPtr;
 
-    return buffer;
+    assert(fileSizeBytesPtr);
+    auto& fileSizeBytes = *fileSizeBytesPtr;
+
+    FILE* f;
+    fopen_s(&f, filename, "rb");
+    assert(f);
+
+    struct stat fileInfo;
+    const int fileStatResult = stat(filename, &fileInfo);
+    assert(fileStatResult == 0);
+
+    fileSizeBytes = fileInfo.st_size;
+    allocator.PushAlloc(reinterpret_cast<void**>(fileData), fileSizeBytes);
+    const size_t freadResult = fread(*fileData, 1, fileSizeBytes, f);
+    assert(freadResult == fileInfo.st_size);
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
@@ -835,6 +844,7 @@ void CreateDescriptorSetLayout(VkDescriptorSetLayout*const descriptorSetLayoutPt
 void CreateGraphicsPipeline(
     VkPipelineLayout*const pipelineLayoutPtr,
     VkPipeline*const graphicsPipelinePtr,
+    StackCpu*const allocatorPtr,
     const VkRenderPass& renderPass,
     const VkDescriptorSetLayout& descriptorSetLayout,
     const VkExtent2D& swapChainExtent,
@@ -842,17 +852,27 @@ void CreateGraphicsPipeline(
 {
     assert(pipelineLayoutPtr);
     VkPipelineLayout& pipelineLayout = *pipelineLayoutPtr;
+    
     assert(graphicsPipelinePtr);
     VkPipeline& graphicsPipeline = *graphicsPipelinePtr;
+    
+    assert(allocatorPtr);
+    auto& allocator = *allocatorPtr;
 
-    auto vertShaderCode = ReadFile("shaders/vert.spv");
-    auto fragShaderCode = ReadFile("shaders/frag.spv");
+    char* vertShaderCode;
+    char* fragShaderCode;
+    size_t vertShaderCodeSizeBytes, fragShaderCodeSizeBytes;
+    assert(allocator.GetFirstByteFree() == 0);//ensure we can Clear() the whole stack correctly (eg there's nothing already allocated in the stack)
+    ReadFile(&vertShaderCode, &allocator, &vertShaderCodeSizeBytes, "shaders/vert.spv");
+    ReadFile(&fragShaderCode, &allocator, &fragShaderCodeSizeBytes, "shaders/frag.spv");
 
     //create wrappers around SPIR-V bytecodes
     VkShaderModule vertShaderModule;
     VkShaderModule fragShaderModule;
-    CreateShaderModule(&vertShaderModule, vertShaderCode, device);
-    CreateShaderModule(&fragShaderModule, fragShaderCode, device);
+    CreateShaderModule(&vertShaderModule, vertShaderCode, vertShaderCodeSizeBytes, device);
+    CreateShaderModule(&fragShaderModule, fragShaderCode, fragShaderCodeSizeBytes, device);
+
+    allocator.Clear();
 
     //vertex shader creation
     VkPipelineShaderStageCreateInfo vertShaderStageInfo = {};
@@ -1675,6 +1695,7 @@ void CreateTextureImage(
     auto& allocator = *allocatorPtr;
 
     int texWidth, texHeight, texChannels;
+    assert(stbAllocator.GetFirstByteFree() == 0);//ensure we can Clear() the whole stack correctly in STBIImageFree() (eg there's nothing already allocated in the stack)
     stbi_uc* pixels = stbi_load(sk_texturePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
     assert(pixels);
     const VkDeviceSize imageSize = texWidth * texHeight * 4;
