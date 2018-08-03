@@ -68,6 +68,10 @@ const char*const sk_texturePath = "textures/chalet.jpg";
 
 typedef uint32_t PushConstantBindIndexType;
 
+VkAllocationCallbacks* GetVulkanAllocationCallbacks();
+#if NTF_DEBUG
+size_t GetVulkanApiCpuBytesAllocatedMax();
+#endif//#if NTF_DEBUG
 HANDLE ThreadSignalingEventCreate();
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device);
 void CopyBufferToImage(
@@ -471,7 +475,7 @@ public:
     inline void Free(const VkDevice& device)
     {
         m_stack.Free();
-        vkFreeMemory(device, m_memoryHandle, nullptr);
+        vkFreeMemory(device, m_memoryHandle, GetVulkanAllocationCallbacks());
     }
 
     inline bool SufficientMemory(const VkMemoryRequirements& memRequirements) const

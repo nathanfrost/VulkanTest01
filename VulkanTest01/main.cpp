@@ -22,6 +22,9 @@ public:
         cleanup();
 
         int i;
+#if NTF_DEBUG
+        printf("s_vulkanApiCpuBytesAllocatedMax=%zu\n", GetVulkanApiCpuBytesAllocatedMax());
+#endif//#if NTF_DEBUG
         printf("Enter a character and press ENTER to exit\n");
         scanf("%i", &i);
     }
@@ -167,43 +170,43 @@ private:
             m_swapChainImageViews,
             m_swapChain);
         
-        vkDestroySampler(m_device, m_textureSampler, nullptr);
-        vkDestroyImageView(m_device, m_textureImageView, nullptr);
+        vkDestroySampler(m_device, m_textureSampler, GetVulkanAllocationCallbacks());
+        vkDestroyImageView(m_device, m_textureImageView, GetVulkanAllocationCallbacks());
 
-        vkDestroyImage(m_device, m_textureImage, nullptr);
+        vkDestroyImage(m_device, m_textureImage, GetVulkanAllocationCallbacks());
 
-        vkDestroyDescriptorPool(m_device, m_descriptorPool, nullptr);
-        vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, nullptr);
+        vkDestroyDescriptorPool(m_device, m_descriptorPool, GetVulkanAllocationCallbacks());
+        vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, GetVulkanAllocationCallbacks());
         
         DestroyUniformBuffer(m_uniformBufferCpuMemory, m_uniformBufferGpuMemory, m_uniformBuffer, m_device);
-        vkDestroyBuffer(m_device, m_indexBuffer, nullptr);
-        vkDestroyBuffer(m_device, m_vertexBuffer, nullptr);
+        vkDestroyBuffer(m_device, m_indexBuffer, GetVulkanAllocationCallbacks());
+        vkDestroyBuffer(m_device, m_vertexBuffer, GetVulkanAllocationCallbacks());
 
         for (size_t frameIndex = 0; frameIndex < NTF_FRAMES_IN_FLIGHT_NUM; ++frameIndex)
         {
-            vkDestroySemaphore(m_device, m_renderFinishedSemaphore[frameIndex], nullptr);
-            vkDestroySemaphore(m_device, m_imageAvailableSemaphore[frameIndex], nullptr);
-            vkDestroyFence(m_device, m_fence[frameIndex], nullptr);
+            vkDestroySemaphore(m_device, m_renderFinishedSemaphore[frameIndex], GetVulkanAllocationCallbacks());
+            vkDestroySemaphore(m_device, m_imageAvailableSemaphore[frameIndex], GetVulkanAllocationCallbacks());
+            vkDestroyFence(m_device, m_fence[frameIndex], GetVulkanAllocationCallbacks());
         }
 
-        vkDestroyCommandPool(m_device, m_commandPoolPrimary, nullptr);
+        vkDestroyCommandPool(m_device, m_commandPoolPrimary, GetVulkanAllocationCallbacks());
         for (auto& commandPoolSecondaryArray : m_commandPoolsSecondary)
         {
             for (auto& commandPoolSecondary : commandPoolSecondaryArray)
             {
-                vkDestroyCommandPool(m_device, commandPoolSecondary, nullptr);
+                vkDestroyCommandPool(m_device, commandPoolSecondary, GetVulkanAllocationCallbacks());
             }
         }
 
         vkUnmapMemory(m_device, m_stagingBufferGpuMemory);
-        vkDestroyBuffer(m_device, m_stagingBufferGpu, nullptr);
+        vkDestroyBuffer(m_device, m_stagingBufferGpu, GetVulkanAllocationCallbacks());
         m_stagingBufferMemoryMapCpuToGpu.Reset();
 
         m_deviceLocalMemory.Destroy(m_device);
-        vkDestroyDevice(m_device, nullptr);
-        DestroyDebugReportCallbackEXT(m_instance, m_callback, nullptr);
-        vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
-        vkDestroyInstance(m_instance, nullptr);
+        vkDestroyDevice(m_device, GetVulkanAllocationCallbacks());
+        DestroyDebugReportCallbackEXT(m_instance, m_callback, GetVulkanAllocationCallbacks());
+        vkDestroySurfaceKHR(m_instance, m_surface, GetVulkanAllocationCallbacks());
+        vkDestroyInstance(m_instance, GetVulkanAllocationCallbacks());
 
         glfwDestroyWindow(m_window);
 

@@ -21,9 +21,13 @@ inline void* AlignedMalloc(size_t size, size_t alignment)
     return ret;
 }
 
+inline void* AlignedRealloc(void* mem, size_t size, size_t alignment)
+{
+    return _aligned_realloc(mem, size, alignment);
+}
+
 inline void AlignedFree(void* mem)
 {
-    assert(mem);
     _aligned_free(mem);
 }
 
