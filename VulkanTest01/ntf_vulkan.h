@@ -480,20 +480,17 @@ public:
 
     inline bool SufficientMemory(const VkMemoryRequirements& memRequirements) const
     {
-#if NTF_DEBUG
         assert(m_stack.Allocated());
-#endif//#if NTF_DEBUG
         VkDeviceSize dummy0, dummy1;
         return PushAlloc(&dummy0, &dummy1, memRequirements);
     }
     bool PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemoryRequirements& memRequirements);
     inline VkDeviceMemory GetMemoryHandle() const 
     { 
-#if NTF_DEBUG
         assert(m_stack.Allocated()); 
-#endif//#if NTF_DEBUG
         return m_memoryHandle; 
     }
+    inline bool Allocated() const { return m_stack.Allocated(); }
 
     VulkanMemoryHeapPage* m_next;
 private:
@@ -510,8 +507,7 @@ private:
 class VulkanMemoryHeap
 {
 public:
-    VulkanMemoryHeap():
-    m_pageResidentForeverAllocated(false)
+    VulkanMemoryHeap()
     {
 #if NTF_DEBUG
         m_initialized = false;
@@ -528,6 +524,7 @@ public:
         const VkMemoryRequirements& memRequirements,
         const VkMemoryPropertyFlags& properties,
         const bool residentForever,
+        const bool linearResource,
         const VkDevice& device,
         const VkPhysicalDevice& physicalDevice);
 
@@ -539,13 +536,15 @@ private:
 #endif//#if NTF_DEBUG
     uint32_t m_memoryTypeIndex;
     VkDeviceSize m_pageSizeBytes;
-    
+
+    /** we are not concerned with VkPhysicalDeviceLimits::bufferImageGranularity, because linear and optimally accessed resources are suballocated 
+        from different VkDeviceMemory objects, so there's no need to worry about bufferImageGranularity's often-egregious alignment requirements */
+    VulkanMemoryHeapPage* m_pageAllocatedLinearFirst;
+    VulkanMemoryHeapPage* m_pageAllocatedNonlinearFirst;
     VulkanMemoryHeapPage* m_pageFreeFirst;
-    VulkanMemoryHeapPage* m_pageAllocatedFirst;
     ArraySafe<VulkanMemoryHeapPage, 32> m_pagePool;
 
-    VulkanMemoryHeapPage m_pageResidentForever;
-    bool m_pageResidentForeverAllocated;
+    VulkanMemoryHeapPage m_pageResidentForeverNonlinear, m_pageResidentForeverLinear;
 };
 
 ///@todo: unit test
@@ -569,6 +568,7 @@ public:
         const VkMemoryRequirements& memRequirements,
         const VkMemoryPropertyFlags& properties,
         const bool residentForever,
+        const bool linearResource,
         const VkDevice& device,
         const VkPhysicalDevice& physicalDevice);
 

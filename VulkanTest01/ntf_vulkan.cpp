@@ -433,6 +433,7 @@ void CreateImage(
         memRequirements,
         properties,
         residentForever, 
+        tiling == VK_IMAGE_TILING_LINEAR,
         device,
         physicalDevice);
     assert(allocateMemoryResult);
@@ -540,6 +541,7 @@ void CreateBuffer(
         memRequirements,
         properties,
         residentForever,
+        true,
         device,
         physicalDevice);
     assert(allocateMemoryResult);
@@ -2510,7 +2512,6 @@ void CreateImageViews(
     }
 }
 
-
 void VulkanPagedStackAllocator::Initialize(const VkDevice& device,const VkPhysicalDevice& physicalDevice)
 {
 #if NTF_DEBUG
@@ -2550,6 +2551,7 @@ bool VulkanPagedStackAllocator::PushAlloc(
     const VkMemoryRequirements& memRequirements,
     const VkMemoryPropertyFlags& properties,
     const bool residentForever,
+    const bool linearResource,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -2566,7 +2568,15 @@ bool VulkanPagedStackAllocator::PushAlloc(
     assert(memRequirements.alignment % 2 == 0);
 
     auto& heap = m_vulkanMemoryHeaps[FindMemoryType(memRequirements.memoryTypeBits, properties, physicalDevice)];
-    const bool allocResult = heap.PushAlloc(&memoryOffset, &memoryHandle, memRequirements, properties, residentForever, device, physicalDevice);
+    const bool allocResult = heap.PushAlloc(
+        &memoryOffset, 
+        &memoryHandle, 
+        memRequirements, 
+        properties, 
+        residentForever, 
+        linearResource, 
+        device, 
+        physicalDevice);
     assert(allocResult);
     return allocResult;
 }
@@ -2580,7 +2590,7 @@ void VulkanMemoryHeap::Initialize(const uint32_t memoryTypeIndex, const VkDevice
 
     m_memoryTypeIndex = memoryTypeIndex;
     m_pageSizeBytes = memoryHeapPageSizeBytes;
-    m_pageAllocatedFirst = nullptr;
+    m_pageAllocatedNonlinearFirst = m_pageAllocatedLinearFirst = nullptr;
 
     const size_t pagesNum = m_pagePool.size();
     VulkanMemoryHeapPage* pageCurrent = m_pageFreeFirst = &m_pagePool[0];
@@ -2592,6 +2602,29 @@ void VulkanMemoryHeap::Initialize(const uint32_t memoryTypeIndex, const VkDevice
     pageCurrent->m_next = nullptr;
 }
 
+///@todo: unit tests
+static void VulkanMemoryHeapPageFreeAll(
+    VulkanMemoryHeapPage**const pageAllocatedFirstPtrPtr, 
+    VulkanMemoryHeapPage**const pageFreeFirstPtrPtr, 
+    const VkDevice device)
+{
+    assert(pageAllocatedFirstPtrPtr);
+    assert(pageFreeFirstPtrPtr);
+
+    //free pages and add them to freelist
+    VulkanMemoryHeapPage*& pageFreeFirst = *pageFreeFirstPtrPtr;
+    VulkanMemoryHeapPage*& allocatedPage = *pageAllocatedFirstPtrPtr;
+    while (allocatedPage)
+    {
+        allocatedPage->Free(device);
+
+        VulkanMemoryHeapPage*const nextAllocatedPage = allocatedPage->m_next;
+        allocatedPage->m_next = pageFreeFirst;
+        pageFreeFirst = allocatedPage;
+        allocatedPage = nextAllocatedPage;
+    }
+    *pageAllocatedFirstPtrPtr = nullptr;
+}
 void VulkanMemoryHeap::Destroy(const VkDevice device)
 {
 #if NTF_DEBUG
@@ -2599,28 +2632,30 @@ void VulkanMemoryHeap::Destroy(const VkDevice device)
     m_initialized = false;
 #endif//#if NTF_DEBUG    
 
-    if (m_pageResidentForeverAllocated)
+    if (m_pageResidentForeverNonlinear.Allocated())
     {
-        m_pageResidentForever.Free(device);
-        m_pageResidentForeverAllocated = false;
+        m_pageResidentForeverNonlinear.Free(device);
+    }
+    if (m_pageResidentForeverLinear.Allocated())
+    {
+        m_pageResidentForeverLinear.Free(device);
     }
 
-    VulkanMemoryHeapPage* freePage = m_pageFreeFirst;
-    assert(freePage);
-    while (freePage->m_next != nullptr)
-    {
-        freePage = freePage->m_next;
-    }
+    VulkanMemoryHeapPageFreeAll(&m_pageAllocatedLinearFirst, &m_pageFreeFirst, device);
+    VulkanMemoryHeapPageFreeAll(&m_pageAllocatedNonlinearFirst, &m_pageFreeFirst, device);
+}
 
-    VulkanMemoryHeapPage* allocatedPage = m_pageAllocatedFirst;
-    while (allocatedPage)
+static VulkanMemoryHeapPage* AllocatePageIfNotAlreadyAllocated(
+    VulkanMemoryHeapPage*const page, 
+    const uint32_t memoryTypeIndex, 
+    const VkDevice& device)
+{
+    assert(page);
+    if (!page->Allocated())
     {
-        allocatedPage->Free(device);
-        freePage->m_next = allocatedPage;
-        freePage = allocatedPage;
-        allocatedPage = allocatedPage->m_next;
+        page->Allocate(256*1024*1024, memoryTypeIndex, device);
     }
-    m_pageAllocatedFirst = nullptr;
+    return page;
 }
 
 bool VulkanMemoryHeap::PushAlloc(
@@ -2629,6 +2664,7 @@ bool VulkanMemoryHeap::PushAlloc(
     const VkMemoryRequirements& memRequirements,
     const VkMemoryPropertyFlags& properties,
     const bool residentForever,
+    const bool linearResource,///<true for buffers and VK_IMAGE_TILING_LINEAR images; false for VK_IMAGE_TILING_OPTIMAL images
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -2643,16 +2679,16 @@ bool VulkanMemoryHeap::PushAlloc(
     VulkanMemoryHeapPage* pageAllocatedCurrent;
     if (residentForever)
     {
-        if (!m_pageResidentForeverAllocated)
+        pageAllocatedCurrent = linearResource ? &m_pageResidentForeverLinear : &m_pageResidentForeverNonlinear;
+        if (!pageAllocatedCurrent->Allocated())
         {
-            m_pageResidentForever.Allocate(256*1024*1024, m_memoryTypeIndex, device);
-            m_pageResidentForeverAllocated = true;
+            pageAllocatedCurrent->Allocate(256*1024*1024, m_memoryTypeIndex, device);
         }
-        pageAllocatedCurrent = &m_pageResidentForever;
     }
     else
     {
-        pageAllocatedCurrent = m_pageAllocatedFirst;
+        VulkanMemoryHeapPage*& pageAllocatedFirst = linearResource ? m_pageAllocatedLinearFirst : m_pageAllocatedNonlinearFirst;
+        pageAllocatedCurrent = pageAllocatedFirst;
         VulkanMemoryHeapPage* pageAllocatedPrevious = nullptr;
         while (pageAllocatedCurrent)
         {
@@ -2672,7 +2708,7 @@ bool VulkanMemoryHeap::PushAlloc(
             m_pageFreeFirst = m_pageFreeFirst->m_next;
 
             pageNew.Allocate(m_pageSizeBytes, m_memoryTypeIndex, device);
-            (pageAllocatedPrevious ? pageAllocatedPrevious->m_next : m_pageAllocatedFirst) = pageAllocatedCurrent = &pageNew;
+            (pageAllocatedPrevious ? pageAllocatedPrevious->m_next : pageAllocatedFirst) = pageAllocatedCurrent = &pageNew;
         }
     }
     assert(pageAllocatedCurrent);
