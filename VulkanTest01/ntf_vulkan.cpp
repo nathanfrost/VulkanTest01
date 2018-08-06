@@ -275,7 +275,7 @@ void CopyBufferToImage(
     const uint32_t width,
     const uint32_t height,
     const VkCommandPool& commandPool,
-    const VkQueue& graphicsQueue,
+    const VkQueue& transferQueue,
     const VkDevice& device)
 {
     VkCommandBuffer commandBuffer;
@@ -294,7 +294,7 @@ void CopyBufferToImage(
 
     vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-    EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue, device);
+    EndSingleTimeCommands(commandBuffer, commandPool, transferQueue, device);
 }
 
 void TransitionImageLayout(
