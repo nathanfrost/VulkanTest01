@@ -417,7 +417,7 @@ void CreateImage(
     imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
     imageInfo.usage = usage;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;//used by only one queue family
+    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;//used by only one queue family at a time
 
     const VkResult createImageResult = vkCreateImage(device, &imageInfo, &s_allocationCallbacks, &image);
     NTF_VK_ASSERT_SUCCESS(createImageResult);
@@ -814,7 +814,7 @@ bool IsDeviceSuitable(
     VkPhysicalDeviceFeatures supportedFeatures;
     vkGetPhysicalDeviceFeatures(physicalDevice, &supportedFeatures);
 
-    return indices.isComplete() && extensionsSupported && supportedFeatures.samplerAnisotropy;
+    return indices.IsComplete() && extensionsSupported && supportedFeatures.samplerAnisotropy;
 }
 
 bool PickPhysicalDevice(
@@ -863,6 +863,7 @@ void CreateLogicalDevice(
     VkDevice*const devicePtr,
     VkQueue*const graphicsQueuePtr,
     VkQueue*const presentQueuePtr,
+    VkQueue*const transferQueuePtr,
     ConstVectorSafeRef<const char*> deviceExtensions,
     ConstVectorSafeRef<const char*> validationLayers,
     const VkSurfaceKHR& surface,
@@ -874,14 +875,17 @@ void CreateLogicalDevice(
     assert(presentQueuePtr);
     VkQueue& presentQueue = *presentQueuePtr;
 
+    assert(transferQueuePtr);
+    VkQueue& transferQueue = *transferQueuePtr;
+
     assert(devicePtr);
     auto& device = *devicePtr;
 
     QueueFamilyIndices indices = FindQueueFamilies(physicalDevice, surface);
 
-    const uint32_t queueFamiliesNum = 2;
+    const uint32_t queueFamiliesNum = 3;
     VectorSafe<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos(0);
-    VectorSafe<int, queueFamiliesNum> uniqueQueueFamilies({ indices.graphicsFamily, indices.presentFamily });
+    VectorSafe<int, queueFamiliesNum> uniqueQueueFamilies({ indices.graphicsFamily, indices.presentFamily, indices.transferFamily });
     SortAndRemoveDuplicatesFromVectorSafe(&uniqueQueueFamilies);
 
     const float queuePriority = 1.0f;
@@ -921,6 +925,7 @@ void CreateLogicalDevice(
 
     vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
     vkGetDeviceQueue(device, indices.presentFamily, 0, &presentQueue);
+    vkGetDeviceQueue(device, indices.transferFamily, 0, &transferQueue);
 }
 
 void DescriptorTypeAssertOnInvalid(const VkDescriptorType descriptorType)
@@ -1675,16 +1680,14 @@ void EndSingleTimeCommands(const VkCommandBuffer& commandBuffer, const VkCommand
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
-void CreateCommandPool(VkCommandPool*const commandPoolPtr, const VkSurfaceKHR& surface, const VkDevice& device, const VkPhysicalDevice& physicalDevice)
+void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queueFamilyIndex, const VkDevice& device, const VkPhysicalDevice& physicalDevice)
 {
     assert(commandPoolPtr);
     auto& commandPool = *commandPoolPtr;
 
-    QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(physicalDevice, surface);
-
     VkCommandPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily;
+    poolInfo.queueFamilyIndex = queueFamilyIndex;
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;   //options:  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new commands very often(may change memory allocation behavior)
                                                                         //          VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : Allow command buffers to be rerecorded individually, without this flag they all have to be reset together
     const VkResult createCommandPoolResult = vkCreateCommandPool(device, &poolInfo, &s_allocationCallbacks, &commandPool);
@@ -1797,8 +1800,10 @@ void CreateTextureImage(
     VulkanPagedStackAllocator*const allocatorPtr,
     const VkBuffer& stagingBufferGpu,
     const bool residentForever,
-    const VkCommandPool& commandPool,
+    const VkQueue& transferQueue,
+    const VkCommandPool& commandPoolTransfer,
     const VkQueue& graphicsQueue,
+    const VkCommandPool& commandPoolGraphics,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -1842,23 +1847,23 @@ void CreateTextureImage(
         VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        commandPool,
-        graphicsQueue,
+        commandPoolTransfer,
+        transferQueue,
         device);
     CopyBufferToImage(
         stagingBufferGpu,
         textureImage,
         static_cast<uint32_t>(texWidth),
         static_cast<uint32_t>(texHeight),
-        commandPool,
-        graphicsQueue,
+        commandPoolTransfer,
+        transferQueue,
         device);
     TransitionImageLayout(
         textureImage,
         VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        commandPool,
+        commandPoolGraphics,
         graphicsQueue,
         device);
 }
@@ -2244,25 +2249,31 @@ QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice& device, const VkSur
     for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < queueFamilyCount; ++queueFamilyIndex)
     {
         const VkQueueFamilyProperties& queueFamilyProperties = queueFamilies[queueFamilyIndex];
-        if (queueFamilyProperties.queueCount > 0 && queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        if (queueFamilyProperties.queueCount > 0)
         {
-            indices.graphicsFamily = queueFamilyIndex;//queue supports rendering functionality
+            ///@todo NTF: add logic to explicitly prefer a physical device that supports drawing and presentation in the same queue for improved performance rather than use presentFamily and graphicsFamily as separate queues
+            if ((queueFamilyProperties.queueFlags & VK_QUEUE_TRANSFER_BIT) && !(queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT))
+            {
+                indices.transferFamily = queueFamilyIndex;
+            }
+            
+            if (queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            {
+                indices.graphicsFamily = queueFamilyIndex;//queue supports rendering functionality
+            }
+
+            VkBool32 presentSupport = false;
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, queueFamilyIndex, surface, &presentSupport);
+            if (presentSupport)
+            {
+                indices.presentFamily = queueFamilyIndex;//queue supports present functionality
+            }
         }
 
-        //TODO NTF: add logic to explicitly prefer a physical device that supports drawing and presentation in the same queue for improved performance rather than use presentFamily and graphicsFamily as separate queues
-        VkBool32 presentSupport = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(device, queueFamilyIndex, surface, &presentSupport);
-        if (queueFamilyProperties.queueCount > 0 && presentSupport)
-        {
-            indices.presentFamily = queueFamilyIndex;//queue supports present functionality
-        }
-
-        if (indices.isComplete())
+        if (indices.IsComplete())
         {
             break;
         }
-
-        queueFamilyIndex++;
     }
 
     return indices;

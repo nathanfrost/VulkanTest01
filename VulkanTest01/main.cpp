@@ -111,6 +111,12 @@ public:
             }
         }
         //#CommandPoolDuplication
+        AllocateCommandBuffers(
+            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
+            m_commandPoolTransfer,
+            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            1,
+            m_device);
     }
 
 private:
@@ -190,6 +196,7 @@ private:
         }
 
         vkDestroyCommandPool(m_device, m_commandPoolPrimary, GetVulkanAllocationCallbacks());
+        vkDestroyCommandPool(m_device, m_commandPoolTransfer, GetVulkanAllocationCallbacks());
         for (auto& commandPoolSecondaryArray : m_commandPoolsSecondary)
         {
             for (auto& commandPoolSecondary : commandPoolSecondaryArray)
@@ -229,7 +236,15 @@ private:
         m_callback = SetupDebugCallback(m_instance);
         CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
         PickPhysicalDevice(&m_physicalDevice, m_surface, m_deviceExtensions, m_instance);
-        CreateLogicalDevice(&m_device, &m_graphicsQueue, &m_presentQueue, m_deviceExtensions, s_validationLayers, m_surface, m_physicalDevice);
+        CreateLogicalDevice(
+            &m_device, 
+            &m_graphicsQueue, 
+            &m_presentQueue, 
+            &m_transferQueue, 
+            m_deviceExtensions, 
+            s_validationLayers, 
+            m_surface, 
+            m_physicalDevice);
         CreateSwapChain(
             m_window, 
             &m_swapChain, 
@@ -253,7 +268,10 @@ private:
             m_descriptorSetLayout, 
             m_swapChainExtent, 
             m_device);
-        CreateCommandPool(&m_commandPoolPrimary, m_surface, m_device, m_physicalDevice);
+
+        const QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
+        CreateCommandPool(&m_commandPoolPrimary, queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
+        CreateCommandPool(&m_commandPoolTransfer, queueFamilyIndices.transferFamily, m_device, m_physicalDevice);
 
         m_deviceLocalMemory.Initialize(m_device, m_physicalDevice);
 
@@ -275,7 +293,7 @@ private:
         {
             for (auto& commandPoolSecondary : commandPoolSecondaryArray)
             {
-                CreateCommandPool(&commandPoolSecondary, m_surface, m_device, m_physicalDevice);
+                CreateCommandPool(&commandPoolSecondary, queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
             }
         }
 
@@ -304,8 +322,10 @@ private:
             &m_deviceLocalMemory,
             m_stagingBufferGpu,
             false,
+            m_transferQueue,
+            m_commandPoolTransfer,
+            m_graphicsQueue,
             m_commandPoolPrimary,
-            m_graphicsQueue, 
             m_device, 
             m_physicalDevice);
         CreateTextureImageView(&m_textureImageView, m_textureImage, m_device);
@@ -395,6 +415,12 @@ private:
             }
         }
         //#CommandPoolDuplication
+        AllocateCommandBuffers(
+            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
+            m_commandPoolTransfer,
+            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            1,
+            m_device);
         CreateFrameSyncPrimitives(&m_imageAvailableSemaphore, &m_renderFinishedSemaphore, &m_fence, NTF_FRAMES_IN_FLIGHT_NUM, m_device);
     }
 
@@ -471,8 +497,7 @@ private:
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;//doesn't need to be deleted, since physical devices can't be created or destroyed by software
     VkDevice m_device;//interface to the physical device; must be destroyed before the physical device
     VkSwapchainKHR m_swapChain;//must be destroyed before the logical device
-    VkQueue m_graphicsQueue;//queues are implicitly cleaned up with the logical device; no need to delete
-    VkQueue m_presentQueue;//queues are implicitly cleaned up with the logical device; no need to delete
+    VkQueue m_graphicsQueue, m_presentQueue, m_transferQueue;//queues are implicitly cleaned up with the logical device; no need to delete
     VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM> m_deviceExtensions;
     enum { kSwapChainImagesNumMax=8 };
     VectorSafe<VkImage, kSwapChainImagesNumMax> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html
@@ -484,7 +509,7 @@ private:
     VkDescriptorSetLayout m_descriptorSetLayout;
     VkPipelineLayout m_pipelineLayout;
     VkPipeline m_graphicsPipeline;
-    VkCommandPool m_commandPoolPrimary;
+    VkCommandPool m_commandPoolPrimary, m_commandPoolTransfer;
     VectorSafe<ArraySafe<VkCommandPool, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandPoolsSecondary;
     VkImage m_depthImage;
     VkDeviceMemory m_depthImageMemory;
@@ -517,6 +542,7 @@ private:
     VkDeviceSize m_uniformBufferCpuAlignment;
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
     VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondary;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kSizeMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kSizeMax>& vectorSafe) -- not sure why
+    VkCommandBuffer m_commandBufferTransfer;//automatically freed when VkCommandPool is destroyed
 
     ArraySafe<CommandBufferSecondaryThread, NTF_OBJECTS_NUM> m_commandBufferSecondaryThreads;
     ArraySafe<HANDLE, NTF_OBJECTS_NUM> m_commandBufferThreadDoneEvents;

@@ -74,21 +74,27 @@ size_t GetVulkanApiCpuBytesAllocatedMax();
 #endif//#if NTF_DEBUG
 HANDLE ThreadSignalingEventCreate();
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device);
-void CopyBufferToImage(
-    const VkBuffer& buffer,
-    const VkImage& image,
-    const uint32_t width,
-    const uint32_t height,
-    const VkCommandPool& commandPool,
+void CreateTextureImage(
+    VkImage*const textureImagePtr,
+    VkDeviceMemory*const textureImageMemoryPtr,
+    StackCpu*const stbAllocatorPtr,
+    ArraySafeRef<uint8_t> stagingBufferMemoryMapCpuToGpu,
+    VulkanPagedStackAllocator*const allocatorPtr,
+    const VkBuffer& stagingBufferGpu,
+    const bool residentForever,
+    const VkQueue& transferQueue,
+    const VkCommandPool& commandPoolTransfer,
     const VkQueue& graphicsQueue,
-    const VkDevice& device);
+    const VkCommandPool& commandPoolGraphics,
+    const VkDevice& device,
+    const VkPhysicalDevice& physicalDevice);
 void TransitionImageLayout(
     const VkImage& image,
     const VkFormat& format,
     const VkImageLayout& oldLayout,
     const VkImageLayout& newLayout,
     const VkCommandPool& commandPool,
-    const VkQueue& graphicsQueue,
+    const VkQueue& queue,
     const VkDevice& device);
 void CreateImage(
     VkImage*const imagePtr,
@@ -215,10 +221,11 @@ struct QueueFamilyIndices
 {
     int graphicsFamily = -1;
     int presentFamily = -1;
+    int transferFamily = -1;
 
-    bool isComplete()
+    bool IsComplete()
     {
-        return graphicsFamily >= 0 && presentFamily >= 0;
+        return graphicsFamily >= 0 && presentFamily >= 0 && transferFamily >= 0;
     }
 };
 
@@ -279,6 +286,7 @@ void CreateLogicalDevice(
     VkDevice*const devicePtr,
     VkQueue*const graphicsQueuePtr,
     VkQueue*const presentQueuePtr,
+    VkQueue*const transferQueuePtr,
     ConstVectorSafeRef<const char*> deviceExtensions,
     ConstVectorSafeRef<const char*> validationLayers,
     const VkSurfaceKHR& surface,
@@ -385,7 +393,7 @@ void CreateAndCopyToGpuBuffer(
     const VkPhysicalDevice& physicalDevice);
 
 void EndSingleTimeCommands(const VkCommandBuffer& commandBuffer, const VkCommandPool commandPool, const VkQueue& graphicsQueue, const VkDevice& device);
-void CreateCommandPool(VkCommandPool*const commandPoolPtr, const VkSurfaceKHR& surface, const VkDevice& device, const VkPhysicalDevice& physicalDevice);
+void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queueFamilyIndex, const VkDevice& device, const VkPhysicalDevice& physicalDevice);
 void CreateDepthResources(
     VkImage*const depthImagePtr,
     VkDeviceMemory*const depthImageMemoryPtr,
@@ -418,8 +426,10 @@ void CreateTextureImage(
     VulkanPagedStackAllocator*const allocatorPtr,
     const VkBuffer& stagingBufferGpu,
     const bool residentForever,
-    const VkCommandPool& commandPool,
+    const VkQueue& transferQueue,
+    const VkCommandPool& commandPoolTransfer,
     const VkQueue& graphicsQueue,
+    const VkCommandPool& commandPoolGraphics,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& device);
