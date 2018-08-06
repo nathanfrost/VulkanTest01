@@ -446,7 +446,7 @@ void CopyBuffer(
     const VkBuffer& dstBuffer,
     const VkDeviceSize& size,
     const VkCommandPool& commandPool,
-    const VkQueue& graphicsQueue,
+    const VkQueue& transferQueue,
     const VkDevice& device)
 {
     VkCommandBuffer commandBuffer;
@@ -456,7 +456,7 @@ void CopyBuffer(
     copyRegion.size = size;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 
-    EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue, device);
+    EndSingleTimeCommands(commandBuffer, commandPool, transferQueue, device);
 }
 
 /* Heap classification:
@@ -1630,7 +1630,7 @@ void CreateAndCopyToGpuBuffer(
     const VkMemoryPropertyFlags &flags,
     const bool residentForever,
     const VkCommandPool& commandPool,
-    const VkQueue& graphicsQueue,
+    const VkQueue& transferQueue,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -1661,7 +1661,7 @@ void CreateAndCopyToGpuBuffer(
         device,
         physicalDevice);
 
-    CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandPool, graphicsQueue, device);
+    CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandPool, transferQueue, device);
 }
 
 void EndSingleTimeCommands(const VkCommandBuffer& commandBuffer, const VkCommandPool commandPool, const VkQueue& graphicsQueue, const VkDevice& device)

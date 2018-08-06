@@ -346,8 +346,8 @@ private:
             sizeof(m_vertices[0]) * m_vertices.size(),
             VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
             false,
-            m_commandPoolPrimary,
-            m_graphicsQueue,
+            m_commandPoolTransfer,
+            m_transferQueue,
             m_device,
             m_physicalDevice);
         CreateAndCopyToGpuBuffer(
@@ -360,8 +360,8 @@ private:
             sizeof(m_indices[0]) * m_indices.size(),
             VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             false,
-            m_commandPoolPrimary,
-            m_graphicsQueue,
+            m_commandPoolTransfer,
+            m_transferQueue,
             m_device,
             m_physicalDevice);
         

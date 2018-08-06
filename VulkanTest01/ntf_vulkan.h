@@ -388,7 +388,7 @@ void CreateAndCopyToGpuBuffer(
     const VkMemoryPropertyFlags &flags,
     const bool residentForever,
     const VkCommandPool& commandPool,
-    const VkQueue& graphicsQueue,
+    const VkQueue& transferQueue,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 
