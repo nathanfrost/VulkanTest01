@@ -40,7 +40,7 @@ void STBAllocatorDestroy()
 
 //BEG_#AllocationCallbacks
 static VkAllocationCallbacks s_allocationCallbacks;
-VkAllocationCallbacks* GetVulkanAllocationCallbacks() { return &s_allocationCallbacks; }
+VkAllocationCallbacks* GetVulkanAllocationCallbacks() { return nullptr;/* &s_allocationCallbacks;*/ }
 
 #if NTF_DEBUG
 //BEG_HAC_#AllocationTracking
@@ -419,7 +419,7 @@ void CreateImage(
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;//used by only one queue family at a time
 
-    const VkResult createImageResult = vkCreateImage(device, &imageInfo, &s_allocationCallbacks, &image);
+    const VkResult createImageResult = vkCreateImage(device, &imageInfo, GetVulkanAllocationCallbacks(), &image);
     NTF_VK_ASSERT_SUCCESS(createImageResult);
 
     VkMemoryRequirements memRequirements;
@@ -529,7 +529,7 @@ void CreateBuffer(
     bufferInfo.usage = usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-    const VkResult createBufferResult = vkCreateBuffer(device, &bufferInfo, &s_allocationCallbacks, &buffer);
+    const VkResult createBufferResult = vkCreateBuffer(device, &bufferInfo, GetVulkanAllocationCallbacks(), &buffer);
     NTF_VK_ASSERT_SUCCESS(createBufferResult);
 
     VkMemoryRequirements memRequirements;
@@ -570,7 +570,7 @@ void CreateShaderModule(VkShaderModule*const shaderModulePtr, char*const code, c
     createInfo.codeSize = codeSizeBytes;
     createInfo.pCode = reinterpret_cast<uint32_t*>(code);
 
-    const VkResult createShaderModuleResult = vkCreateShaderModule(device, &createInfo, &s_allocationCallbacks, &shaderModule);
+    const VkResult createShaderModuleResult = vkCreateShaderModule(device, &createInfo, GetVulkanAllocationCallbacks(), &shaderModule);
     NTF_VK_ASSERT_SUCCESS(createShaderModuleResult);
 }
 
@@ -627,7 +627,7 @@ void CreateImageView(VkImageView*const imageViewPtr, const VkDevice& device, con
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
 
-    const VkResult createImageViewResult = vkCreateImageView(device, &viewInfo, &s_allocationCallbacks, &imageView);
+    const VkResult createImageViewResult = vkCreateImageView(device, &viewInfo, GetVulkanAllocationCallbacks(), &imageView);
     NTF_VK_ASSERT_SUCCESS(createImageViewResult);
 }
 
@@ -920,7 +920,7 @@ void CreateLogicalDevice(
         createInfo.enabledLayerCount = 0;
     }
 
-    const VkResult createDeviceResult = vkCreateDevice(physicalDevice, &createInfo, &s_allocationCallbacks, &device);
+    const VkResult createDeviceResult = vkCreateDevice(physicalDevice, &createInfo, GetVulkanAllocationCallbacks(), &device);
     NTF_VK_ASSERT_SUCCESS(createDeviceResult);
 
     vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
@@ -961,7 +961,7 @@ void CreateDescriptorSetLayout(VkDescriptorSetLayout*const descriptorSetLayoutPt
     layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     layoutInfo.pBindings = bindings.data();
 
-    const VkResult createDescriptorSetLayoutResult = vkCreateDescriptorSetLayout(device, &layoutInfo, &s_allocationCallbacks, &descriptorSetLayout);
+    const VkResult createDescriptorSetLayoutResult = vkCreateDescriptorSetLayout(device, &layoutInfo, GetVulkanAllocationCallbacks(), &descriptorSetLayout);
     NTF_VK_ASSERT_SUCCESS(createDescriptorSetLayoutResult);
 }
 
@@ -1167,7 +1167,7 @@ void CreateGraphicsPipeline(
     pipelineLayoutInfo.pushConstantRangeCount = 1;
     pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
-    const VkResult createPipelineLayoutResult = vkCreatePipelineLayout(device, &pipelineLayoutInfo, &s_allocationCallbacks, &pipelineLayout);
+    const VkResult createPipelineLayoutResult = vkCreatePipelineLayout(device, &pipelineLayoutInfo, GetVulkanAllocationCallbacks(), &pipelineLayout);
     NTF_VK_ASSERT_SUCCESS(createPipelineLayoutResult);
 
     VkGraphicsPipelineCreateInfo pipelineInfo = {};
@@ -1187,11 +1187,11 @@ void CreateGraphicsPipeline(
     pipelineInfo.pDepthStencilState = &depthStencil;
 
     const VkResult createGraphicsPipelineResult = 
-        vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, &s_allocationCallbacks, &graphicsPipeline);
+        vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, GetVulkanAllocationCallbacks(), &graphicsPipeline);
     NTF_VK_ASSERT_SUCCESS(createGraphicsPipelineResult);
 
-    vkDestroyShaderModule(device, fragShaderModule, &s_allocationCallbacks);
-    vkDestroyShaderModule(device, vertShaderModule, &s_allocationCallbacks);
+    vkDestroyShaderModule(device, fragShaderModule, GetVulkanAllocationCallbacks());
+    vkDestroyShaderModule(device, vertShaderModule, GetVulkanAllocationCallbacks());
 }
 
 void CreateRenderPass(
@@ -1270,7 +1270,7 @@ void CreateRenderPass(
     renderPassInfo.dependencyCount = 1;
     renderPassInfo.pDependencies = &dependency;
 
-    const VkResult createRenderPassResult = vkCreateRenderPass(device, &renderPassInfo, &s_allocationCallbacks, &renderPass);
+    const VkResult createRenderPassResult = vkCreateRenderPass(device, &renderPassInfo, GetVulkanAllocationCallbacks(), &renderPass);
     NTF_VK_ASSERT_SUCCESS(createRenderPassResult);
 }
 
@@ -1463,7 +1463,7 @@ void DestroyUniformBuffer(
 {
     vkUnmapMemory(device, uniformBufferGpuMemory);
     uniformBufferCpuMemory.Reset();
-    vkDestroyBuffer(device, uniformBuffer, &s_allocationCallbacks);
+    vkDestroyBuffer(device, uniformBuffer, GetVulkanAllocationCallbacks());
 }
 
 void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDescriptorType descriptorType, const VkDevice& device)
@@ -1488,7 +1488,7 @@ void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDesc
     poolInfo.flags = 0;//if you allocate and free descriptors, don't use VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT here because that's abdicating memory allocation to the driver.  Instead use vkResetDescriptorPool() because it amounts to changing an offset for (de)allocation
 
 
-    const VkResult createDescriptorPoolResult = vkCreateDescriptorPool(device, &poolInfo, &s_allocationCallbacks, &descriptorPool);
+    const VkResult createDescriptorPoolResult = vkCreateDescriptorPool(device, &poolInfo, GetVulkanAllocationCallbacks(), &descriptorPool);
     NTF_VK_ASSERT_SUCCESS(createDescriptorPoolResult);
 }
 
@@ -1690,7 +1690,7 @@ void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queue
     poolInfo.queueFamilyIndex = queueFamilyIndex;
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;   //options:  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT: Hint that command buffers are rerecorded with new commands very often(may change memory allocation behavior)
                                                                         //          VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT : Allow command buffers to be rerecorded individually, without this flag they all have to be reset together
-    const VkResult createCommandPoolResult = vkCreateCommandPool(device, &poolInfo, &s_allocationCallbacks, &commandPool);
+    const VkResult createCommandPoolResult = vkCreateCommandPool(device, &poolInfo, GetVulkanAllocationCallbacks(), &commandPool);
     NTF_VK_ASSERT_SUCCESS(createCommandPoolResult);
 }
 
@@ -1896,7 +1896,7 @@ void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& dev
     samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-    const VkResult createSamplerResult = vkCreateSampler(device, &samplerInfo, &s_allocationCallbacks, &textureSampler);
+    const VkResult createSamplerResult = vkCreateSampler(device, &samplerInfo, GetVulkanAllocationCallbacks(), &textureSampler);
     NTF_VK_ASSERT_SUCCESS(createSamplerResult);
 }
 
@@ -1928,7 +1928,7 @@ void CreateFramebuffers(
         framebufferInfo.height = swapChainExtent.height;
         framebufferInfo.layers = 1;//number of image arrays -- each swap chain image in pAttachments is a single image
 
-        const VkResult createFramebufferResult = vkCreateFramebuffer(device, &framebufferInfo, &s_allocationCallbacks, &swapChainFramebuffers[i]);
+        const VkResult createFramebufferResult = vkCreateFramebuffer(device, &framebufferInfo, GetVulkanAllocationCallbacks(), &swapChainFramebuffers[i]);
         NTF_VK_ASSERT_SUCCESS(createFramebufferResult);
     }
 }
@@ -1940,7 +1940,7 @@ void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const
 
     assert(window);
 
-    const VkResult createWindowSurfaceResult = glfwCreateWindowSurface(instance, window, &s_allocationCallbacks, &surface);//cross-platform window creation
+    const VkResult createWindowSurfaceResult = glfwCreateWindowSurface(instance, window, GetVulkanAllocationCallbacks(), &surface);//cross-platform window creation
     NTF_VK_ASSERT_SUCCESS(createWindowSurfaceResult);
 }
 
@@ -1963,12 +1963,12 @@ void CreateFrameSyncPrimitives(
 
     for (size_t frameIndex = 0; frameIndex < framesNum; ++frameIndex)
     {
-        if (vkCreateSemaphore(device, &semaphoreInfo, &s_allocationCallbacks, &imageAvailable[frameIndex]) != VK_SUCCESS ||
-            vkCreateSemaphore(device, &semaphoreInfo, &s_allocationCallbacks, &renderFinished[frameIndex]) != VK_SUCCESS)
+        if (vkCreateSemaphore(device, &semaphoreInfo, GetVulkanAllocationCallbacks(), &imageAvailable[frameIndex]) != VK_SUCCESS ||
+            vkCreateSemaphore(device, &semaphoreInfo, GetVulkanAllocationCallbacks(), &renderFinished[frameIndex]) != VK_SUCCESS)
         {
             assert(false);//failed to create semaphores
         }
-        if (vkCreateFence(device, &fenceInfo, &s_allocationCallbacks, &fence[frameIndex]) != VK_SUCCESS)
+        if (vkCreateFence(device, &fenceInfo, GetVulkanAllocationCallbacks(), &fence[frameIndex]) != VK_SUCCESS)
         {
             assert(false);//failed to create fence
         }
@@ -2190,7 +2190,7 @@ VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers)
     }
 
     VkInstance instance;
-    const VkResult createInstanceResult = vkCreateInstance(&createInfo, &s_allocationCallbacks, &instance);
+    const VkResult createInstanceResult = vkCreateInstance(&createInfo, GetVulkanAllocationCallbacks(), &instance);
     NTF_VK_ASSERT_SUCCESS(createInstanceResult);
     return instance;
 }
@@ -2205,7 +2205,7 @@ VkDebugReportCallbackEXT SetupDebugCallback(const VkInstance& instance)
     createInfo.pfnCallback = DebugCallback;
 
     VkDebugReportCallbackEXT callback;
-    const VkResult createDebugReportCallbackEXTResult = CreateDebugReportCallbackEXT(instance, &createInfo, &s_allocationCallbacks, &callback);//@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
+    const VkResult createDebugReportCallbackEXTResult = CreateDebugReportCallbackEXT(instance, &createInfo, GetVulkanAllocationCallbacks(), &callback);//@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
     NTF_VK_ASSERT_SUCCESS(createDebugReportCallbackEXTResult);
     return callback;
 }
@@ -2273,6 +2273,22 @@ QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice& device, const VkSur
         if (indices.IsComplete())
         {
             break;
+        }
+    }
+
+    if (indices.transferFamily < 0)//couldn't find a specialized transfer queue (here defined to be a queue that supports transfer but not graphics)
+    {
+        for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < queueFamilyCount; ++queueFamilyIndex)
+        {
+            const VkQueueFamilyProperties& queueFamilyProperties = queueFamilies[queueFamilyIndex];
+            if (queueFamilyProperties.queueCount > 0)
+            {
+                if (queueFamilyProperties.queueFlags & VK_QUEUE_TRANSFER_BIT)
+                {
+                    indices.transferFamily = queueFamilyIndex;//accept any queue that supports transfer
+                    break;
+                }
+            }
         }
     }
 
@@ -2429,7 +2445,7 @@ void CreateSwapChain(
     createInfo.clipped = VK_TRUE;//don't render pixels obscured by another window in front of our render target
     createInfo.oldSwapchain = VK_NULL_HANDLE;//assume we only need one swap chain (although it's possible for swap chains to get invalidated and need to be recreated by events like resizing the window)  TODO: understand more
 
-    const VkResult createSwapchainKHRResult = vkCreateSwapchainKHR(device, &createInfo, &s_allocationCallbacks, &swapChain);
+    const VkResult createSwapchainKHRResult = vkCreateSwapchainKHR(device, &createInfo, GetVulkanAllocationCallbacks(), &swapChain);
     NTF_VK_ASSERT_SUCCESS(createSwapchainKHRResult);
 
     //extract swap chain image handles
@@ -2467,12 +2483,12 @@ void CleanupSwapChain(
     assert(swapChainFramebuffers.size() == swapChainImageViews.size());
     assert(commandBuffersSecondary.size() > 0);
     
-    vkDestroyImageView(device, depthImageView, &s_allocationCallbacks);
-    vkDestroyImage(device, depthImage, &s_allocationCallbacks);
+    vkDestroyImageView(device, depthImageView, GetVulkanAllocationCallbacks());
+    vkDestroyImage(device, depthImage, GetVulkanAllocationCallbacks());
 
     for (const VkFramebuffer vkFramebuffer : swapChainFramebuffers)
     {
-        vkDestroyFramebuffer(device, vkFramebuffer, &s_allocationCallbacks);
+        vkDestroyFramebuffer(device, vkFramebuffer, GetVulkanAllocationCallbacks());
     }
 
     //return command buffers to the pool from whence they came
@@ -2496,16 +2512,16 @@ void CleanupSwapChain(
         }
     }
 
-    vkDestroyPipeline(device, graphicsPipeline, &s_allocationCallbacks);
-    vkDestroyPipelineLayout(device, pipelineLayout, &s_allocationCallbacks);
-    vkDestroyRenderPass(device, renderPass, &s_allocationCallbacks);
+    vkDestroyPipeline(device, graphicsPipeline, GetVulkanAllocationCallbacks());
+    vkDestroyPipelineLayout(device, pipelineLayout, GetVulkanAllocationCallbacks());
+    vkDestroyRenderPass(device, renderPass, GetVulkanAllocationCallbacks());
 
     for (const VkImageView vkImageView : swapChainImageViews)
     {
-        vkDestroyImageView(device, vkImageView, &s_allocationCallbacks);
+        vkDestroyImageView(device, vkImageView, GetVulkanAllocationCallbacks());
     }
 
-    vkDestroySwapchainKHR(device, swapChain, &s_allocationCallbacks);
+    vkDestroySwapchainKHR(device, swapChain, GetVulkanAllocationCallbacks());
 }
 
 void CreateImageViews(
@@ -2538,7 +2554,7 @@ void VulkanPagedStackAllocator::Initialize(const VkDevice& device,const VkPhysic
     m_vulkanMemoryHeaps.size(memProperties.memoryTypeCount);
     for (size_t memoryTypeIndex = 0; memoryTypeIndex < memProperties.memoryTypeCount; ++memoryTypeIndex)
     {
-        m_vulkanMemoryHeaps[memoryTypeIndex].Initialize(Cast_size_t_uint32_t(memoryTypeIndex), 256 * 1024 * 1024);
+        m_vulkanMemoryHeaps[memoryTypeIndex].Initialize(Cast_size_t_uint32_t(memoryTypeIndex), 128 * 1024 * 1024);
     }
 }
 
@@ -2656,19 +2672,6 @@ void VulkanMemoryHeap::Destroy(const VkDevice device)
     VulkanMemoryHeapPageFreeAll(&m_pageAllocatedNonlinearFirst, &m_pageFreeFirst, device);
 }
 
-static VulkanMemoryHeapPage* AllocatePageIfNotAlreadyAllocated(
-    VulkanMemoryHeapPage*const page, 
-    const uint32_t memoryTypeIndex, 
-    const VkDevice& device)
-{
-    assert(page);
-    if (!page->Allocated())
-    {
-        page->Allocate(256*1024*1024, memoryTypeIndex, device);
-    }
-    return page;
-}
-
 bool VulkanMemoryHeap::PushAlloc(
     VkDeviceSize* memoryOffsetPtr,
     VkDeviceMemory* memoryHandlePtr,
@@ -2742,7 +2745,8 @@ bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMaxBytes, const uin
     allocInfo.memoryTypeIndex = memoryTypeIndex;
     allocInfo.pNext = nullptr;
 
-    const VkResult allocateMemoryResult = vkAllocateMemory(device, &allocInfo, &s_allocationCallbacks, &m_memoryHandle);
+    const VkResult allocateMemoryResult = vkAllocateMemory(device, &allocInfo, GetVulkanAllocationCallbacks(), &m_memoryHandle);
+    printf("vkAllocateMemory(memoryTypeIndex=%u, memoryMaxBytes=%u)=%x; m_memoryHandle=%p\n", memoryTypeIndex, Cast_VkDeviceSize_uint32_t(memoryMaxBytes), allocateMemoryResult, (void*)m_memoryHandle);
     NTF_VK_ASSERT_SUCCESS(allocateMemoryResult);
     return NTF_VK_SUCCESS(allocateMemoryResult);
 }
