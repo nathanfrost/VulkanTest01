@@ -54,7 +54,7 @@ bool StackNTF<SizeT>::PushAllocInternal(SizeT*const firstByteFreePtr, SizeT*cons
     }
 
     firstByteFree = firstByteReturned + size;
-    if (firstByteFree >= m_maxOffsetPlusOne)
+    if (firstByteFree > m_maxOffsetPlusOne)
     {
         return false;
     }
