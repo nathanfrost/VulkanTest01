@@ -274,12 +274,11 @@ void CopyBufferToImage(
     const VkImage& image,
     const uint32_t width,
     const uint32_t height,
-    const VkCommandPool& commandPool,
+    const VkCommandBuffer& commandBuffer,
     const VkQueue& transferQueue,
     const VkDevice& device)
 {
-    VkCommandBuffer commandBuffer;
-    BeginSingleTimeCommands(&commandBuffer, commandPool, device);
+    BeginCommands(commandBuffer, device);
 
     VkBufferImageCopy region = {};
     region.bufferOffset = 0;
@@ -294,7 +293,7 @@ void CopyBufferToImage(
 
     vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-    EndSingleTimeCommands(commandBuffer, commandPool, transferQueue, device);
+    EndSingleTimeCommandsHackDeleteSoon(commandBuffer, transferQueue, device);
 }
 
 void TransitionImageLayout(
@@ -302,12 +301,11 @@ void TransitionImageLayout(
     const VkFormat& format,
     const VkImageLayout& oldLayout,
     const VkImageLayout& newLayout,
-    const VkCommandPool& commandPool,
+    const VkCommandBuffer commandBuffer,
     const VkQueue& graphicsQueue,
     const VkDevice& device)
 {
-    VkCommandBuffer commandBuffer;
-    BeginSingleTimeCommands(&commandBuffer, commandPool, device);
+    BeginCommands(commandBuffer, device);
 
     VkImageMemoryBarrier barrier = {};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -378,7 +376,7 @@ void TransitionImageLayout(
         1,
         &barrier);
 
-    EndSingleTimeCommands(commandBuffer, commandPool, graphicsQueue, device);
+    EndSingleTimeCommandsHackDeleteSoon(commandBuffer, graphicsQueue, device);
 }
 
 void CreateImage(
@@ -728,6 +726,15 @@ void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT
 bool Vertex::operator==(const Vertex& other) const
 {
     return pos == other.pos && color == other.color && texCoord == other.texCoord;
+}
+
+void BeginCommands(const VkCommandBuffer& commandBuffer, const VkDevice& device)
+{
+    VkCommandBufferBeginInfo beginInfo = {};
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+    vkBeginCommandBuffer(commandBuffer, &beginInfo);
 }
 
 void BeginSingleTimeCommands(VkCommandBuffer*const commandBufferPtr, const VkCommandPool& commandPool, const VkDevice& device)
@@ -1363,6 +1370,7 @@ void FillPrimaryCommandBuffer(
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    ///@todo: seems like this should be VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT; /* options: * VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded right after executing it once
                                                                                 * VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: This is a secondary command buffer that will be entirely within a single render pass.
                                                                                 * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also already pending execution. */
@@ -1664,6 +1672,19 @@ void CreateAndCopyToGpuBuffer(
     CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandPool, transferQueue, device);
 }
 
+void EndSingleTimeCommandsHackDeleteSoon(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device)
+{
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+    vkQueueWaitIdle(queue);//could use a fence, which would allow you to schedule multiple transfers simultaneously and wait for all of them complete, instead of executing one at a time
+}
+
 void EndSingleTimeCommands(const VkCommandBuffer& commandBuffer, const VkCommandPool commandPool, const VkQueue& graphicsQueue, const VkDevice& device)
 {
     vkEndCommandBuffer(commandBuffer);
@@ -1676,7 +1697,7 @@ void EndSingleTimeCommands(const VkCommandBuffer& commandBuffer, const VkCommand
     vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
     vkQueueWaitIdle(graphicsQueue);//could use a fence, which would allow you to schedule multiple transfers simultaneously and wait for all of them complete, instead of executing one at a time
 
-                                   ///@todo: pretty sure I should be using a pool of commmand buffers here
+    ///@todo: pretty sure I should be using a pool of commmand buffers here
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
@@ -1700,7 +1721,7 @@ void CreateDepthResources(
     VkImageView*const depthImageViewPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     const VkExtent2D& swapChainExtent,
-    const VkCommandPool& commandPool,
+    const VkCommandBuffer& commandBuffer,
     const VkQueue& graphicsQueue,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
@@ -1740,7 +1761,7 @@ void CreateDepthResources(
         depthFormat,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        commandPool,
+        commandBuffer,
         graphicsQueue,
         device);
 }
@@ -1801,9 +1822,9 @@ void CreateTextureImage(
     const VkBuffer& stagingBufferGpu,
     const bool residentForever,
     const VkQueue& transferQueue,
-    const VkCommandPool& commandPoolTransfer,
+    const VkCommandBuffer& commandBufferTransfer,
     const VkQueue& graphicsQueue,
-    const VkCommandPool& commandPoolGraphics,
+    const VkCommandBuffer& commandBufferGraphics,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -1847,7 +1868,7 @@ void CreateTextureImage(
         VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        commandPoolTransfer,
+        commandBufferTransfer,
         transferQueue,
         device);
     CopyBufferToImage(
@@ -1855,7 +1876,7 @@ void CreateTextureImage(
         textureImage,
         static_cast<uint32_t>(texWidth),
         static_cast<uint32_t>(texHeight),
-        commandPoolTransfer,
+        commandBufferTransfer,
         transferQueue,
         device);
     TransitionImageLayout(
@@ -1863,7 +1884,7 @@ void CreateTextureImage(
         VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        commandPoolGraphics,
+        commandBufferGraphics,
         graphicsQueue,
         device);
 }

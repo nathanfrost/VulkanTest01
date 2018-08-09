@@ -72,13 +72,28 @@ public:
             m_descriptorSetLayout, 
             m_swapChainExtent, 
             m_device);
+        
+        //#CommandPoolDuplication
+        AllocateCommandBuffers(
+            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
+            m_commandPoolTransfer,
+            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            1,
+            m_device);
+        AllocateCommandBuffers(
+            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
+            m_commandPoolPrimary,
+            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            1,
+            m_device);
+
         CreateDepthResources(
             &m_depthImage,
             &m_depthImageMemory,
             &m_depthImageView,
             &m_deviceLocalMemory,
             m_swapChainExtent,
-            m_commandPoolPrimary,
+            m_commandBufferTransitionImage,
             m_graphicsQueue,
             m_device,
             m_physicalDevice);
@@ -111,12 +126,6 @@ public:
             }
         }
         //#CommandPoolDuplication
-        AllocateCommandBuffers(
-            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
-            m_commandPoolTransfer,
-            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            1,
-            m_device);
     }
 
 private:
@@ -275,13 +284,27 @@ private:
 
         m_deviceLocalMemory.Initialize(m_device, m_physicalDevice);
 
+        //#CommandPoolDuplication
+        AllocateCommandBuffers(
+            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
+            m_commandPoolTransfer,
+            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            1,
+            m_device);
+        AllocateCommandBuffers(
+            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
+            m_commandPoolPrimary,
+            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            1,
+            m_device);
+
         CreateDepthResources(
             &m_depthImage, 
             &m_depthImageMemory, 
             &m_depthImageView, 
             &m_deviceLocalMemory,
             m_swapChainExtent, 
-            m_commandPoolPrimary, 
+            m_commandBufferTransitionImage,
             m_graphicsQueue, 
             m_device,
             m_physicalDevice);
@@ -323,9 +346,9 @@ private:
             m_stagingBufferGpu,
             false,
             m_transferQueue,
-            m_commandPoolTransfer,
+            m_commandBufferTransfer,
             m_graphicsQueue,
-            m_commandPoolPrimary,
+            m_commandBufferTransitionImage,
             m_device, 
             m_physicalDevice);
         CreateTextureImageView(&m_textureImageView, m_textureImage, m_device);
@@ -415,12 +438,6 @@ private:
             }
         }
         //#CommandPoolDuplication
-        AllocateCommandBuffers(
-            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
-            m_commandPoolTransfer,
-            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            1,
-            m_device);
         CreateFrameSyncPrimitives(&m_imageAvailableSemaphore, &m_renderFinishedSemaphore, &m_fence, NTF_FRAMES_IN_FLIGHT_NUM, m_device);
     }
 
@@ -543,6 +560,7 @@ private:
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
     VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondary;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kSizeMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kSizeMax>& vectorSafe) -- not sure why
     VkCommandBuffer m_commandBufferTransfer;//automatically freed when VkCommandPool is destroyed
+    VkCommandBuffer m_commandBufferTransitionImage;//automatically freed when VkCommandPool is destroyed
 
     ArraySafe<CommandBufferSecondaryThread, NTF_OBJECTS_NUM> m_commandBufferSecondaryThreads;
     ArraySafe<HANDLE, NTF_OBJECTS_NUM> m_commandBufferThreadDoneEvents;
