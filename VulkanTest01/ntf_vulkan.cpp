@@ -296,6 +296,62 @@ void CopyBufferToImage(
     EndSingleTimeCommandsHackDeleteSoon(commandBuffer, transferQueue, device);
 }
 
+void TransferImageFromCpuToGpu(
+    const VkImage& image,
+    const uint32_t width,
+    const uint32_t height,
+    const VkFormat& format,
+    const VkBuffer& buffer,
+    const VkCommandBuffer commandBufferTransfer,
+    const VkQueue& transferQueue,
+    const VkDevice& device)
+{
+    BeginCommands(commandBufferTransfer, device);
+
+    //transition memory to format optimal for copying from CPU->GPU
+    VkImageMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+    //not an array and has no mipmapping levels
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+
+    barrier.srcAccessMask = 0;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;//specifies write access to an image or buffer in a clear or copy operation.
+
+    vkCmdPipelineBarrier(
+        commandBufferTransfer,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,//perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader),
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0,///<@todo NTF: consider VK_DEPENDENCY_BY_REGION_BIT so tile-renderers can operate on arbitrary chunks of memory rather than flush an entire buffer
+        0, nullptr,
+        0, nullptr,
+        1,
+        &barrier);
+
+    VkBufferImageCopy region = {};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;//extra row padding; 0 indicates tightly packed
+    region.bufferImageHeight = 0;//extra height padding; 0 indicates tightly packed
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+    region.imageOffset = { 0, 0, 0 };
+    region.imageExtent = { width,height,1 };
+
+    vkCmdCopyBufferToImage(commandBufferTransfer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    EndSingleTimeCommandsHackDeleteSoon(commandBufferTransfer, transferQueue, device);
+}
+
 void TransitionImageLayout(
     const VkImage& image,
     const VkFormat& format,
@@ -370,7 +426,7 @@ void TransitionImageLayout(
         commandBuffer,
         sourceStage,
         destinationStage,
-        0,
+        0,///<@todo NTF: consider VK_DEPENDENCY_BY_REGION_BIT so tile-renderers can operate on arbitrary chunks of memory rather than flush an entire buffer
         0, nullptr,
         0, nullptr,
         1,
@@ -1863,22 +1919,31 @@ void CreateTextureImage(
         device,
         physicalDevice);
 
-    TransitionImageLayout(
-        textureImage,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        commandBufferTransfer,
-        transferQueue,
-        device);
-    CopyBufferToImage(
-        stagingBufferGpu,
+    TransferImageFromCpuToGpu(
         textureImage,
         static_cast<uint32_t>(texWidth),
         static_cast<uint32_t>(texHeight),
+        VK_FORMAT_R8G8B8A8_UNORM,
+        stagingBufferGpu,
         commandBufferTransfer,
         transferQueue,
         device);
+    //TransitionImageLayout(
+    //    textureImage,
+    //    VK_FORMAT_R8G8B8A8_UNORM,
+    //    VK_IMAGE_LAYOUT_UNDEFINED,
+    //    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+    //    commandBufferTransfer,
+    //    transferQueue,
+    //    device);
+    //CopyBufferToImage(
+    //    stagingBufferGpu,
+    //    textureImage,
+    //    static_cast<uint32_t>(texWidth),
+    //    static_cast<uint32_t>(texHeight),
+    //    commandBufferTransfer,
+    //    transferQueue,
+    //    device);
     TransitionImageLayout(
         textureImage,
         VK_FORMAT_R8G8B8A8_UNORM,
