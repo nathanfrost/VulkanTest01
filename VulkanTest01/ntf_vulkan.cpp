@@ -420,7 +420,7 @@ void TransferImageFromCpuToGpu(
         barrier.subresourceRange.layerCount = 1;
 
         //block until source is done being written to, then block until shader is done reading from
-        barrier.srcAccessMask = 0;///@todo NTF: should this be VK_ACCESS_TRANSFER_WRITE_BIT?  https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples says no
+        barrier.srcAccessMask = 0;
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
 
         vkCmdPipelineBarrier(
