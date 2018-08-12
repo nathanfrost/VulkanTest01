@@ -336,7 +336,7 @@ void TransferImageFromCpuToGpu(
         commandBufferTransfer,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,//perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader),
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        0,///<@todo NTF: consider VK_DEPENDENCY_BY_REGION_BIT so tile-renderers can operate on arbitrary chunks of memory rather than flush an entire buffer
+        0,
         0, nullptr,
         0, nullptr,
         1,
@@ -379,7 +379,7 @@ void TransferImageFromCpuToGpu(
             commandBufferTransfer,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-            0,///<@todo NTF: consider VK_DEPENDENCY_BY_REGION_BIT so tile-renderers can operate on arbitrary chunks of memory rather than flush an entire buffer
+            0,
             0, nullptr,
             0, nullptr,
             1,
@@ -427,7 +427,7 @@ void TransferImageFromCpuToGpu(
             commandBufferGraphics,
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,///@todo: should this be VK_PIPELINE_STAGE_TRANSFER_BIT?  https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples says no
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0,///<@todo NTF: consider VK_DEPENDENCY_BY_REGION_BIT so tile-renderers can operate on arbitrary chunks of memory rather than flush an entire buffer
+            0,
             0, nullptr,
             0, nullptr,
             1,
@@ -530,7 +530,7 @@ void TransitionImageLayout(
         commandBuffer,
         sourceStage,
         destinationStage,
-        0,///<@todo NTF: consider VK_DEPENDENCY_BY_REGION_BIT so tile-renderers can operate on arbitrary chunks of memory rather than flush an entire buffer
+        0,
         0, nullptr,
         0, nullptr,
         1,
