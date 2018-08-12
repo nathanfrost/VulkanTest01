@@ -301,9 +301,14 @@ void TransferImageFromCpuToGpu(
     const uint32_t width,
     const uint32_t height,
     const VkFormat& format,
-    const VkBuffer& buffer,
+    const VkBuffer& stagingBuffer,
     const VkCommandBuffer commandBufferTransfer,
     const VkQueue& transferQueue,
+    const uint32_t transferQueueFamilyIndex,
+    const VkSemaphore transferFinishedSemaphore,
+    const VkCommandBuffer commandBufferGraphics,
+    const VkQueue& graphicsQueue,
+    const uint32_t graphicsQueueFamilyIndex,
     const VkDevice& device)
 {
     BeginCommands(commandBufferTransfer, device);
@@ -313,8 +318,8 @@ void TransferImageFromCpuToGpu(
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;///@todo: transferQueueFamilyIndex
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;///@todo: transferQueueFamilyIndex
     barrier.image = image;
     barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
@@ -325,7 +330,7 @@ void TransferImageFromCpuToGpu(
     barrier.subresourceRange.layerCount = 1;
 
     barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;//specifies write access to an image or buffer in a clear or copy operation.
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;//specifies write access to an image or stagingBuffer in a clear or copy operation.
 
     vkCmdPipelineBarrier(
         commandBufferTransfer,
@@ -348,8 +353,107 @@ void TransferImageFromCpuToGpu(
     region.imageOffset = { 0, 0, 0 };
     region.imageExtent = { width,height,1 };
 
-    vkCmdCopyBufferToImage(commandBufferTransfer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-    EndSingleTimeCommandsHackDeleteSoon(commandBufferTransfer, transferQueue, device);
+    vkCmdCopyBufferToImage(commandBufferTransfer, stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    
+    ///@todo: if(isUnifiedGraphicsAndTransferQueue) goes here; else:
+
+    {
+        VkImageMemoryBarrier barrier = {};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = transferQueueFamilyIndex;
+        barrier.dstQueueFamilyIndex = graphicsQueueFamilyIndex;
+        barrier.image = image;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = 0;
+
+        vkCmdPipelineBarrier(
+            commandBufferTransfer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            0,///<@todo NTF: consider VK_DEPENDENCY_BY_REGION_BIT so tile-renderers can operate on arbitrary chunks of memory rather than flush an entire buffer
+            0, nullptr,
+            0, nullptr,
+            1,
+            &barrier);
+    }
+
+    vkEndCommandBuffer(commandBufferTransfer);
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBufferTransfer;
+
+    VkSemaphore signalSemaphores[] = { transferFinishedSemaphore };
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = signalSemaphores;
+
+    const VkResult queueSubmitResult = vkQueueSubmit(transferQueue, 1, &submitInfo, VK_NULL_HANDLE);
+    NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
+
+    //BEG_SAME_CALL
+    {
+        BeginCommands(commandBufferGraphics, device);
+
+        VkImageMemoryBarrier barrier = {};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcQueueFamilyIndex = transferQueueFamilyIndex;
+        barrier.dstQueueFamilyIndex = graphicsQueueFamilyIndex;
+        barrier.image = image;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+        //not an array and has no mipmapping levels
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+
+        //block until source is done being written to, then block until shader is done reading from
+        barrier.srcAccessMask = 0;///@todo NTF: should this be VK_ACCESS_TRANSFER_WRITE_BIT?  https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples says no
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
+
+        vkCmdPipelineBarrier(
+            commandBufferGraphics,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,///@todo: should this be VK_PIPELINE_STAGE_TRANSFER_BIT?  https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples says no
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0,///<@todo NTF: consider VK_DEPENDENCY_BY_REGION_BIT so tile-renderers can operate on arbitrary chunks of memory rather than flush an entire buffer
+            0, nullptr,
+            0, nullptr,
+            1,
+            &barrier);
+
+        //BEG_SUBMIT_DUPE_WITH_ABOVE
+        vkEndCommandBuffer(commandBufferGraphics);
+
+        VkSubmitInfo submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBufferGraphics;
+        
+        //theoretically the implementation can already start executing our vertex shader and such while the image is not
+        //available yet. Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores
+        VkSemaphore waitSemaphores[] = { transferFinishedSemaphore };
+        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_TRANSFER_BIT };
+        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.pWaitSemaphores = waitSemaphores;
+        submitInfo.pWaitDstStageMask = waitStages;
+
+        const VkResult queueSubmitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
+        //END_SUBMIT_DUPE_WITH_ABOVE
+    }
+    //END_SAME_CALL
 }
 
 void TransitionImageLayout(
@@ -1728,6 +1832,18 @@ void CreateAndCopyToGpuBuffer(
     CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandPool, transferQueue, device);
 }
 
+void EndSingleTimeCommandsHackDeleteSoon_NoWaitIdle(const VkCommandBuffer& commandBuffer, const VkQueue& queue)
+{
+    vkEndCommandBuffer(commandBuffer);
+
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+}
+
 void EndSingleTimeCommandsHackDeleteSoon(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device)
 {
     vkEndCommandBuffer(commandBuffer);
@@ -1879,8 +1995,11 @@ void CreateTextureImage(
     const bool residentForever,
     const VkQueue& transferQueue,
     const VkCommandBuffer& commandBufferTransfer,
+    const uint32_t transferQueueFamilyIndex,
+    const VkSemaphore transferFinishedSemaphore,
     const VkQueue& graphicsQueue,
     const VkCommandBuffer& commandBufferGraphics,
+    const uint32_t graphicsQueueFamilyIndex,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -1927,30 +2046,11 @@ void CreateTextureImage(
         stagingBufferGpu,
         commandBufferTransfer,
         transferQueue,
-        device);
-    //TransitionImageLayout(
-    //    textureImage,
-    //    VK_FORMAT_R8G8B8A8_UNORM,
-    //    VK_IMAGE_LAYOUT_UNDEFINED,
-    //    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-    //    commandBufferTransfer,
-    //    transferQueue,
-    //    device);
-    //CopyBufferToImage(
-    //    stagingBufferGpu,
-    //    textureImage,
-    //    static_cast<uint32_t>(texWidth),
-    //    static_cast<uint32_t>(texHeight),
-    //    commandBufferTransfer,
-    //    transferQueue,
-    //    device);
-    TransitionImageLayout(
-        textureImage,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        transferQueueFamilyIndex,
+        transferFinishedSemaphore,
         commandBufferGraphics,
         graphicsQueue,
+        graphicsQueueFamilyIndex,
         device);
 }
 
@@ -2033,10 +2133,14 @@ void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const
 void CreateFrameSyncPrimitives(
     VectorSafeRef<VkSemaphore> imageAvailable, 
     VectorSafeRef<VkSemaphore> renderFinished, 
+    VkSemaphore*const transferFinishedSemaphorePtr,
     VectorSafeRef<VkFence> fence, 
     const size_t framesNum,
     const VkDevice& device)
 {
+    assert(transferFinishedSemaphorePtr);
+    auto& transferFinishedSemaphore = *transferFinishedSemaphorePtr;
+
     assert(framesNum);
 
     VkSemaphoreCreateInfo semaphoreInfo = {};
@@ -2059,6 +2163,10 @@ void CreateFrameSyncPrimitives(
             assert(false);//failed to create fence
         }
     }
+
+    const VkResult transferFinishedSemaphoreCreateResult = 
+        vkCreateSemaphore(device, &semaphoreInfo, GetVulkanAllocationCallbacks(), &transferFinishedSemaphore);
+    NTF_VK_ASSERT_SUCCESS(transferFinishedSemaphoreCreateResult);
 }
 
 ///@todo: use push constants instead, since it's more efficient
@@ -2189,7 +2297,6 @@ void DrawFrame(
 
     VkPresentInfoKHR presentInfo = {};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = signalSemaphores;
 

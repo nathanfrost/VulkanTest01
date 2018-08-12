@@ -203,6 +203,7 @@ private:
             vkDestroySemaphore(m_device, m_imageAvailableSemaphore[frameIndex], GetVulkanAllocationCallbacks());
             vkDestroyFence(m_device, m_fence[frameIndex], GetVulkanAllocationCallbacks());
         }
+        vkDestroySemaphore(m_device, m_transferFinishedSemaphore, GetVulkanAllocationCallbacks());
 
         vkDestroyCommandPool(m_device, m_commandPoolPrimary, GetVulkanAllocationCallbacks());
         vkDestroyCommandPool(m_device, m_commandPoolTransfer, GetVulkanAllocationCallbacks());
@@ -245,6 +246,7 @@ private:
         m_callback = SetupDebugCallback(m_instance);
         CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
         PickPhysicalDevice(&m_physicalDevice, m_surface, m_deviceExtensions, m_instance);
+        m_queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
         CreateLogicalDevice(
             &m_device, 
             &m_graphicsQueue, 
@@ -298,6 +300,14 @@ private:
             1,
             m_device);
 
+        CreateFrameSyncPrimitives(
+            &m_imageAvailableSemaphore,
+            &m_renderFinishedSemaphore,
+            &m_transferFinishedSemaphore,
+            &m_fence,
+            NTF_FRAMES_IN_FLIGHT_NUM,
+            m_device);
+
         CreateDepthResources(
             &m_depthImage, 
             &m_depthImageMemory, 
@@ -347,8 +357,11 @@ private:
             false,
             m_transferQueue,
             m_commandBufferTransfer,
+            m_queueFamilyIndices.transferFamily,
+            m_transferFinishedSemaphore,
             m_graphicsQueue,
             m_commandBufferTransitionImage,
+            m_queueFamilyIndices.graphicsFamily,
             m_device, 
             m_physicalDevice);
         CreateTextureImageView(&m_textureImageView, m_textureImage, m_device);
@@ -438,7 +451,6 @@ private:
             }
         }
         //#CommandPoolDuplication
-        CreateFrameSyncPrimitives(&m_imageAvailableSemaphore, &m_renderFinishedSemaphore, &m_fence, NTF_FRAMES_IN_FLIGHT_NUM, m_device);
     }
 
     void mainLoop(GLFWwindow* window) 
@@ -511,6 +523,7 @@ private:
     VkInstance m_instance;
     VkDebugReportCallbackEXT m_callback;
     VkSurfaceKHR m_surface;
+    QueueFamilyIndices m_queueFamilyIndices;
     VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;//doesn't need to be deleted, since physical devices can't be created or destroyed by software
     VkDevice m_device;//interface to the physical device; must be destroyed before the physical device
     VkSwapchainKHR m_swapChain;//must be destroyed before the logical device
@@ -573,6 +586,7 @@ private:
     int m_frameIndex=0;
     VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_imageAvailableSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
     VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_renderFinishedSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
+    VkSemaphore m_transferFinishedSemaphore;
     VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_fence = VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a true ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
 
     VulkanPagedStackAllocator m_deviceLocalMemory;

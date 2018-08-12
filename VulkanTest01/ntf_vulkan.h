@@ -417,8 +417,11 @@ void CreateTextureImage(
     const bool residentForever,
     const VkQueue& transferQueue,
     const VkCommandBuffer& commandBufferTransfer,
+    const uint32_t transferQueueFamilyIndex,
+    const VkSemaphore transferFinishedSemaphore,
     const VkQueue& graphicsQueue,
     const VkCommandBuffer& commandBufferGraphics,
+    const uint32_t graphicsQueueFamilyIndex,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& device);
@@ -434,6 +437,7 @@ void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const
 void CreateFrameSyncPrimitives(
     VectorSafeRef<VkSemaphore> imageAvailable,
     VectorSafeRef<VkSemaphore> renderFinished,
+    VkSemaphore*const transferFinishedSemaphorePtr,
     VectorSafeRef<VkFence> fence,
     const size_t framesNum,
     const VkDevice& device);
