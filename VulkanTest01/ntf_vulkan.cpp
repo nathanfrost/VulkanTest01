@@ -1832,18 +1832,6 @@ void CreateAndCopyToGpuBuffer(
     CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandPool, transferQueue, device);
 }
 
-void EndSingleTimeCommandsHackDeleteSoon_NoWaitIdle(const VkCommandBuffer& commandBuffer, const VkQueue& queue)
-{
-    vkEndCommandBuffer(commandBuffer);
-
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-
-    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-}
-
 void EndSingleTimeCommandsHackDeleteSoon(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device)
 {
     vkEndCommandBuffer(commandBuffer);
