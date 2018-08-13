@@ -331,7 +331,6 @@ public:
 private:
     void SetArray(T* p)
     {
-        assert(p);
         m_array = p;
 #if NTF_ARRAY_SAFE_DEBUG
         m_arraySet = true;
@@ -339,7 +338,6 @@ private:
     }
     void SetSizeMax(const size_t sizeMax)
     {
-        assert(sizeMax > 0);
 #if NTF_ARRAY_SAFE_DEBUG
         m_sizeMax = sizeMax;
 #endif//#if NTF_ARRAY_SAFE_DEBUG
@@ -349,17 +347,9 @@ private:
     T* m_array;
 #if NTF_ARRAY_SAFE_DEBUG
     size_t m_sizeMax;
-    bool m_arraySet;
 #endif//#if NTF_ARRAY_SAFE_DEBUG
 
 public:
-    //this would be a non-const pointer to non-const -- this class is for const pointer to non-const
-    //    ArraySafeRef()
-    //    {
-    //#if NTF_ARRAY_SAFE_DEBUG
-    //        m_sizeMax = 0;
-    //#endif//#if NTF_ARRAY_SAFE_DEBUG
-    //    }
     ///@todo
     //ArraySafeRef(T*const pointer, const std::initializer_list<T>& initializerList, const size_t maxSize)
     //{
@@ -427,7 +417,6 @@ public:
         m_array = nullptr;
 
 #if NTF_ARRAY_SAFE_DEBUG
-        m_arraySet = false;
         m_sizeMax = 0;
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
@@ -443,10 +432,6 @@ public:
 
     void AssertValid() const
     {
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(m_arraySet);
-        assert(m_sizeMax > 0);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
     ///@todo: have to pass in number of bytes explicitly
@@ -621,7 +606,7 @@ void AlignedFree(VectorSafeRef<T>*const vectorSafeRef)
 
 
 template<class T>
-class ConstVectorSafeRef///@todo: rename VectorSafeRefConst
+class ConstVectorSafeRef
 {
 public:
     typedef ConstVectorSafeRef<T> ThisDataType;
@@ -632,12 +617,10 @@ public:
 private:
     void SetArray(const T*const p)
     {
-        assert(p);
         m_array = p;
     }
     void SetSizeMax(const size_t sizeMax)
     {
-        assert(sizeMax > 0);
         m_sizeMax = sizeMax;
     }
 
@@ -646,6 +629,13 @@ private:
     size_t m_sizeMax;
 
 public:
+    ConstVectorSafeRef()
+    {
+        SetArray(nullptr);
+        SetSizeMax(0);
+        AssertValid();
+    }
+
     ConstVectorSafeRef(const T*const pointer, const size_t sizeMax)
     {
         SetArray(pointer);
@@ -662,10 +652,6 @@ public:
 
     void AssertValid() const
     {
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(m_array);
-        assert(m_sizeMax > 0);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
     size_type size() const noexcept
@@ -790,16 +776,15 @@ public:
         MemcpyFromStart(arraySafeOther.GetAddressOfUnderlyingArray(), arraySafeOther.SizeInBytes());
     }
 
+    ///@todo: unit test
     void MemcpyFromStart(const void*const input, const size_t inputBytesNum)///@todo: rename to make obvious that the semantics of this is to CLEAR the Array and replace with the contents of input
     {
         assert(input);
         assert(inputBytesNum > 0);
-        size(inputBytesNum / sizeof(T));
         assert(inputBytesNum <= SizeInBytes());
         assert(inputBytesNum % sizeof(T) == 0);
 
         memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
-        AssertValid();
     }
 
     size_type size() const noexcept

@@ -74,14 +74,6 @@ size_t GetVulkanApiCpuBytesAllocatedMax();
 #endif//#if NTF_DEBUG
 HANDLE ThreadSignalingEventCreate();
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device);
-void TransitionImageLayout(
-    const VkImage& image,
-    const VkFormat& format,
-    const VkImageLayout& oldLayout,
-    const VkImageLayout& newLayout,
-    const VkCommandBuffer commandBuffer,
-    const VkQueue& graphicsQueue,
-    const VkDevice& device);
 void CreateImage(
     VkImage*const imagePtr,
     VkDeviceMemory*const imageMemoryPtr,
@@ -101,7 +93,6 @@ void CopyBufferToImage(
     const uint32_t width,
     const uint32_t height,
     const VkCommandBuffer& commandBuffer,
-    const VkQueue& transferQueue,
     const VkDevice& device);
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
 uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);

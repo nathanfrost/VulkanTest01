@@ -275,11 +275,8 @@ void CopyBufferToImage(
     const uint32_t width,
     const uint32_t height,
     const VkCommandBuffer& commandBuffer,
-    const VkQueue& transferQueue,
     const VkDevice& device)
 {
-    BeginCommands(commandBuffer, device);
-
     VkBufferImageCopy region = {};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;//extra row padding; 0 indicates tightly packed
@@ -292,8 +289,72 @@ void CopyBufferToImage(
     region.imageExtent = { width,height,1 };
 
     vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+}
 
-    EndSingleTimeCommandsHackDeleteSoon(commandBuffer, transferQueue, device);
+void ImageMemoryBarrier(
+    const VkImageLayout& oldLayout,
+    const VkImageLayout& newLayout,
+    const uint32_t srcQueueFamilyIndex, 
+    const uint32_t dstQueueFamilyIndex,
+    const VkImageAspectFlagBits& aspectMask,
+    const VkImage& image,
+    const VkAccessFlags& srcAccessMask, 
+    const VkAccessFlags& dstAccessMask, 
+    const VkPipelineStageFlags& srcStageMask,
+    const VkPipelineStageFlags& dstStageMask,
+    const VkCommandBuffer& commandBuffer)
+{
+    VkImageMemoryBarrier barrier = {};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.oldLayout = oldLayout;
+    barrier.newLayout = newLayout;
+    barrier.srcQueueFamilyIndex = srcQueueFamilyIndex;
+    barrier.dstQueueFamilyIndex = dstQueueFamilyIndex;
+    barrier.image = image;
+    barrier.subresourceRange.aspectMask = aspectMask;
+
+    //not an array and has no mipmapping levels
+    barrier.subresourceRange.baseMipLevel = 0;
+    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+
+    barrier.srcAccessMask = srcAccessMask;
+    barrier.dstAccessMask = dstAccessMask;
+
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        srcStageMask,//perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader),
+        dstStageMask,
+        0,
+        0, nullptr,
+        0, nullptr,
+        1,
+        &barrier);
+}
+
+VkResult SubmitCommandBuffer(
+    ConstVectorSafeRef<VkSemaphore> signalSemaphores,
+    ConstVectorSafeRef<VkSemaphore> waitSemaphores,
+    ArraySafeRef<VkPipelineStageFlags> waitStages,///<@todo: ConstArraySafeRef
+    const VkCommandBuffer& commandBuffer,
+    const VkQueue& queue)
+{
+    VkSubmitInfo submitInfo = {};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+
+    submitInfo.signalSemaphoreCount = Cast_size_t_uint32_t(signalSemaphores.size());
+    submitInfo.pSignalSemaphores = signalSemaphores.GetAddressOfUnderlyingArray();
+
+    submitInfo.waitSemaphoreCount = Cast_size_t_uint32_t(waitSemaphores.size());
+    submitInfo.pWaitSemaphores = waitSemaphores.GetAddressOfUnderlyingArray();
+    submitInfo.pWaitDstStageMask = waitStages.GetAddressOfUnderlyingArray();
+
+    const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+    NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
+    return queueSubmitResult;
 }
 
 void TransferImageFromCpuToGpu(
@@ -314,229 +375,64 @@ void TransferImageFromCpuToGpu(
     BeginCommands(commandBufferTransfer, device);
 
     //transition memory to format optimal for copying from CPU->GPU
-    VkImageMemoryBarrier barrier = {};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.srcQueueFamilyIndex = transferQueueFamilyIndex;
-    barrier.dstQueueFamilyIndex = transferQueueFamilyIndex;
-    barrier.image = image;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-    //not an array and has no mipmapping levels
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-
-    barrier.srcAccessMask = 0;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;//specifies write access to an image or stagingBuffer in a clear or copy operation.
-
-    vkCmdPipelineBarrier(
-        commandBufferTransfer,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,//perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader),
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
+    ImageMemoryBarrier(
+        VK_IMAGE_LAYOUT_UNDEFINED, 
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
+        transferQueueFamilyIndex, 
+        transferQueueFamilyIndex, 
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        image,
         0,
-        0, nullptr,
-        0, nullptr,
-        1,
-        &barrier);
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,//perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader), 
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        commandBufferTransfer);
 
-    VkBufferImageCopy region = {};
-    region.bufferOffset = 0;
-    region.bufferRowLength = 0;//extra row padding; 0 indicates tightly packed
-    region.bufferImageHeight = 0;//extra height padding; 0 indicates tightly packed
-    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.mipLevel = 0;
-    region.imageSubresource.baseArrayLayer = 0;
-    region.imageSubresource.layerCount = 1;
-    region.imageOffset = { 0, 0, 0 };
-    region.imageExtent = { width,height,1 };
-
-    vkCmdCopyBufferToImage(commandBufferTransfer, stagingBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-    
+    CopyBufferToImage(stagingBuffer, image, width, height, commandBufferTransfer, device);    
     ///@todo: if(isUnifiedGraphicsAndTransferQueue) goes here; else:
 
-    {
-        VkImageMemoryBarrier barrier = {};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcQueueFamilyIndex = transferQueueFamilyIndex;
-        barrier.dstQueueFamilyIndex = graphicsQueueFamilyIndex;
-        barrier.image = image;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = 0;
-
-        vkCmdPipelineBarrier(
-            commandBufferTransfer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-            0,
-            0, nullptr,
-            0, nullptr,
-            1,
-            &barrier);
-    }
+    ImageMemoryBarrier(
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        transferQueueFamilyIndex,
+        graphicsQueueFamilyIndex,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        image,
+        VK_ACCESS_TRANSFER_WRITE_BIT,
+        0,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+        commandBufferTransfer);
 
     vkEndCommandBuffer(commandBufferTransfer);
+    SubmitCommandBuffer(
+        VectorSafe<VkSemaphore,1>({transferFinishedSemaphore}), 
+        ConstVectorSafeRef<VkSemaphore>(), 
+        ArraySafeRef<VkPipelineStageFlags>(), 
+        commandBufferTransfer, 
+        transferQueue);
 
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBufferTransfer;
-
-    VkSemaphore signalSemaphores[] = { transferFinishedSemaphore };
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
-
-    const VkResult queueSubmitResult = vkQueueSubmit(transferQueue, 1, &submitInfo, VK_NULL_HANDLE);
-    NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
-
-    //BEG_SAME_CALL
-    {
-        BeginCommands(commandBufferGraphics, device);
-
-        VkImageMemoryBarrier barrier = {};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcQueueFamilyIndex = transferQueueFamilyIndex;
-        barrier.dstQueueFamilyIndex = graphicsQueueFamilyIndex;
-        barrier.image = image;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-        //not an array and has no mipmapping levels
-        barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-
-        //block until source is done being written to, then block until shader is done reading from
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
-
-        vkCmdPipelineBarrier(
-            commandBufferGraphics,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,///@todo: should this be VK_PIPELINE_STAGE_TRANSFER_BIT?  https://github.com/KhronosGroup/Vulkan-Docs/wiki/Synchronization-Examples says no
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0,
-            0, nullptr,
-            0, nullptr,
-            1,
-            &barrier);
-
-        //BEG_SUBMIT_DUPE_WITH_ABOVE
-        vkEndCommandBuffer(commandBufferGraphics);
-
-        VkSubmitInfo submitInfo = {};
-        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.commandBufferCount = 1;
-        submitInfo.pCommandBuffers = &commandBufferGraphics;
-        
-        //theoretically the implementation can already start executing our vertex shader and such while the image is not
-        //available yet. Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores
-        VkSemaphore waitSemaphores[] = { transferFinishedSemaphore };
-        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_TRANSFER_BIT };
-        submitInfo.waitSemaphoreCount = 1;
-        submitInfo.pWaitSemaphores = waitSemaphores;
-        submitInfo.pWaitDstStageMask = waitStages;
-
-        const VkResult queueSubmitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-        NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
-        //END_SUBMIT_DUPE_WITH_ABOVE
-    }
-    //END_SAME_CALL
-}
-
-void TransitionImageLayout(
-    const VkImage& image,
-    const VkFormat& format,
-    const VkImageLayout& oldLayout,
-    const VkImageLayout& newLayout,
-    const VkCommandBuffer commandBuffer,
-    const VkQueue& graphicsQueue,
-    const VkDevice& device)
-{
-    BeginCommands(commandBuffer, device);
-
-    VkImageMemoryBarrier barrier = {};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = oldLayout;
-    barrier.newLayout = newLayout;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = image;
-    if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-    {
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        if (HasStencilComponent(format))
-        {
-            barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-        }
-    }
-    else
-    {
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    }
-
-    //not an array and has no mipmapping levels
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-
-    VkPipelineStageFlags sourceStage;
-    VkPipelineStageFlags destinationStage;
-
-    if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-    {
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;//specifies write access to an image or buffer in a clear or copy operation.
-
-        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;//perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader)
-        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    }
-    else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-    {
-        //block until source is done being written to, then block until shader is done reading from
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;//specifies write access to an image or buffer in a clear or copy operation.
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
-
-        sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-        destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    }
-    else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-    {
-        barrier.srcAccessMask = 0;
-        barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-
-        sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-        destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    }
-    else
-    {
-        assert(false);//unsupported layout transition
-    }
-
-    vkCmdPipelineBarrier(
-        commandBuffer,
-        sourceStage,
-        destinationStage,
+    BeginCommands(commandBufferGraphics, device);
+    ImageMemoryBarrier(
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        transferQueueFamilyIndex,
+        graphicsQueueFamilyIndex,
+        VK_IMAGE_ASPECT_COLOR_BIT,
+        image,
         0,
-        0, nullptr,
-        0, nullptr,
-        1,
-        &barrier);
-
-    EndSingleTimeCommandsHackDeleteSoon(commandBuffer, graphicsQueue, device);
+        VK_ACCESS_SHADER_READ_BIT,//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        commandBufferGraphics);
+    vkEndCommandBuffer(commandBufferGraphics);
+    ArraySafe<VkPipelineStageFlags, 1> waitStages({ VK_PIPELINE_STAGE_TRANSFER_BIT });
+    SubmitCommandBuffer(
+        ConstVectorSafeRef<VkSemaphore>(),
+        VectorSafe<VkSemaphore,1>({ transferFinishedSemaphore }), 
+        &waitStages,
+        commandBufferGraphics,
+        graphicsQueue);
 }
 
 void CreateImage(
@@ -1916,14 +1812,20 @@ void CreateDepthResources(
 
     CreateImageView(&depthImageView, device, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-    TransitionImageLayout(
-        depthImage,
-        depthFormat,
+    BeginCommands(commandBuffer, device);
+    ImageMemoryBarrier(
         VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        commandBuffer,
-        graphicsQueue,
-        device);
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,//  | HasStencilComponent(format)) ? VK_IMAGE_ASPECT_STENCIL_BIT : 0
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_QUEUE_FAMILY_IGNORED,
+        VK_IMAGE_ASPECT_DEPTH_BIT,
+        depthImage,
+        0,
+        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+        commandBuffer);
+    EndSingleTimeCommandsHackDeleteSoon(commandBuffer, graphicsQueue, device);
 }
 
 VkFormat FindSupportedFormat(
