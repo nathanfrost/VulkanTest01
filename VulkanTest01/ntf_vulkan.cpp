@@ -372,6 +372,9 @@ void TransferImageFromCpuToGpu(
     const uint32_t graphicsQueueFamilyIndex,
     const VkDevice& device)
 {
+    const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
+    assert(unifiedGraphicsAndTransferQueue == (transferQueueFamilyIndex == graphicsQueueFamilyIndex));
+
     BeginCommands(commandBufferTransfer, device);
 
     //transition memory to format optimal for copying from CPU->GPU
@@ -389,50 +392,77 @@ void TransferImageFromCpuToGpu(
         commandBufferTransfer);
 
     CopyBufferToImage(stagingBuffer, image, width, height, commandBufferTransfer, device);    
-    ///@todo: if(isUnifiedGraphicsAndTransferQueue) goes here; else:
+    if (unifiedGraphicsAndTransferQueue)
+    {
+        //transferQueue == graphicsQueue, so prepare image for shader reads with no change of queue ownership
+        ImageMemoryBarrier(
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            transferQueueFamilyIndex,
+            transferQueueFamilyIndex,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            image,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_ACCESS_SHADER_READ_BIT,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, 
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            commandBufferTransfer);
+        vkEndCommandBuffer(commandBufferTransfer);
+        SubmitCommandBuffer(
+            ConstVectorSafeRef<VkSemaphore>(),
+            ConstVectorSafeRef<VkSemaphore>(),
+            ArraySafeRef<VkPipelineStageFlags>(),
+            commandBufferTransfer,
+            transferQueue);
+    }
+    else
+    {
+        //transition resource ownership from transfer queue to graphics queue
+        ImageMemoryBarrier(
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            transferQueueFamilyIndex,
+            graphicsQueueFamilyIndex,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            image,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
+            0,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            commandBufferTransfer);
 
-    ImageMemoryBarrier(
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        transferQueueFamilyIndex,
-        graphicsQueueFamilyIndex,
-        VK_IMAGE_ASPECT_COLOR_BIT,
-        image,
-        VK_ACCESS_TRANSFER_WRITE_BIT,
-        0,
-        VK_PIPELINE_STAGE_TRANSFER_BIT,
-        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-        commandBufferTransfer);
+        vkEndCommandBuffer(commandBufferTransfer);
+        SubmitCommandBuffer(
+            VectorSafe<VkSemaphore, 1>({ transferFinishedSemaphore }),
+            ConstVectorSafeRef<VkSemaphore>(),
+            ArraySafeRef<VkPipelineStageFlags>(),
+            commandBufferTransfer,
+            transferQueue);
 
-    vkEndCommandBuffer(commandBufferTransfer);
-    SubmitCommandBuffer(
-        VectorSafe<VkSemaphore,1>({transferFinishedSemaphore}), 
-        ConstVectorSafeRef<VkSemaphore>(), 
-        ArraySafeRef<VkPipelineStageFlags>(), 
-        commandBufferTransfer, 
-        transferQueue);
+        //prepare texture for shader reads
+        BeginCommands(commandBufferGraphics, device);
+        ImageMemoryBarrier(
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            transferQueueFamilyIndex,
+            graphicsQueueFamilyIndex,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            image,
+            0,
+            VK_ACCESS_SHADER_READ_BIT,//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            commandBufferGraphics);
 
-    BeginCommands(commandBufferGraphics, device);
-    ImageMemoryBarrier(
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        transferQueueFamilyIndex,
-        graphicsQueueFamilyIndex,
-        VK_IMAGE_ASPECT_COLOR_BIT,
-        image,
-        0,
-        VK_ACCESS_SHADER_READ_BIT,//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        commandBufferGraphics);
-    vkEndCommandBuffer(commandBufferGraphics);
-    ArraySafe<VkPipelineStageFlags, 1> waitStages({ VK_PIPELINE_STAGE_TRANSFER_BIT });
-    SubmitCommandBuffer(
-        ConstVectorSafeRef<VkSemaphore>(),
-        VectorSafe<VkSemaphore,1>({ transferFinishedSemaphore }), 
-        &waitStages,
-        commandBufferGraphics,
-        graphicsQueue);
+        vkEndCommandBuffer(commandBufferGraphics);
+        ArraySafe<VkPipelineStageFlags, 1> waitStages({ VK_PIPELINE_STAGE_TRANSFER_BIT });
+        SubmitCommandBuffer(
+            ConstVectorSafeRef<VkSemaphore>(),
+            VectorSafe<VkSemaphore, 1>({ transferFinishedSemaphore }),
+            &waitStages,
+            commandBufferGraphics,
+            graphicsQueue);
+    }
 }
 
 void CreateImage(

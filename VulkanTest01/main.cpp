@@ -74,6 +74,7 @@ public:
             m_device);
         
         //#CommandPoolDuplication
+        
         AllocateCommandBuffers(
             ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
             m_commandPoolTransfer,
@@ -206,7 +207,10 @@ private:
         vkDestroySemaphore(m_device, m_transferFinishedSemaphore, GetVulkanAllocationCallbacks());
 
         vkDestroyCommandPool(m_device, m_commandPoolPrimary, GetVulkanAllocationCallbacks());
-        vkDestroyCommandPool(m_device, m_commandPoolTransfer, GetVulkanAllocationCallbacks());
+        if (m_commandPoolTransfer != m_commandPoolPrimary)
+        {
+            vkDestroyCommandPool(m_device, m_commandPoolTransfer, GetVulkanAllocationCallbacks());
+        }
         for (auto& commandPoolSecondaryArray : m_commandPoolsSecondary)
         {
             for (auto& commandPoolSecondary : commandPoolSecondaryArray)
@@ -282,7 +286,14 @@ private:
 
         const QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
         CreateCommandPool(&m_commandPoolPrimary, queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
-        CreateCommandPool(&m_commandPoolTransfer, queueFamilyIndices.transferFamily, m_device, m_physicalDevice);
+        if (queueFamilyIndices.graphicsFamily != queueFamilyIndices.transferFamily)
+        {
+            CreateCommandPool(&m_commandPoolTransfer, queueFamilyIndices.transferFamily, m_device, m_physicalDevice);
+        }
+        else
+        {
+            m_commandPoolTransfer = m_commandPoolPrimary;
+        }
 
         m_deviceLocalMemory.Initialize(m_device, m_physicalDevice);
 
