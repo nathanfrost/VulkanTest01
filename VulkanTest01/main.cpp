@@ -356,7 +356,7 @@ private:
 
         void* stagingBufferMemoryMapCpuToGpu;
         vkMapMemory(m_device, m_stagingBufferGpuMemory, offsetToAllocatedBlock, m_kStagingBufferSize, 0, &stagingBufferMemoryMapCpuToGpu);
-        m_stagingBufferMemoryMapCpuToGpu.SetArray(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpu), m_kStagingBufferSize);
+        m_stagingBufferMemoryMapCpuToGpu.SetArray(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpu), m_kStagingBufferSize);///@todo NEXT: use a StackNTF instead of an Array to batch together as many buffers as the staging buffer will allow, then use a fence to know when the commands are complete and the staging buffer memory can be reused
 
         CreateTextureImage(
             &m_textureImage, 
