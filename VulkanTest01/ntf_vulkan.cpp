@@ -619,6 +619,11 @@ void CreateBuffer(
     NTF_REF(vkBufferPtr, vkBuffer);
 
     CreateBuffer(&vkBuffer, vkBufferSizeBytes, flags, device);
+
+    VkMemoryRequirements memoryRequirements;
+    vkGetBufferMemoryRequirements(device, vkBuffer, &memoryRequirements);
+    assert(memoryRequirements.size >= vkBufferSizeBytes);
+
     const VkResult bindBufferResult = vkBindBufferMemory(device, vkBuffer, vkBufferMemory, offsetToAllocatedBlock);
     NTF_VK_ASSERT_SUCCESS(bindBufferResult);
 }

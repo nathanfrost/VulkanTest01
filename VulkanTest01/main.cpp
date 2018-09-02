@@ -226,6 +226,10 @@ private:
         vkUnmapMemory(m_device, m_stagingBufferGpuMemory);
         //BEG_#StagingBuffer
         vkDestroyBuffer(m_device, m_stagingBufferGpu, GetVulkanAllocationCallbacks());
+        for (auto& buffer : m_stagingBuffersGpu)
+        {
+            vkDestroyBuffer(m_device, buffer, GetVulkanAllocationCallbacks());
+        }
         //END_#StagingBuffer
         m_stagingBufferMemoryMapCpuToGpu.Destroy();
 
