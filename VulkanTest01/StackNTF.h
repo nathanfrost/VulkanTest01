@@ -44,16 +44,24 @@ public:
         m_initialized = false;
 #endif//#if NTF_DEBUG
     };
-    void Initialize(const size_t pageSizeBytes);
+    void Initialize(uint8_t*const p, const size_t sizeBytes);
     ///@todo: all explicit default C++ functions
 
     void Destroy();
     inline void Clear() { m_stack.ClearSuballocations(); }
 
-    bool PushAlloc(void**const memoryPtr, const size_t sizeBytes);
+    bool PushAlloc(ArraySafeRef<uint8_t>*const memoryRetPtr, const size_t alignment, const size_t sizeBytes);
+    bool MemcpyIfPushAllocSucceeds(
+        ArraySafeRef<uint8_t>*const memoryRetPtr,
+        const void*const dataToMemcpy,
+        const size_t alignment,
+        const size_t sizeBytes);
+    bool PushAlloc(void**const memoryPtr, const size_t alignment, const size_t sizeBytes);
     inline size_t GetFirstByteFree(){ assert(m_initialized); return m_stack.GetFirstByteFree(); }
+    inline uint8_t*const GetMemory() { return m_memory; }
 
 private:
+    void InitializeInternal(uint8_t*const p, const size_t sizeBytes);
 #if NTF_DEBUG
     bool m_initialized;
 #endif//#if NTF_DEBUG

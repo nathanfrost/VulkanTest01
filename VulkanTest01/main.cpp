@@ -2,6 +2,10 @@
 
 VectorSafe<const char*, NTF_VALIDATION_LAYERS_SIZE> s_validationLayers;
 
+extern StackCpu* g_stbAllocator;
+
+#include"ntf_vulkan_utility.h"
+
 //don't complain about scanf being unsafe
 #pragma warning(disable : 4996)
 ///@todo: figure out which libraries I'm linking that trigger LNK4098 (seems like some libraries are linking /MD and /MDd and others are linking /MT and /MTd for C-runtime) -- for now, pass /IGNORE:4098 to the linker
@@ -10,6 +14,7 @@ class VulkanRendererNTF
 public:
 #define NTF_FRAMES_IN_FLIGHT_NUM 2//#FramesInFlight
 #define NTF_OBJECTS_NUM 2//number of models to draw
+#define NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE (128 * 1024 * 1024)
 
     void run() 
 	{
@@ -90,7 +95,6 @@ public:
 
         CreateDepthResources(
             &m_depthImage,
-            &m_depthImageMemory,
             &m_depthImageView,
             &m_deviceLocalMemory,
             m_swapChainExtent,
@@ -220,8 +224,10 @@ private:
         }
 
         vkUnmapMemory(m_device, m_stagingBufferGpuMemory);
+        //BEG_#StagingBuffer
         vkDestroyBuffer(m_device, m_stagingBufferGpu, GetVulkanAllocationCallbacks());
-        m_stagingBufferMemoryMapCpuToGpu.Reset();
+        //END_#StagingBuffer
+        m_stagingBufferMemoryMapCpuToGpu.Destroy();
 
         m_deviceLocalMemory.Destroy(m_device);
         vkDestroyDevice(m_device, GetVulkanAllocationCallbacks());
@@ -321,7 +327,6 @@ private:
 
         CreateDepthResources(
             &m_depthImage, 
-            &m_depthImageMemory, 
             &m_depthImageView, 
             &m_deviceLocalMemory,
             m_swapChainExtent, 
@@ -341,76 +346,172 @@ private:
             }
         }
 
-        VkDeviceSize offsetToAllocatedBlock;
+        StackNTF<VkDeviceSize> stagingBufferGpuStack;
+        VkDeviceSize stagingBufferGpuOffsetToAllocatedBlock;
+        stagingBufferGpuStack.Allocate(NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
         CreateBuffer(
             &m_stagingBufferGpu,
             &m_stagingBufferGpuMemory,
             &m_deviceLocalMemory,
-            &offsetToAllocatedBlock,
-            m_kStagingBufferSize,
+            &m_offsetToFirstByteOfStagingBuffer,
+            NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
             true,
             m_device,
             m_physicalDevice);
+        VkMemoryRequirements memRequirements;
+        vkGetBufferMemoryRequirements(m_device, m_stagingBufferGpu, &memRequirements);
+        m_stagingBufferGpuAlignmentStandard = memRequirements.alignment;
 
         void* stagingBufferMemoryMapCpuToGpu;
-        vkMapMemory(m_device, m_stagingBufferGpuMemory, offsetToAllocatedBlock, m_kStagingBufferSize, 0, &stagingBufferMemoryMapCpuToGpu);
-        m_stagingBufferMemoryMapCpuToGpu.SetArray(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpu), m_kStagingBufferSize);///@todo NEXT: use a StackNTF instead of an Array to batch together as many buffers as the staging buffer will allow, then use a fence to know when the commands are complete and the staging buffer memory can be reused
-
-        CreateTextureImage(
-            &m_textureImage, 
-            &m_textureImageMemory, 
-            g_stbAllocator,
-            m_stagingBufferMemoryMapCpuToGpu,
-            &m_deviceLocalMemory,
-            m_stagingBufferGpu,
-            false,
-            m_transferQueue,
-            m_commandBufferTransfer,
-            m_queueFamilyIndices.transferFamily,
-            m_transferFinishedSemaphore,
-            m_graphicsQueue,
-            m_commandBufferTransitionImage,
-            m_queueFamilyIndices.graphicsFamily,
+        const VkResult vkMapMemoryResult = vkMapMemory(
             m_device, 
+            m_stagingBufferGpuMemory, 
+            m_offsetToFirstByteOfStagingBuffer,
+            NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE, 
+            0, 
+            &stagingBufferMemoryMapCpuToGpu);
+        NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
+        m_stagingBufferMemoryMapCpuToGpu.Initialize(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpu), NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
+        size_t stagingBufferGpuIndex = 0;
+        
+        int textureWidth, textureHeight;
+        size_t imageSizeBytes;
+        VkDeviceSize alignment;
+        const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+        const bool copyPixelsIfStagingBufferHasSpaceResult = CreateImageAndCopyPixelsIfStagingBufferHasSpace(
+            &m_textureImage,
+            &m_deviceLocalMemory,
+            &alignment,
+            &textureWidth, 
+            &textureHeight, 
+            &m_stagingBufferMemoryMapCpuToGpu,
+            &imageSizeBytes, 
+            g_stbAllocator,
+            "textures/chalet.jpg",
+            imageFormat,
+            VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
+            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+            false,
+            m_device,
             m_physicalDevice);
+        assert(copyPixelsIfStagingBufferHasSpaceResult);
+
+        const bool pushAllocSuccess = stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, alignment, imageSizeBytes);
+        assert(pushAllocSuccess);
+        CreateBuffer(
+            &m_stagingBuffersGpu[stagingBufferGpuIndex],
+            m_stagingBufferGpuMemory,
+            m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+            imageSizeBytes,
+            0,
+            m_device,
+            m_physicalDevice);
+
+        TransferImageFromCpuToGpu(
+            m_textureImage, 
+            textureWidth, 
+            textureHeight, 
+            imageFormat,
+            m_stagingBuffersGpu[stagingBufferGpuIndex], 
+            m_commandBufferTransfer, 
+            m_transferQueue, 
+            m_queueFamilyIndices.transferFamily, 
+            m_transferFinishedSemaphore, 
+            m_commandBufferTransitionImage, 
+            m_graphicsQueue, 
+            m_queueFamilyIndices.graphicsFamily, 
+            m_device);
+
         CreateTextureImageView(&m_textureImageView, m_textureImage, m_device);
         CreateTextureSampler(&m_textureSampler, m_device);
+
+        ++stagingBufferGpuIndex;
 
         //BEG_#StreamingMemory
         LoadModel(&m_vertices, &m_indices);
         m_indicesSize = Cast_size_t_uint32_t(m_indices.size());//store since we need secondary buffers to point to this
         //END_#StreamingMemory
+        {
+            const size_t bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
 
-        CreateAndCopyToGpuBuffer(
-            &m_deviceLocalMemory,
-            &m_vertexBuffer,
-            &m_vertexBufferMemory,
-            m_stagingBufferMemoryMapCpuToGpu,
-            m_vertices.data(),
-            m_stagingBufferGpu,
-            sizeof(m_vertices[0]) * m_vertices.size(),
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
-            false,
-            m_commandPoolTransfer,
-            m_transferQueue,
-            m_device,
-            m_physicalDevice);
-        CreateAndCopyToGpuBuffer(
-            &m_deviceLocalMemory,
-            &m_indexBuffer,
-            &m_indexBufferMemory,
-            m_stagingBufferMemoryMapCpuToGpu,
-            m_indices.data(),
-            m_stagingBufferGpu,
-            sizeof(m_indices[0]) * m_indices.size(),
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            false,
-            m_commandPoolTransfer,
-            m_transferQueue,
-            m_device,
-            m_physicalDevice);
+            stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
+            CreateBuffer(
+                &m_stagingBuffersGpu[stagingBufferGpuIndex],
+                m_stagingBufferGpuMemory,
+                m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+                bufferSize,
+                0,
+                m_device,
+                m_physicalDevice);
+
+#if NTF_DEBUG
+            VkMemoryRequirements memRequirements;
+            vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[stagingBufferGpuIndex], &memRequirements);
+            assert(memRequirements.alignment == m_stagingBufferGpuAlignmentStandard);
+#endif//#if NTF_DEBUG
+
+            ArraySafeRef<uint8_t> vertexBufferStagingBufferCpuToGpu;
+            m_stagingBufferMemoryMapCpuToGpu.PushAlloc(
+                &vertexBufferStagingBufferCpuToGpu, 
+                Cast_VkDeviceSize_size_t(m_stagingBufferGpuAlignmentStandard), 
+                bufferSize);
+            CreateAndCopyToGpuBuffer(
+                &m_deviceLocalMemory,
+                &m_vertexBuffer,
+                &m_vertexBufferMemory,
+                vertexBufferStagingBufferCpuToGpu,
+                m_vertices.data(),
+                m_stagingBuffersGpu[stagingBufferGpuIndex],
+                bufferSize,
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
+                false,
+                m_commandPoolTransfer,
+                m_transferQueue,
+                m_device,
+                m_physicalDevice);
+            ++stagingBufferGpuIndex;
+        }
+        {
+            const size_t bufferSize = sizeof(m_indices[0]) * m_indices.size();
+            stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
+            CreateBuffer(
+                &m_stagingBuffersGpu[stagingBufferGpuIndex],
+                m_stagingBufferGpuMemory,
+                m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+                bufferSize,
+                0,
+                m_device,
+                m_physicalDevice);
+
+#if NTF_DEBUG
+            VkMemoryRequirements memRequirements;
+            vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[stagingBufferGpuIndex], &memRequirements);
+            assert(memRequirements.alignment == m_stagingBufferGpuAlignmentStandard);
+#endif//#if NTF_DEBUG
+
+            ArraySafeRef<uint8_t> indexBufferStagingBufferCpuToGpu;
+            m_stagingBufferMemoryMapCpuToGpu.PushAlloc(
+                &indexBufferStagingBufferCpuToGpu, 
+                Cast_VkDeviceSize_size_t(m_stagingBufferGpuAlignmentStandard), 
+                bufferSize);
+            CreateAndCopyToGpuBuffer(
+                &m_deviceLocalMemory,
+                &m_indexBuffer,
+                &m_indexBufferMemory,
+                indexBufferStagingBufferCpuToGpu,
+                m_indices.data(),
+                m_stagingBuffersGpu[stagingBufferGpuIndex],
+                bufferSize,
+                VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                false,
+                m_commandPoolTransfer,
+                m_transferQueue,
+                m_device,
+                m_physicalDevice);
+        }
         
         m_uniformBufferCpuAlignment = UniformBufferCpuAlignmentCalculate(sm_uniformBufferElementSize, m_physicalDevice);
         CreateUniformBuffer(
@@ -553,10 +654,8 @@ private:
     VkCommandPool m_commandPoolPrimary, m_commandPoolTransfer;
     VectorSafe<ArraySafe<VkCommandPool, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandPoolsSecondary;
     VkImage m_depthImage;
-    VkDeviceMemory m_depthImageMemory;
     VkImageView m_depthImageView;
     VkImage m_textureImage;
-    VkDeviceMemory m_textureImageMemory;
     VkImageView m_textureImageView;
     VkSampler m_textureSampler;
 
@@ -571,6 +670,7 @@ private:
     VkDeviceMemory m_vertexBufferMemory;
     VkBuffer m_indexBuffer;
     VkDeviceMemory m_indexBufferMemory;
+    VkDeviceMemory m_textureBufferMemory;
     VkBuffer m_uniformBuffer;
     VkDeviceMemory m_uniformBufferGpuMemory;
     VkDeviceSize m_uniformBufferOffsetToGpuMemory;
@@ -601,10 +701,14 @@ private:
     VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_fence = VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a true ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
 
     VulkanPagedStackAllocator m_deviceLocalMemory;
+    //BEG_#StagingBuffer
     VkBuffer m_stagingBufferGpu;
+    VkDeviceSize m_stagingBufferGpuAlignmentStandard;
+    ArraySafe<VkBuffer, 3> m_stagingBuffersGpu;
     VkDeviceMemory m_stagingBufferGpuMemory;
-    ArraySafeRef<uint8_t> m_stagingBufferMemoryMapCpuToGpu;
-    const size_t m_kStagingBufferSize = 128 * 1024 * 1024;
+    VkDeviceSize m_offsetToFirstByteOfStagingBuffer;
+    //END_#StagingBuffer
+    StackCpu m_stagingBufferMemoryMapCpuToGpu;
 };
 
 int main() 

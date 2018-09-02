@@ -9,7 +9,7 @@ void* __cdecl stb_malloc(size_t _Size)
     assert(g_stbAllocator);
     
     void* memory;
-    g_stbAllocator->PushAlloc(&memory, _Size);
+    g_stbAllocator->PushAlloc(&memory, 0, _Size);
     assert(memory);
     return memory;
 }
@@ -29,10 +29,12 @@ FILE* s_winTimer;
 void STBAllocatorCreate()
 {
     g_stbAllocator = new StackCpu();
-    g_stbAllocator->Initialize(128 * 1024 * 1024);
+    const size_t sizeBytes = 128 * 1024 * 1024;
+    g_stbAllocator->Initialize(reinterpret_cast<uint8_t*>(malloc(sizeBytes)), sizeBytes);
 }
 void STBAllocatorDestroy()
 {
+    free(g_stbAllocator->GetMemory());
     g_stbAllocator->Destroy();
     delete g_stbAllocator;
 }
@@ -465,10 +467,10 @@ void TransferImageFromCpuToGpu(
     }
 }
 
-void CreateImage(
+bool CreateAllocateBindImageIfAllocatorHasSpace(
     VkImage*const imagePtr,
-    VkDeviceMemory*const imageMemoryPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
+    VkDeviceSize*const alignmentPtr,
     const uint32_t width,
     const uint32_t height,
     const VkFormat& format,
@@ -482,11 +484,10 @@ void CreateImage(
     assert(imagePtr);
     auto& image = *imagePtr;
 
-    assert(imageMemoryPtr);
-    auto& imageMemory = *imageMemoryPtr;
-
     assert(allocatorPtr);
     auto& allocator = *allocatorPtr;
+
+    NTF_REF(alignmentPtr, alignment);
 
     VkImageCreateInfo imageInfo = {};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -508,6 +509,7 @@ void CreateImage(
 
     VkMemoryRequirements memRequirements;
     vkGetImageMemoryRequirements(device, image, &memRequirements);
+    alignment = memRequirements.alignment;
 
     VkDeviceSize memoryOffset;
     VkDeviceMemory memoryHandle;
@@ -520,9 +522,16 @@ void CreateImage(
         tiling == VK_IMAGE_TILING_LINEAR,
         device,
         physicalDevice);
-    assert(allocateMemoryResult);
+    if (allocateMemoryResult)
+    {
+        vkBindImageMemory(device, image, memoryHandle, memoryOffset);
+    }
+    else
+    {
+        vkDestroyImage(device, image, GetVulkanAllocationCallbacks());
+    }
 
-    vkBindImageMemory(device, image, memoryHandle, memoryOffset);
+    return allocateMemoryResult;
 }
 
 void CopyBuffer(
@@ -583,6 +592,36 @@ uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPh
     return -1;
 }
 
+void CreateBuffer(VkBuffer*const vkBufferPtr, const VkDeviceSize& vkBufferSizeBytes, const VkBufferUsageFlags& usage, const VkDevice& device)
+{
+    NTF_REF(vkBufferPtr, vkBuffer);
+
+    VkBufferCreateInfo bufferInfo = {};
+    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+    bufferInfo.size = vkBufferSizeBytes;
+    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | usage;
+    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    const VkResult createBufferResult = vkCreateBuffer(device, &bufferInfo, GetVulkanAllocationCallbacks(), &vkBuffer);
+    NTF_VK_ASSERT_SUCCESS(createBufferResult);
+}
+
+///user is responsible for ensuring the VkDeviceMemory was allocated from the heap that supports all operations this buffer is intended for
+void CreateBuffer(
+    VkBuffer*const vkBufferPtr,
+    const VkDeviceMemory& vkBufferMemory,
+    const VkDeviceSize& offsetToAllocatedBlock,
+    const VkDeviceSize& vkBufferSizeBytes,
+    const VkMemoryPropertyFlags& flags,
+    const VkDevice& device,
+    const VkPhysicalDevice& physicalDevice)
+{
+    NTF_REF(vkBufferPtr, vkBuffer);
+
+    CreateBuffer(&vkBuffer, vkBufferSizeBytes, flags, device);
+    const VkResult bindBufferResult = vkBindBufferMemory(device, vkBuffer, vkBufferMemory, offsetToAllocatedBlock);
+    NTF_VK_ASSERT_SUCCESS(bindBufferResult);
+}
 void CreateBuffer(
     VkBuffer*const bufferPtr,
     VkDeviceMemory*const bufferMemoryPtr,
@@ -607,14 +646,7 @@ void CreateBuffer(
     assert(offsetToAllocatedBlockPtr);
     auto& offsetToAllocatedBlock = *offsetToAllocatedBlockPtr;
 
-    VkBufferCreateInfo bufferInfo = {};
-    bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-    bufferInfo.size = size;
-    bufferInfo.usage = usage;
-    bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    const VkResult createBufferResult = vkCreateBuffer(device, &bufferInfo, GetVulkanAllocationCallbacks(), &buffer);
-    NTF_VK_ASSERT_SUCCESS(createBufferResult);
+    CreateBuffer(&buffer, size, usage, device);
 
     VkMemoryRequirements memRequirements;
     vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
@@ -630,7 +662,8 @@ void CreateBuffer(
         physicalDevice);
     assert(allocateMemoryResult);
 
-    vkBindBufferMemory(device, buffer, bufferMemory, offsetToAllocatedBlock);
+    const VkResult bindBufferResult = vkBindBufferMemory(device, buffer, bufferMemory, offsetToAllocatedBlock);
+    NTF_VK_ASSERT_SUCCESS(bindBufferResult);
 }
 
 VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice)
@@ -734,7 +767,7 @@ void ReadFile(char**const fileData, StackCpu*const allocatorPtr, size_t*const fi
     assert(fileStatResult == 0);
 
     fileSizeBytes = fileInfo.st_size;
-    allocator.PushAlloc(reinterpret_cast<void**>(fileData), fileSizeBytes);
+    allocator.PushAlloc(reinterpret_cast<void**>(fileData), 0, fileSizeBytes);
     const size_t freadResult = fread(*fileData, 1, fileSizeBytes, f);
     assert(freadResult == fileInfo.st_size);
 }
@@ -1721,7 +1754,7 @@ void CreateAndCopyToGpuBuffer(
     const void*const cpuBufferSource,
     const VkBuffer& stagingBufferGpu,
     const VkDeviceSize bufferSize,
-    const VkMemoryPropertyFlags &flags,
+    const VkMemoryPropertyFlags& flags,
     const bool residentForever,
     const VkCommandPool& commandPool,
     const VkQueue& transferQueue,
@@ -1803,7 +1836,6 @@ void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queue
 
 void CreateDepthResources(
     VkImage*const depthImagePtr,
-    VkDeviceMemory*const depthImageMemoryPtr,
     VkImageView*const depthImageViewPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     const VkExtent2D& swapChainExtent,
@@ -1815,9 +1847,6 @@ void CreateDepthResources(
     assert(depthImagePtr);
     auto& depthImage = *depthImagePtr;
 
-    assert(depthImageMemoryPtr);
-    auto& depthImageMemory = *depthImageMemoryPtr;
-
     assert(depthImageViewPtr);
     auto& depthImageView = *depthImageViewPtr;
 
@@ -1826,10 +1855,11 @@ void CreateDepthResources(
 
     VkFormat depthFormat = FindDepthFormat(physicalDevice);
 
-    CreateImage(
+    VkDeviceSize alignment;
+    CreateAllocateBindImageIfAllocatorHasSpace(
         &depthImage,
-        &depthImageMemory,
         &allocator,
+        &alignment,
         swapChainExtent.width,
         swapChainExtent.height,
         depthFormat,
@@ -1905,12 +1935,77 @@ void STBIImageFree(void*const retval_from_stbi_load, StackCpu*const stbAllocator
             the transitions and copy in the CreateTextureImage function. Try to experiment with this by creating a
             setupCommandBuffer that the helper functions record commands into, and add a flushSetupCommands to
             execute the commands that have been recorded so far.*/
+bool CreateImageAndCopyPixelsIfStagingBufferHasSpace(
+    VkImage*const imagePtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
+    VkDeviceSize*const alignmentPtr,
+    int*const textureWidthPtr,
+    int*const textureHeightPtr,
+    StackCpu*const stagingBufferMemoryMapCpuToGpuStackPtr,
+    size_t*const imageSizeBytesPtr,
+    StackCpu*const stbAllocatorPtr, 
+    const char*const texturePathRelative,
+    const VkFormat& format,
+    const VkImageTiling& tiling,
+    const VkImageUsageFlags& usage,
+    const VkMemoryPropertyFlags& properties,
+    const bool residentForever,
+    const VkDevice& device,
+    const VkPhysicalDevice& physicalDevice)
+{
+    NTF_REF(imagePtr, image);
+    NTF_REF(allocatorPtr, allocator);
+    NTF_REF(alignmentPtr, alignment);
+
+    assert(textureWidthPtr);
+    auto& textureWidth = *textureWidthPtr;
+
+    assert(textureHeightPtr);
+    auto& textureHeight = *textureHeightPtr;
+
+    NTF_REF(stagingBufferMemoryMapCpuToGpuStackPtr, stagingBufferMemoryMapCpuToGpuStack);
+    NTF_REF(imageSizeBytesPtr, imageSizeBytes);
+
+    assert(stbAllocatorPtr);
+    auto& stbAllocator = *stbAllocatorPtr;
+
+    assert(texturePathRelative);
+
+    int textureChannels;
+    assert(stbAllocator.GetFirstByteFree() == 0);//ensure we can Clear() the whole stack correctly in STBIImageFree() (eg there's nothing already allocated in the stack)
+    stbi_uc* pixels = stbi_load(texturePathRelative, &textureWidth, &textureHeight, &textureChannels, STBI_rgb_alpha);
+    assert(pixels);
+    imageSizeBytes = textureWidth * textureHeight * 4;
+
+    CreateAllocateBindImageIfAllocatorHasSpace(
+        &image,
+        &allocator,
+        &alignment,
+        textureWidth,
+        textureHeight,
+        format,
+        tiling,
+        usage,
+        properties,
+        residentForever,
+        device,
+        physicalDevice);
+
+    ArraySafeRef<uint8_t> stagingBufferSuballocatedFromStack;
+    const bool stagingBufferHasSpace = 
+        stagingBufferMemoryMapCpuToGpuStack.MemcpyIfPushAllocSucceeds(
+            &stagingBufferSuballocatedFromStack, 
+            pixels, 
+            Cast_VkDeviceSize_size_t(alignment), 
+            imageSizeBytes);
+    STBIImageFree(pixels, &stbAllocator);
+    return stagingBufferHasSpace;
+}
 void CreateTextureImage(
     VkImage*const textureImagePtr,
-    VkDeviceMemory*const textureImageMemoryPtr,
-    StackCpu*const stbAllocatorPtr,
-    ArraySafeRef<uint8_t> stagingBufferMemoryMapCpuToGpu,
     VulkanPagedStackAllocator*const allocatorPtr,
+    const uint32_t widthPixels,
+    const uint32_t heightPixels,
     const VkBuffer& stagingBufferGpu,
     const bool residentForever,
     const VkQueue& transferQueue,
@@ -1926,31 +2021,21 @@ void CreateTextureImage(
     assert(textureImagePtr);
     auto& textureImage = *textureImagePtr;
 
-    assert(textureImageMemoryPtr);
-    auto& textureImageMemory = *textureImageMemoryPtr;
-
-    assert(stbAllocatorPtr);
-    auto& stbAllocator = *stbAllocatorPtr;
-
     assert(allocatorPtr);
     auto& allocator = *allocatorPtr;
 
-    int texWidth, texHeight, texChannels;
-    assert(stbAllocator.GetFirstByteFree() == 0);//ensure we can Clear() the whole stack correctly in STBIImageFree() (eg there's nothing already allocated in the stack)
-    stbi_uc* pixels = stbi_load(sk_texturePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-    assert(pixels);
-    const VkDeviceSize imageSize = texWidth * texHeight * 4;
+    assert(widthPixels > 0);
+    assert(heightPixels > 0);
 
-    stagingBufferMemoryMapCpuToGpu.MemcpyFromStart(pixels, static_cast<size_t>(imageSize));
-    STBIImageFree(pixels, &stbAllocator);
-
-    CreateImage(
+    VkDeviceSize alignment;
+    const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+    CreateAllocateBindImageIfAllocatorHasSpace(
         &textureImage,
-        &textureImageMemory,
         &allocator,
-        texWidth,
-        texHeight,
-        VK_FORMAT_R8G8B8A8_UNORM,
+        &alignment,
+        widthPixels,
+        heightPixels,
+        imageFormat,
         VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -1960,9 +2045,9 @@ void CreateTextureImage(
 
     TransferImageFromCpuToGpu(
         textureImage,
-        static_cast<uint32_t>(texWidth),
-        static_cast<uint32_t>(texHeight),
-        VK_FORMAT_R8G8B8A8_UNORM,
+        widthPixels,
+        heightPixels,
+        imageFormat,
         stagingBufferGpu,
         commandBufferTransfer,
         transferQueue,

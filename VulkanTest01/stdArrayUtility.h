@@ -8,6 +8,8 @@
 #include<string.h>
 #include<windows.h>//for DWORD
 
+#define NTF_REF(ptrIdentifier, refIdentifier) assert(ptrIdentifier); auto& refIdentifier = *ptrIdentifier
+
 template<class T, size_t kSize>
 class VectorSafe;
 

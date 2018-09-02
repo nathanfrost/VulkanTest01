@@ -64,20 +64,34 @@ static const uint32_t s_kWidth = 800;
 static const uint32_t s_kHeight = 600;
 
 const char*const sk_ModelPath = "models/chalet.obj";
-const char*const sk_texturePath = "textures/chalet.jpg";
 
 typedef uint32_t PushConstantBindIndexType;
+
 
 VkAllocationCallbacks* GetVulkanAllocationCallbacks();
 #if NTF_DEBUG
 size_t GetVulkanApiCpuBytesAllocatedMax();
 #endif//#if NTF_DEBUG
 HANDLE ThreadSignalingEventCreate();
+void TransferImageFromCpuToGpu(
+    const VkImage& image,
+    const uint32_t width,
+    const uint32_t height,
+    const VkFormat& format,
+    const VkBuffer& stagingBuffer,
+    const VkCommandBuffer commandBufferTransfer,
+    const VkQueue& transferQueue,
+    const uint32_t transferQueueFamilyIndex,
+    const VkSemaphore transferFinishedSemaphore,
+    const VkCommandBuffer commandBufferGraphics,
+    const VkQueue& graphicsQueue,
+    const uint32_t graphicsQueueFamilyIndex,
+    const VkDevice& device);
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device);
-void CreateImage(
+bool CreateAllocateBindImageIfAllocatorHasSpace(
     VkImage*const imagePtr,
-    VkDeviceMemory*const imageMemoryPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
+    VkDeviceSize*const alignmentPtr,
     const uint32_t width,
     const uint32_t height,
     const VkFormat& format,
@@ -85,6 +99,14 @@ void CreateImage(
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
     const bool residentForever,
+    const VkDevice& device,
+    const VkPhysicalDevice& physicalDevice);
+void CreateBuffer(
+    VkBuffer*const vkBufferPtr,
+    const VkDeviceMemory& vkBufferMemory,
+    const VkDeviceSize& offsetToAllocatedBlock,
+    const VkDeviceSize& vkBufferSizeBytes,
+    const VkMemoryPropertyFlags& flags,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 void CopyBufferToImage(
@@ -364,7 +386,7 @@ void CreateAndCopyToGpuBuffer(
     const void*const cpuBufferSource,
     const VkBuffer& stagingBufferGpu,
     const VkDeviceSize bufferSize,
-    const VkMemoryPropertyFlags &flags,
+    const VkMemoryPropertyFlags& flags,
     const bool residentForever,
     const VkCommandPool& commandPool,
     const VkQueue& transferQueue,
@@ -376,7 +398,6 @@ void EndSingleTimeCommands(const VkCommandBuffer& commandBuffer, const VkCommand
 void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queueFamilyIndex, const VkDevice& device, const VkPhysicalDevice& physicalDevice);
 void CreateDepthResources(
     VkImage*const depthImagePtr,
-    VkDeviceMemory*const depthImageMemoryPtr,
     VkImageView*const depthImageViewPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     const VkExtent2D& swapChainExtent,
@@ -398,12 +419,28 @@ bool HasStencilComponent(VkFormat format);
             the transitions and copy in the CreateTextureImage function. Try to experiment with this by creating a
             setupCommandBuffer that the helper functions record commands into, and add a flushSetupCommands to
             execute the commands that have been recorded so far.*/
+bool CreateImageAndCopyPixelsIfStagingBufferHasSpace(
+    VkImage*const imagePtr,
+    VulkanPagedStackAllocator*const allocatorPtr,
+    VkDeviceSize*const alignmentPtr,
+    int*const textureWidthPtr,
+    int*const textureHeightPtr,
+    StackCpu*const stagingBufferMemoryMapCpuToGpuStackPtr,
+    size_t*const imageSizeBytesPtr,
+    StackCpu*const stbAllocatorPtr,
+    const char*const texturePathRelative,
+    const VkFormat& format,
+    const VkImageTiling& tiling,
+    const VkImageUsageFlags& usage,
+    const VkMemoryPropertyFlags& properties,
+    const bool residentForever,
+    const VkDevice& device,
+    const VkPhysicalDevice& physicalDevice);
 void CreateTextureImage(
     VkImage*const textureImagePtr,
-    VkDeviceMemory*const textureImageMemoryPtr,
-    StackCpu*const stbAllocatorPtr,
-    ArraySafeRef<uint8_t> stagingBufferMemoryMapCpuToGpu,
     VulkanPagedStackAllocator*const allocatorPtr,
+    const uint32_t widthPixels,
+    const uint32_t heightPixels,
     const VkBuffer& stagingBufferGpu,
     const bool residentForever,
     const VkQueue& transferQueue,
