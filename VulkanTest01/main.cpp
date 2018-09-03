@@ -521,31 +521,25 @@ private:
                 m_device,
                 m_physicalDevice);
         }
-        if (unifiedGraphicsAndTransferQueue)
+        VectorSafe<VkSemaphore, 1> transferFinishedSemaphore;
+        if (!unifiedGraphicsAndTransferQueue)
         {
-            vkEndCommandBuffer(m_commandBufferTransfer);
-            SubmitCommandBuffer(
-                ConstVectorSafeRef<VkSemaphore>(),
-                ConstVectorSafeRef<VkSemaphore>(),
-                ArraySafeRef<VkPipelineStageFlags>(),
-                m_commandBufferTransfer,
-                m_transferQueue);
+            transferFinishedSemaphore.Push(m_transferFinishedSemaphore);
         }
-        else
+        vkEndCommandBuffer(m_commandBufferTransfer);
+        SubmitCommandBuffer(
+            transferFinishedSemaphore,
+            ConstVectorSafeRef<VkSemaphore>(),
+            ArraySafeRef<VkPipelineStageFlags>(),
+            m_commandBufferTransfer,
+            m_transferQueue);
+        if (!unifiedGraphicsAndTransferQueue)
         {
-            vkEndCommandBuffer(m_commandBufferTransfer);
-            SubmitCommandBuffer(
-                VectorSafe<VkSemaphore, 1>({ m_transferFinishedSemaphore }),///@todo: refactor with above case; only this line in vkEndCommandBuffer()/SubmitCommandBuffer() calls is unique
-                ConstVectorSafeRef<VkSemaphore>(),
-                ArraySafeRef<VkPipelineStageFlags>(),
-                m_commandBufferTransfer,
-                m_transferQueue);
-
             vkEndCommandBuffer(m_commandBufferTransitionImage);
             ArraySafe<VkPipelineStageFlags, 1> waitStages({ VK_PIPELINE_STAGE_TRANSFER_BIT });
             SubmitCommandBuffer(
                 ConstVectorSafeRef<VkSemaphore>(),
-                VectorSafe<VkSemaphore, 1>({ m_transferFinishedSemaphore }),///@todo: refactor with above call
+                transferFinishedSemaphore,
                 &waitStages,
                 m_commandBufferTransitionImage,
                 m_graphicsQueue);
