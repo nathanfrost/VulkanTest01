@@ -417,7 +417,7 @@ private:
         const bool unifiedGraphicsAndTransferQueue = m_graphicsQueue == m_transferQueue;
         assert(unifiedGraphicsAndTransferQueue == (m_queueFamilyIndices.transferFamily == m_queueFamilyIndices.graphicsFamily));
         BeginCommands(m_commandBufferTransfer, m_device);
-        if (unifiedGraphicsAndTransferQueue)
+        if (!unifiedGraphicsAndTransferQueue)
         {
             BeginCommands(m_commandBufferTransitionImage, m_device);
         }
