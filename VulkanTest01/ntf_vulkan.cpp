@@ -377,8 +377,6 @@ void TransferImageFromCpuToGpu(
     const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
     assert(unifiedGraphicsAndTransferQueue == (transferQueueFamilyIndex == graphicsQueueFamilyIndex));
 
-    BeginCommands(commandBufferTransfer, device);
-
     //transition memory to format optimal for copying from CPU->GPU
     ImageMemoryBarrier(
         VK_IMAGE_LAYOUT_UNDEFINED, 
@@ -409,13 +407,6 @@ void TransferImageFromCpuToGpu(
             VK_PIPELINE_STAGE_TRANSFER_BIT, 
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             commandBufferTransfer);
-        vkEndCommandBuffer(commandBufferTransfer);
-        SubmitCommandBuffer(
-            ConstVectorSafeRef<VkSemaphore>(),
-            ConstVectorSafeRef<VkSemaphore>(),
-            ArraySafeRef<VkPipelineStageFlags>(),
-            commandBufferTransfer,
-            transferQueue);
     }
     else
     {
@@ -433,16 +424,7 @@ void TransferImageFromCpuToGpu(
             VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
             commandBufferTransfer);
 
-        vkEndCommandBuffer(commandBufferTransfer);
-        SubmitCommandBuffer(
-            VectorSafe<VkSemaphore, 1>({ transferFinishedSemaphore }),
-            ConstVectorSafeRef<VkSemaphore>(),
-            ArraySafeRef<VkPipelineStageFlags>(),
-            commandBufferTransfer,
-            transferQueue);
-
         //prepare texture for shader reads
-        BeginCommands(commandBufferGraphics, device);
         ImageMemoryBarrier(
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -455,15 +437,6 @@ void TransferImageFromCpuToGpu(
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
             commandBufferGraphics);
-
-        vkEndCommandBuffer(commandBufferGraphics);
-        ArraySafe<VkPipelineStageFlags, 1> waitStages({ VK_PIPELINE_STAGE_TRANSFER_BIT });
-        SubmitCommandBuffer(
-            ConstVectorSafeRef<VkSemaphore>(),
-            VectorSafe<VkSemaphore, 1>({ transferFinishedSemaphore }),
-            &waitStages,
-            commandBufferGraphics,
-            graphicsQueue);
     }
 }
 
@@ -534,22 +507,11 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     return allocateMemoryResult;
 }
 
-void CopyBuffer(
-    const VkBuffer& srcBuffer,
-    const VkBuffer& dstBuffer,
-    const VkDeviceSize& size,
-    const VkCommandPool& commandPool,
-    const VkQueue& transferQueue,
-    const VkDevice& device)
+void CopyBuffer(const VkBuffer& srcBuffer,const VkBuffer& dstBuffer,const VkDeviceSize& size, const VkCommandBuffer commandBuffer)
 {
-    VkCommandBuffer commandBuffer;
-    BeginSingleTimeCommands(&commandBuffer, commandPool, device);
-
     VkBufferCopy copyRegion = {};
     copyRegion.size = size;
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-    EndSingleTimeCommands(commandBuffer, commandPool, transferQueue, device);
 }
 
 /* Heap classification:
@@ -854,27 +816,6 @@ bool Vertex::operator==(const Vertex& other) const
 
 void BeginCommands(const VkCommandBuffer& commandBuffer, const VkDevice& device)
 {
-    VkCommandBufferBeginInfo beginInfo = {};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
-}
-
-void BeginSingleTimeCommands(VkCommandBuffer*const commandBufferPtr, const VkCommandPool& commandPool, const VkDevice& device)
-{
-    assert(commandBufferPtr);
-    auto& commandBuffer = *commandBufferPtr;
-
-    VkCommandBufferAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandPool = commandPool;
-    allocInfo.commandBufferCount = 1;
-
-    ///@todo: pretty sure I should be using a pool of commmand buffers here
-    vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
-
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -1761,8 +1702,7 @@ void CreateAndCopyToGpuBuffer(
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags& flags,
     const bool residentForever,
-    const VkCommandPool& commandPool,
-    const VkQueue& transferQueue,
+    const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -1793,7 +1733,7 @@ void CreateAndCopyToGpuBuffer(
         device,
         physicalDevice);
 
-    CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandPool, transferQueue, device);
+    CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandBuffer);
 }
 
 void EndSingleTimeCommandsHackDeleteSoon(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device)

@@ -116,6 +116,12 @@ void CopyBufferToImage(
     const uint32_t height,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device);
+VkResult SubmitCommandBuffer(
+    ConstVectorSafeRef<VkSemaphore> signalSemaphores,
+    ConstVectorSafeRef<VkSemaphore> waitSemaphores,
+    ArraySafeRef<VkPipelineStageFlags> waitStages,///<@todo: ConstArraySafeRef
+    const VkCommandBuffer& commandBuffer,
+    const VkQueue& queue);
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
 uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
 void CreateBuffer(
@@ -149,7 +155,6 @@ VkResult CreateDebugReportCallbackEXT(
     const VkAllocationCallbacks* pAllocator,
     VkDebugReportCallbackEXT* pCallback);
 void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator);
-void BeginSingleTimeCommands(VkCommandBuffer*const commandBufferPtr, const VkCommandPool& commandPool, const VkDevice& device);
 void BeginCommands(const VkCommandBuffer& commandBuffer, const VkDevice& device);
 
 struct Vertex
@@ -388,8 +393,7 @@ void CreateAndCopyToGpuBuffer(
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags& flags,
     const bool residentForever,
-    const VkCommandPool& commandPool,
-    const VkQueue& transferQueue,
+    const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 

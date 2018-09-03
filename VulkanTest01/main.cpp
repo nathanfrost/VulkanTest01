@@ -414,6 +414,13 @@ private:
             m_device,
             m_physicalDevice);
 
+        const bool unifiedGraphicsAndTransferQueue = m_graphicsQueue == m_transferQueue;
+        assert(unifiedGraphicsAndTransferQueue == (m_queueFamilyIndices.transferFamily == m_queueFamilyIndices.graphicsFamily));
+        BeginCommands(m_commandBufferTransfer, m_device);
+        if (unifiedGraphicsAndTransferQueue)
+        {
+            BeginCommands(m_commandBufferTransitionImage, m_device);
+        }
         TransferImageFromCpuToGpu(
             m_textureImage, 
             textureWidth, 
@@ -472,8 +479,7 @@ private:
                 bufferSize,
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
                 false,
-                m_commandPoolTransfer,
-                m_transferQueue,
+                m_commandBufferTransfer,
                 m_device,
                 m_physicalDevice);
             ++stagingBufferGpuIndex;
@@ -511,12 +517,40 @@ private:
                 bufferSize,
                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                 false,
-                m_commandPoolTransfer,
-                m_transferQueue,
+                m_commandBufferTransfer,
                 m_device,
                 m_physicalDevice);
         }
-        
+        if (unifiedGraphicsAndTransferQueue)
+        {
+            vkEndCommandBuffer(m_commandBufferTransfer);
+            SubmitCommandBuffer(
+                ConstVectorSafeRef<VkSemaphore>(),
+                ConstVectorSafeRef<VkSemaphore>(),
+                ArraySafeRef<VkPipelineStageFlags>(),
+                m_commandBufferTransfer,
+                m_transferQueue);
+        }
+        else
+        {
+            vkEndCommandBuffer(m_commandBufferTransfer);
+            SubmitCommandBuffer(
+                VectorSafe<VkSemaphore, 1>({ m_transferFinishedSemaphore }),///@todo: refactor with above case; only this line in vkEndCommandBuffer()/SubmitCommandBuffer() calls is unique
+                ConstVectorSafeRef<VkSemaphore>(),
+                ArraySafeRef<VkPipelineStageFlags>(),
+                m_commandBufferTransfer,
+                m_transferQueue);
+
+            vkEndCommandBuffer(m_commandBufferTransitionImage);
+            ArraySafe<VkPipelineStageFlags, 1> waitStages({ VK_PIPELINE_STAGE_TRANSFER_BIT });
+            SubmitCommandBuffer(
+                ConstVectorSafeRef<VkSemaphore>(),
+                VectorSafe<VkSemaphore, 1>({ m_transferFinishedSemaphore }),///@todo: refactor with above call
+                &waitStages,
+                m_commandBufferTransitionImage,
+                m_graphicsQueue);
+        }
+
         m_uniformBufferCpuAlignment = UniformBufferCpuAlignmentCalculate(sm_uniformBufferElementSize, m_physicalDevice);
         CreateUniformBuffer(
             &m_uniformBufferCpuMemory,
