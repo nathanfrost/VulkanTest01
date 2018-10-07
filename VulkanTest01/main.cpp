@@ -191,16 +191,18 @@ private:
             m_swapChain);
         
         vkDestroySampler(m_device, m_textureSampler, GetVulkanAllocationCallbacks());
-        vkDestroyImageView(m_device, m_textureImageView, GetVulkanAllocationCallbacks());
-
-        vkDestroyImage(m_device, m_textureImage, GetVulkanAllocationCallbacks());
 
         vkDestroyDescriptorPool(m_device, m_descriptorPool, GetVulkanAllocationCallbacks());
         vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, GetVulkanAllocationCallbacks());
         
-        DestroyUniformBuffer(m_uniformBufferCpuMemory, m_uniformBufferGpuMemory, m_uniformBuffer, m_device);
-        vkDestroyBuffer(m_device, m_indexBuffer, GetVulkanAllocationCallbacks());
-        vkDestroyBuffer(m_device, m_vertexBuffer, GetVulkanAllocationCallbacks());
+        for (auto& texturedGeometry : m_texturedGeometries)
+        {
+            vkDestroyImage(m_device, texturedGeometry.m_textureImage, GetVulkanAllocationCallbacks());
+            vkDestroyImageView(m_device, texturedGeometry.m_textureImageView, GetVulkanAllocationCallbacks());
+            DestroyUniformBuffer(texturedGeometry.m_uniformBufferCpuMemory, texturedGeometry.m_uniformBufferGpuMemory, texturedGeometry.m_uniformBuffer, m_device);
+            vkDestroyBuffer(m_device, texturedGeometry.m_indexBuffer, GetVulkanAllocationCallbacks());
+            vkDestroyBuffer(m_device, texturedGeometry.m_vertexBuffer, GetVulkanAllocationCallbacks());
+        }
 
         for (size_t frameIndex = 0; frameIndex < NTF_FRAMES_IN_FLIGHT_NUM; ++frameIndex)
         {
@@ -379,40 +381,6 @@ private:
         NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
         m_stagingBufferMemoryMapCpuToGpu.Initialize(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpu), NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
         size_t stagingBufferGpuIndex = 0;
-        
-        int textureWidth, textureHeight;
-        size_t imageSizeBytes;
-        VkDeviceSize alignment;
-        const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
-        const bool copyPixelsIfStagingBufferHasSpaceResult = CreateImageAndCopyPixelsIfStagingBufferHasSpace(
-            &m_textureImage,
-            &m_deviceLocalMemory,
-            &alignment,
-            &textureWidth, 
-            &textureHeight, 
-            &m_stagingBufferMemoryMapCpuToGpu,
-            &imageSizeBytes, 
-            g_stbAllocator,
-            "textures/cat_diff.tga",//"textures/chalet.jpg",
-            imageFormat,
-            VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
-            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            false,
-            m_device,
-            m_physicalDevice);
-        assert(copyPixelsIfStagingBufferHasSpaceResult);
-
-        const bool pushAllocSuccess = stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, alignment, imageSizeBytes);
-        assert(pushAllocSuccess);
-        CreateBuffer(
-            &m_stagingBuffersGpu[stagingBufferGpuIndex],
-            m_stagingBufferGpuMemory,
-            m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
-            imageSizeBytes,
-            0,
-            m_device,
-            m_physicalDevice);
 
         const bool unifiedGraphicsAndTransferQueue = m_graphicsQueue == m_transferQueue;
         assert(unifiedGraphicsAndTransferQueue == (m_queueFamilyIndices.transferFamily == m_queueFamilyIndices.graphicsFamily));
@@ -421,110 +389,152 @@ private:
         {
             BeginCommands(m_commandBufferTransitionImage, m_device);
         }
-        TransferImageFromCpuToGpu(
-            m_textureImage, 
-            textureWidth, 
-            textureHeight, 
-            imageFormat,
-            m_stagingBuffersGpu[stagingBufferGpuIndex], 
-            m_commandBufferTransfer, 
-            m_transferQueue, 
-            m_queueFamilyIndices.transferFamily, 
-            m_transferFinishedSemaphore, 
-            m_commandBufferTransitionImage, 
-            m_graphicsQueue, 
-            m_queueFamilyIndices.graphicsFamily, 
-            m_device);
-
-        CreateTextureImageView(&m_textureImageView, m_textureImage, m_device);
         CreateTextureSampler(&m_textureSampler, m_device);
 
-        ++stagingBufferGpuIndex;
-
-        //BEG_#StreamingMemory
-        LoadModel(&m_vertices, &m_indices);
-        m_indicesSize = Cast_size_t_uint32_t(m_indices.size());//store since we need secondary buffers to point to this
-        //END_#StreamingMemory
-        {
-            const size_t bufferSize = sizeof(m_vertices[0]) * m_vertices.size();
-
-            stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
-            CreateBuffer(
-                &m_stagingBuffersGpu[stagingBufferGpuIndex],
-                m_stagingBufferGpuMemory,
-                m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
-                bufferSize,
-                0,
-                m_device,
-                m_physicalDevice);
-
-#if NTF_DEBUG
-            VkMemoryRequirements memRequirements;
-            vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[stagingBufferGpuIndex], &memRequirements);
-            assert(memRequirements.alignment == m_stagingBufferGpuAlignmentStandard);
-#endif//#if NTF_DEBUG
-
-            ArraySafeRef<uint8_t> vertexBufferStagingBufferCpuToGpu;
-            m_stagingBufferMemoryMapCpuToGpu.PushAlloc(
-                &vertexBufferStagingBufferCpuToGpu, 
-                Cast_VkDeviceSize_size_t(m_stagingBufferGpuAlignmentStandard), 
-                bufferSize);
-            CreateAndCopyToGpuBuffer(
-                &m_deviceLocalMemory,
-                &m_vertexBuffer,
-                &m_vertexBufferMemory,
-                vertexBufferStagingBufferCpuToGpu,
-                m_vertices.data(),
-                m_stagingBuffersGpu[stagingBufferGpuIndex],
-                bufferSize,
-                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
-                false,
-                m_commandBufferTransfer,
-                m_device,
-                m_physicalDevice);
-            ++stagingBufferGpuIndex;
-        }
-        {
-            const size_t bufferSize = sizeof(m_indices[0]) * m_indices.size();
-            stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
-            CreateBuffer(
-                &m_stagingBuffersGpu[stagingBufferGpuIndex],
-                m_stagingBufferGpuMemory,
-                m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
-                bufferSize,
-                0,
-                m_device,
-                m_physicalDevice);
-
-#if NTF_DEBUG
-            VkMemoryRequirements memRequirements;
-            vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[stagingBufferGpuIndex], &memRequirements);
-            assert(memRequirements.alignment == m_stagingBufferGpuAlignmentStandard);
-#endif//#if NTF_DEBUG
-
-            ArraySafeRef<uint8_t> indexBufferStagingBufferCpuToGpu;
-            m_stagingBufferMemoryMapCpuToGpu.PushAlloc(
-                &indexBufferStagingBufferCpuToGpu, 
-                Cast_VkDeviceSize_size_t(m_stagingBufferGpuAlignmentStandard), 
-                bufferSize);
-            CreateAndCopyToGpuBuffer(
-                &m_deviceLocalMemory,
-                &m_indexBuffer,
-                &m_indexBufferMemory,
-                indexBufferStagingBufferCpuToGpu,
-                m_indices.data(),
-                m_stagingBuffersGpu[stagingBufferGpuIndex],
-                bufferSize,
-                VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                false,
-                m_commandBufferTransfer,
-                m_device,
-                m_physicalDevice);
-        }
         VectorSafe<VkSemaphore, 1> transferFinishedSemaphore;
-        if (!unifiedGraphicsAndTransferQueue)
+        for (auto& texturedGeometry : m_texturedGeometries)
         {
-            transferFinishedSemaphore.Push(m_transferFinishedSemaphore);
+            int textureWidth, textureHeight;
+            size_t imageSizeBytes;
+            VkDeviceSize alignment;
+            const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+            {
+                const bool copyPixelsIfStagingBufferHasSpaceResult = CreateImageAndCopyPixelsIfStagingBufferHasSpace(
+                    &texturedGeometry.m_textureImage,
+                    &m_deviceLocalMemory,
+                    &alignment,
+                    &textureWidth,
+                    &textureHeight,
+                    &m_stagingBufferMemoryMapCpuToGpu,
+                    &imageSizeBytes,
+                    g_stbAllocator,
+                    "textures/cat_diff.tga",//"textures/chalet.jpg",
+                    imageFormat,
+                    VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
+                    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                    false,
+                    m_device,
+                    m_physicalDevice);
+                assert(copyPixelsIfStagingBufferHasSpaceResult);
+            }
+
+            const bool pushAllocSuccess = stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, alignment, imageSizeBytes);
+            assert(pushAllocSuccess);
+            CreateBuffer(
+                &m_stagingBuffersGpu[stagingBufferGpuIndex],
+                m_stagingBufferGpuMemory,
+                m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+                imageSizeBytes,
+                0,
+                m_device,
+                m_physicalDevice);
+
+            TransferImageFromCpuToGpu(
+                texturedGeometry.m_textureImage,
+                textureWidth,
+                textureHeight,
+                imageFormat,
+                m_stagingBuffersGpu[stagingBufferGpuIndex],
+                m_commandBufferTransfer,
+                m_transferQueue,
+                m_queueFamilyIndices.transferFamily,
+                m_transferFinishedSemaphore,
+                m_commandBufferTransitionImage,
+                m_graphicsQueue,
+                m_queueFamilyIndices.graphicsFamily,
+                m_device);
+
+            CreateTextureImageView(&texturedGeometry.m_textureImageView, texturedGeometry.m_textureImage, m_device);
+            ++stagingBufferGpuIndex;
+
+            //BEG_#StreamingMemory
+            LoadModel(&texturedGeometry.m_vertices, &texturedGeometry.m_indices);
+            texturedGeometry.m_indicesSize = Cast_size_t_uint32_t(texturedGeometry.m_indices.size());//store since we need secondary buffers to point to this
+            //END_#StreamingMemory
+            const size_t bufferSize = sizeof(texturedGeometry.m_vertices[0]) * texturedGeometry.m_vertices.size();
+
+            ///@todo: #IndexVertexBufferUploadDuplication: consider refactor
+            {
+                stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
+                CreateBuffer(
+                    &m_stagingBuffersGpu[stagingBufferGpuIndex],
+                    m_stagingBufferGpuMemory,
+                    m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+                    bufferSize,
+                    0,
+                    m_device,
+                    m_physicalDevice);
+
+#if NTF_DEBUG
+                VkMemoryRequirements memRequirements;
+                vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[stagingBufferGpuIndex], &memRequirements);
+                assert(memRequirements.alignment == m_stagingBufferGpuAlignmentStandard);
+#endif//#if NTF_DEBUG
+
+                ArraySafeRef<uint8_t> vertexBufferStagingBufferCpuToGpu;
+                m_stagingBufferMemoryMapCpuToGpu.PushAlloc(
+                    &vertexBufferStagingBufferCpuToGpu,
+                    Cast_VkDeviceSize_size_t(m_stagingBufferGpuAlignmentStandard),
+                    bufferSize);
+                CreateAndCopyToGpuBuffer(
+                    &m_deviceLocalMemory,
+                    &texturedGeometry.m_vertexBuffer,
+                    &texturedGeometry.m_vertexBufferMemory,
+                    vertexBufferStagingBufferCpuToGpu,
+                    texturedGeometry.m_vertices.data(),
+                    m_stagingBuffersGpu[stagingBufferGpuIndex],
+                    bufferSize,
+                    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
+                    false,
+                    m_commandBufferTransfer,
+                    m_device,
+                    m_physicalDevice);
+                ++stagingBufferGpuIndex;
+            }
+
+            ///@todo: #IndexVertexBufferUploadDuplication: consider refactor
+            {
+                const size_t bufferSize = sizeof(texturedGeometry.m_indices[0]) * texturedGeometry.m_indices.size();
+                stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
+                CreateBuffer(
+                    &m_stagingBuffersGpu[stagingBufferGpuIndex],
+                    m_stagingBufferGpuMemory,
+                    m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+                    bufferSize,
+                    0,
+                    m_device,
+                    m_physicalDevice);
+
+#if NTF_DEBUG
+                VkMemoryRequirements memRequirements;
+                vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[stagingBufferGpuIndex], &memRequirements);
+                assert(memRequirements.alignment == m_stagingBufferGpuAlignmentStandard);
+#endif//#if NTF_DEBUG
+
+                ArraySafeRef<uint8_t> indexBufferStagingBufferCpuToGpu;
+                m_stagingBufferMemoryMapCpuToGpu.PushAlloc(
+                    &indexBufferStagingBufferCpuToGpu,
+                    Cast_VkDeviceSize_size_t(m_stagingBufferGpuAlignmentStandard),
+                    bufferSize);
+                CreateAndCopyToGpuBuffer(
+                    &m_deviceLocalMemory,
+                    &texturedGeometry.m_indexBuffer,
+                    &texturedGeometry.m_indexBufferMemory,
+                    indexBufferStagingBufferCpuToGpu,
+                    texturedGeometry.m_indices.data(),
+                    m_stagingBuffersGpu[stagingBufferGpuIndex],
+                    bufferSize,
+                    VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                    false,
+                    m_commandBufferTransfer,
+                    m_device,
+                    m_physicalDevice);
+            }
+            if (!unifiedGraphicsAndTransferQueue)
+            {
+                transferFinishedSemaphore.Push(m_transferFinishedSemaphore);
+            }
         }
         vkEndCommandBuffer(m_commandBufferTransfer);
         SubmitCommandBuffer(
@@ -547,11 +557,11 @@ private:
 
         m_uniformBufferCpuAlignment = UniformBufferCpuAlignmentCalculate(sm_uniformBufferElementSize, m_physicalDevice);
         CreateUniformBuffer(
-            &m_uniformBufferCpuMemory,
-            &m_uniformBufferGpuMemory,
-            &m_uniformBuffer, 
+            &m_texturedGeometries[0].m_uniformBufferCpuMemory,
+            &m_texturedGeometries[0].m_uniformBufferGpuMemory,
+            &m_texturedGeometries[0].m_uniformBuffer,
             &m_deviceLocalMemory,
-            &m_uniformBufferOffsetToGpuMemory,
+            &m_texturedGeometries[0].m_uniformBufferOffsetToGpuMemory,
             UniformBufferSizeCalculate(),
             false,
             m_device, 
@@ -563,9 +573,9 @@ private:
             descriptorType, 
             m_descriptorSetLayout, 
             m_descriptorPool, 
-            m_uniformBuffer, 
+            m_texturedGeometries[0].m_uniformBuffer,
             sm_uniformBufferElementSize, 
-            m_textureImageView, 
+            m_texturedGeometries[0].m_textureImageView, ///<@todo: #StreamingMemory: unhack; 
             m_textureSampler, 
             m_device);
 
@@ -605,14 +615,17 @@ private:
         {
             glfwPollEvents();
 
-            UpdateUniformBuffer(
-                m_uniformBufferCpuMemory, 
-                m_uniformBufferGpuMemory, 
-                m_uniformBufferOffsetToGpuMemory,
-                NTF_OBJECTS_NUM,
-                UniformBufferSizeCalculate(), 
-                m_swapChainExtent, 
-                m_device);
+            for (auto& texturedGeometry : m_texturedGeometries)
+            {
+                UpdateUniformBuffer(
+                    texturedGeometry.m_uniformBufferCpuMemory,
+                    texturedGeometry.m_uniformBufferGpuMemory,
+                    texturedGeometry.m_uniformBufferOffsetToGpuMemory,
+                    NTF_OBJECTS_NUM,
+                    UniformBufferSizeCalculate(),
+                    m_swapChainExtent,
+                    m_device);
+            }
 
             const VkSemaphore imageAvailableSemaphore = m_imageAvailableSemaphore[frameIndex];
             uint32_t acquiredImageIndex;
@@ -629,9 +642,9 @@ private:
                 &m_swapChainExtent,
                 &m_pipelineLayout,
                 &m_graphicsPipeline,
-                &m_vertexBuffer,
-                &m_indexBuffer,
-                &m_indicesSize,
+                &m_texturedGeometries[0].m_vertexBuffer,
+                &m_texturedGeometries[0].m_indexBuffer,
+                &m_texturedGeometries[0].m_indicesSize,
                 &m_objectIndices,
                 NTF_OBJECTS_NUM);
 
@@ -687,27 +700,11 @@ private:
     VectorSafe<ArraySafe<VkCommandPool, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandPoolsSecondary;
     VkImage m_depthImage;
     VkImageView m_depthImageView;
-    VkImage m_textureImage;
-    VkImageView m_textureImageView;
     VkSampler m_textureSampler;
 
     //BEG_#StreamingMemory
-    std::vector<Vertex> m_vertices;
-    std::vector<uint32_t> m_indices;
-    uint32_t m_indicesSize;
-    //END_#StreamingMemory
+    ArraySafe<TexturedGeometry,1> m_texturedGeometries;
 
-    //BEG_#StreamingMemory
-    VkBuffer m_vertexBuffer;
-    VkDeviceMemory m_vertexBufferMemory;
-    VkBuffer m_indexBuffer;
-    VkDeviceMemory m_indexBufferMemory;
-    VkDeviceMemory m_textureBufferMemory;
-    VkBuffer m_uniformBuffer;
-    VkDeviceMemory m_uniformBufferGpuMemory;
-    VkDeviceSize m_uniformBufferOffsetToGpuMemory;
-    ArraySafeRef<uint8_t> m_uniformBufferCpuMemory;
-    
     VkDescriptorPool m_descriptorPool;
     VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed
     //END_#StreamingMemory
@@ -736,7 +733,7 @@ private:
     //BEG_#StagingBuffer
     VkBuffer m_stagingBufferGpu;
     VkDeviceSize m_stagingBufferGpuAlignmentStandard;
-    ArraySafe<VkBuffer, 3> m_stagingBuffersGpu;
+    ArraySafe<VkBuffer, 32> m_stagingBuffersGpu;
     VkDeviceMemory m_stagingBufferGpuMemory;
     VkDeviceSize m_offsetToFirstByteOfStagingBuffer;
     //END_#StagingBuffer

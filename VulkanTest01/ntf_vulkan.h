@@ -169,6 +169,25 @@ struct Vertex
     bool operator==(const Vertex& other) const;
 };
 
+struct TexturedGeometry
+{
+    std::vector<Vertex> m_vertices;///<@todo: #StreamingMemory: eliminate std::vector
+    std::vector<uint32_t> m_indices;///<@todo: #StreamingMemory: eliminate std::vector
+    uint32_t m_indicesSize;
+
+    VkBuffer m_vertexBuffer;
+    VkDeviceMemory m_vertexBufferMemory;
+    VkBuffer m_indexBuffer;
+    VkDeviceMemory m_indexBufferMemory;
+    VkImage m_textureImage;
+    VkImageView m_textureImageView;
+    VkDeviceMemory m_textureBufferMemory;
+    VkBuffer m_uniformBuffer;
+    VkDeviceMemory m_uniformBufferGpuMemory;
+    VkDeviceSize m_uniformBufferOffsetToGpuMemory;
+    ArraySafeRef<uint8_t> m_uniformBufferCpuMemory;
+};
+
 namespace std
 {
     template<> struct hash<Vertex>
