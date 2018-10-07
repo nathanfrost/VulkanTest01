@@ -63,7 +63,7 @@ class VulkanPagedStackAllocator;
 static const uint32_t s_kWidth = 800;
 static const uint32_t s_kHeight = 600;
 
-const char*const sk_ModelPath = "models/chalet.obj";
+const char*const sk_ModelPath = "models/cat.obj";//"models/chalet.obj";
 
 typedef uint32_t PushConstantBindIndexType;
 

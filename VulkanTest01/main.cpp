@@ -393,7 +393,7 @@ private:
             &m_stagingBufferMemoryMapCpuToGpu,
             &imageSizeBytes, 
             g_stbAllocator,
-            "textures/chalet.jpg",
+            "textures/cat_diff.tga",//"textures/chalet.jpg",
             imageFormat,
             VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
             VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
