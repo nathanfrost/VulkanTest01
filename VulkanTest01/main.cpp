@@ -198,11 +198,11 @@ private:
         
         for (auto& texturedGeometry : m_texturedGeometries)
         {
-            vkDestroyImage(m_device, texturedGeometry.m_textureImage, GetVulkanAllocationCallbacks());
-            vkDestroyImageView(m_device, texturedGeometry.m_textureImageView, GetVulkanAllocationCallbacks());
-            DestroyUniformBuffer(texturedGeometry.m_uniformBufferCpuMemory, texturedGeometry.m_uniformBufferGpuMemory, texturedGeometry.m_uniformBuffer, m_device);
-            vkDestroyBuffer(m_device, texturedGeometry.m_indexBuffer, GetVulkanAllocationCallbacks());
-            vkDestroyBuffer(m_device, texturedGeometry.m_vertexBuffer, GetVulkanAllocationCallbacks());
+            vkDestroyImage(m_device, texturedGeometry.textureImage, GetVulkanAllocationCallbacks());
+            vkDestroyImageView(m_device, texturedGeometry.textureImageView, GetVulkanAllocationCallbacks());
+            DestroyUniformBuffer(texturedGeometry.uniformBufferCpuMemory, texturedGeometry.uniformBufferGpuMemory, texturedGeometry.uniformBuffer, m_device);
+            vkDestroyBuffer(m_device, texturedGeometry.indexBuffer, GetVulkanAllocationCallbacks());
+            vkDestroyBuffer(m_device, texturedGeometry.vertexBuffer, GetVulkanAllocationCallbacks());
         }
 
         for (size_t frameIndex = 0; frameIndex < NTF_FRAMES_IN_FLIGHT_NUM; ++frameIndex)
@@ -401,7 +401,7 @@ private:
             const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
             {
                 const bool copyPixelsIfStagingBufferHasSpaceResult = CreateImageAndCopyPixelsIfStagingBufferHasSpace(
-                    &texturedGeometry.m_textureImage,
+                    &texturedGeometry.textureImage,
                     &m_deviceLocalMemory,
                     &alignment,
                     &textureWidth,
@@ -432,7 +432,7 @@ private:
                 m_physicalDevice);
 
             TransferImageFromCpuToGpu(
-                texturedGeometry.m_textureImage,
+                texturedGeometry.textureImage,
                 textureWidth,
                 textureHeight,
                 imageFormat,
@@ -446,14 +446,14 @@ private:
                 m_queueFamilyIndices.graphicsFamily,
                 m_device);
 
-            CreateTextureImageView(&texturedGeometry.m_textureImageView, texturedGeometry.m_textureImage, m_device);
+            CreateTextureImageView(&texturedGeometry.textureImageView, texturedGeometry.textureImage, m_device);
             ++stagingBufferGpuIndex;
 
             //BEG_#StreamingMemory
-            LoadModel(&texturedGeometry.m_vertices, &texturedGeometry.m_indices);
-            texturedGeometry.m_indicesSize = Cast_size_t_uint32_t(texturedGeometry.m_indices.size());//store since we need secondary buffers to point to this
+            LoadModel(&texturedGeometry.vertices, &texturedGeometry.indices);
+            texturedGeometry.indicesSize = Cast_size_t_uint32_t(texturedGeometry.indices.size());//store since we need secondary buffers to point to this
             //END_#StreamingMemory
-            const size_t bufferSize = sizeof(texturedGeometry.m_vertices[0]) * texturedGeometry.m_vertices.size();
+            const size_t bufferSize = sizeof(texturedGeometry.vertices[0]) * texturedGeometry.vertices.size();
 
             ///@todo: #IndexVertexBufferUploadDuplication: consider refactor
             {
@@ -480,10 +480,10 @@ private:
                     bufferSize);
                 CreateAndCopyToGpuBuffer(
                     &m_deviceLocalMemory,
-                    &texturedGeometry.m_vertexBuffer,
-                    &texturedGeometry.m_vertexBufferMemory,
+                    &texturedGeometry.vertexBuffer,
+                    &texturedGeometry.vertexBufferMemory,
                     vertexBufferStagingBufferCpuToGpu,
-                    texturedGeometry.m_vertices.data(),
+                    texturedGeometry.vertices.data(),
                     m_stagingBuffersGpu[stagingBufferGpuIndex],
                     bufferSize,
                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
@@ -496,7 +496,7 @@ private:
 
             ///@todo: #IndexVertexBufferUploadDuplication: consider refactor
             {
-                const size_t bufferSize = sizeof(texturedGeometry.m_indices[0]) * texturedGeometry.m_indices.size();
+                const size_t bufferSize = sizeof(texturedGeometry.indices[0]) * texturedGeometry.indices.size();
                 stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
                 CreateBuffer(
                     &m_stagingBuffersGpu[stagingBufferGpuIndex],
@@ -520,10 +520,10 @@ private:
                     bufferSize);
                 CreateAndCopyToGpuBuffer(
                     &m_deviceLocalMemory,
-                    &texturedGeometry.m_indexBuffer,
-                    &texturedGeometry.m_indexBufferMemory,
+                    &texturedGeometry.indexBuffer,
+                    &texturedGeometry.indexBufferMemory,
                     indexBufferStagingBufferCpuToGpu,
-                    texturedGeometry.m_indices.data(),
+                    texturedGeometry.indices.data(),
                     m_stagingBuffersGpu[stagingBufferGpuIndex],
                     bufferSize,
                     VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
@@ -558,11 +558,11 @@ private:
 
         m_uniformBufferCpuAlignment = UniformBufferCpuAlignmentCalculate(sm_uniformBufferElementSize, m_physicalDevice);
         CreateUniformBuffer(
-            &m_texturedGeometries[0].m_uniformBufferCpuMemory,
-            &m_texturedGeometries[0].m_uniformBufferGpuMemory,
-            &m_texturedGeometries[0].m_uniformBuffer,
+            &m_texturedGeometries[0].uniformBufferCpuMemory,
+            &m_texturedGeometries[0].uniformBufferGpuMemory,
+            &m_texturedGeometries[0].uniformBuffer,
             &m_deviceLocalMemory,
-            &m_texturedGeometries[0].m_uniformBufferOffsetToGpuMemory,
+            &m_texturedGeometries[0].uniformBufferOffsetToGpuMemory,
             UniformBufferSizeCalculate(),
             false,
             m_device, 
@@ -574,9 +574,9 @@ private:
             descriptorType, 
             m_descriptorSetLayout, 
             m_descriptorPool, 
-            m_texturedGeometries[0].m_uniformBuffer,
+            m_texturedGeometries[0].uniformBuffer,
             sm_uniformBufferElementSize, 
-            m_texturedGeometries[0].m_textureImageView, ///<@todo: #StreamingMemory: unhack; 
+            m_texturedGeometries[0].textureImageView, ///<@todo: #StreamingMemory: unhack; 
             m_textureSampler, 
             m_device);
 
@@ -619,9 +619,9 @@ private:
             for (auto& texturedGeometry : m_texturedGeometries)
             {
                 UpdateUniformBuffer(
-                    texturedGeometry.m_uniformBufferCpuMemory,
-                    texturedGeometry.m_uniformBufferGpuMemory,
-                    texturedGeometry.m_uniformBufferOffsetToGpuMemory,
+                    texturedGeometry.uniformBufferCpuMemory,
+                    texturedGeometry.uniformBufferGpuMemory,
+                    texturedGeometry.uniformBufferOffsetToGpuMemory,
                     NTF_OBJECTS_NUM,
                     UniformBufferSizeCalculate(),
                     m_swapChainExtent,
@@ -644,9 +644,9 @@ private:
             //    &m_swapChainExtent,
             //    &m_pipelineLayout,
             //    &m_graphicsPipeline,
-            //    &m_texturedGeometries[0].m_vertexBuffer,
-            //    &m_texturedGeometries[0].m_indexBuffer,
-            //    &m_texturedGeometries[0].m_indicesSize,
+            //    &m_texturedGeometries[0].vertexBuffer,
+            //    &m_texturedGeometries[0].indexBuffer,
+            //    &m_texturedGeometries[0].indicesSize,
             //    &m_objectIndices,
             //    NTF_OBJECTS_NUM);
 
@@ -669,9 +669,9 @@ private:
                 m_swapChainExtent,
                 m_pipelineLayout,
                 m_graphicsPipeline,
-                m_texturedGeometries[0].m_vertexBuffer,
-                m_texturedGeometries[0].m_indexBuffer,
-                m_texturedGeometries[0].m_indicesSize,
+                m_texturedGeometries[0].vertexBuffer,
+                m_texturedGeometries[0].indexBuffer,
+                m_texturedGeometries[0].indicesSize,
                 m_device);
 
             DrawFrame(
