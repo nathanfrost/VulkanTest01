@@ -2610,7 +2610,6 @@ void FreeCommandBuffers(ArraySafeRef<VkCommandBuffer> commandBuffers, const uint
 
 void CleanupSwapChain(
     VectorSafeRef<VkCommandBuffer> commandBuffersPrimary,
-    VectorSafeRef<ArraySafe<VkCommandBuffer, 2>> commandBuffersSecondary,///<@todo NTF: refactor out magic number 2 (meant to be NTF_OBJECTS_NUM) and either support VectorSafeRef<ArraySafeRef<T>> or repeatedly call FreeCommandBuffers on each VectorSafe outside of this function
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
@@ -2625,7 +2624,6 @@ void CleanupSwapChain(
 {
     assert(commandBuffersPrimary.size() == swapChainFramebuffers.size());
     assert(swapChainFramebuffers.size() == swapChainImageViews.size());
-    assert(commandBuffersSecondary.size() > 0);
     
     vkDestroyImageView(device, depthImageView, GetVulkanAllocationCallbacks());
     vkDestroyImage(device, depthImage, GetVulkanAllocationCallbacks());
@@ -2638,23 +2636,6 @@ void CleanupSwapChain(
     //return command buffers to the pool from whence they came
     const size_t secondaryCommandBufferPerThread = 1;
     FreeCommandBuffers(&commandBuffersPrimary, Cast_size_t_uint32_t(commandBuffersPrimary.size()), device, commandPoolPrimary);
-    const size_t commandBuffersSecondarySize = commandBuffersSecondary.size();
-    for (size_t commandSecondaryArrayIndex = 0; commandSecondaryArrayIndex < commandBuffersSecondarySize; ++commandSecondaryArrayIndex)
-    {
-        auto& commandBuffersSecondaryArray = commandBuffersSecondary[commandSecondaryArrayIndex];
-        auto& commandPoolsSecondaryArray = commandPoolsSecondary[commandSecondaryArrayIndex];
-        const size_t commandBuffersSecondarySize = commandBuffersSecondaryArray.size();
-        assert(commandBuffersSecondarySize == commandPoolsSecondaryArray.size());
-
-        for (size_t commandSecondaryIndex = 0; commandSecondaryIndex < commandBuffersSecondarySize; ++commandSecondaryIndex)
-        {
-            FreeCommandBuffers(
-                ArraySafeRef<VkCommandBuffer>(&commandBuffersSecondaryArray[commandSecondaryIndex], secondaryCommandBufferPerThread),
-                secondaryCommandBufferPerThread,
-                device,
-                commandPoolsSecondaryArray[commandSecondaryIndex]);
-        }
-    }
 
     vkDestroyPipeline(device, graphicsPipeline, GetVulkanAllocationCallbacks());
     vkDestroyPipelineLayout(device, pipelineLayout, GetVulkanAllocationCallbacks());

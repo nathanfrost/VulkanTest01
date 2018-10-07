@@ -42,7 +42,6 @@ public:
 
         CleanupSwapChain(
             &m_commandBuffersPrimary,
-            &m_commandBuffersSecondary,
             m_device,
             m_depthImageView,
             m_depthImage,
@@ -114,24 +113,6 @@ public:
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             swapChainFramebuffersSize,
             m_device);
-
-        const size_t commandBuffersSecondaryPerFrame = NTF_OBJECTS_NUM;
-        const size_t commandBufferSecondaryPerCreateCall = 1;
-        m_commandBuffersSecondary.size(swapChainFramebuffersSize);
-        m_commandPoolsSecondary.size(swapChainFramebuffersSize);
-        for (size_t frameBufferIndex = 0; frameBufferIndex < swapChainFramebuffersSize; ++frameBufferIndex)
-        {
-            for (size_t commandBufferSecondaryIndex = 0; commandBufferSecondaryIndex < commandBuffersSecondaryPerFrame; ++commandBufferSecondaryIndex)
-            {
-                AllocateCommandBuffers(
-                    ArraySafeRef<VkCommandBuffer>(&m_commandBuffersSecondary[frameBufferIndex][commandBufferSecondaryIndex], commandBufferSecondaryPerCreateCall),
-                    m_commandPoolsSecondary[frameBufferIndex][commandBufferSecondaryIndex],
-                    VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-                    commandBufferSecondaryPerCreateCall,
-                    m_device);
-            }
-        }
-        //#CommandPoolDuplication
     }
 
 private:
@@ -178,7 +159,6 @@ private:
 
         CleanupSwapChain(
             &m_commandBuffersPrimary,
-            &m_commandBuffersSecondary,
             m_device,
             m_depthImageView,
             m_depthImage,
@@ -352,6 +332,9 @@ private:
                 CreateCommandPool(&commandPoolSecondary, queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
             }
         }
+
+        CreateDescriptorPool(&m_descriptorPool, descriptorType, m_device);
+        m_uniformBufferCpuAlignment = UniformBufferCpuAlignmentCalculate(sm_uniformBufferElementSize, m_physicalDevice);
 
         StackNTF<VkDeviceSize> stagingBufferGpuStack;
         VkDeviceSize stagingBufferGpuOffsetToAllocatedBlock;
@@ -556,29 +539,30 @@ private:
                 m_graphicsQueue);
         }
 
-        m_uniformBufferCpuAlignment = UniformBufferCpuAlignmentCalculate(sm_uniformBufferElementSize, m_physicalDevice);
-        CreateUniformBuffer(
-            &m_texturedGeometries[0].uniformBufferCpuMemory,
-            &m_texturedGeometries[0].uniformBufferGpuMemory,
-            &m_texturedGeometries[0].uniformBuffer,
-            &m_deviceLocalMemory,
-            &m_texturedGeometries[0].uniformBufferOffsetToGpuMemory,
-            UniformBufferSizeCalculate(),
-            false,
-            m_device, 
-            m_physicalDevice);
+        for (auto& texturedGeometry : m_texturedGeometries)
+        {
+            CreateUniformBuffer(
+                &texturedGeometry.uniformBufferCpuMemory,
+                &texturedGeometry.uniformBufferGpuMemory,
+                &texturedGeometry.uniformBuffer,
+                &m_deviceLocalMemory,
+                &texturedGeometry.uniformBufferOffsetToGpuMemory,
+                UniformBufferSizeCalculate(),
+                false,
+                m_device,
+                m_physicalDevice);
 
-        CreateDescriptorPool(&m_descriptorPool, descriptorType, m_device);
-        CreateDescriptorSet(
-            &m_descriptorSet, 
-            descriptorType, 
-            m_descriptorSetLayout, 
-            m_descriptorPool, 
-            m_texturedGeometries[0].uniformBuffer,
-            sm_uniformBufferElementSize, 
-            m_texturedGeometries[0].textureImageView, ///<@todo: #StreamingMemory: unhack; 
-            m_textureSampler, 
-            m_device);
+            CreateDescriptorSet(
+                &m_descriptorSet,
+                descriptorType,
+                m_descriptorSetLayout,
+                m_descriptorPool,
+                texturedGeometry.uniformBuffer,
+                sm_uniformBufferElementSize,
+                texturedGeometry.textureImageView,
+                m_textureSampler,
+                m_device);
+        }
 
         //#CommandPoolDuplication
         m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
@@ -588,24 +572,6 @@ private:
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             swapChainFramebuffersSize,
             m_device);
-
-        const size_t commandBuffersSecondaryPerFrame = NTF_OBJECTS_NUM;
-        const size_t commandBufferSecondaryPerCreateCall = 1;
-        m_commandBuffersSecondary.size(swapChainFramebuffersSize);
-        m_commandPoolsSecondary.size(swapChainFramebuffersSize);
-        for (size_t frameBufferIndex = 0; frameBufferIndex < swapChainFramebuffersSize; ++frameBufferIndex)
-        {
-            for (size_t commandBufferSecondaryIndex = 0; commandBufferSecondaryIndex < commandBuffersSecondaryPerFrame; ++commandBufferSecondaryIndex)
-            {
-                AllocateCommandBuffers(
-                    ArraySafeRef<VkCommandBuffer>(&m_commandBuffersSecondary[frameBufferIndex][commandBufferSecondaryIndex], commandBufferSecondaryPerCreateCall),
-                    m_commandPoolsSecondary[frameBufferIndex][commandBufferSecondaryIndex],
-                    VK_COMMAND_BUFFER_LEVEL_SECONDARY,
-                    commandBufferSecondaryPerCreateCall,
-                    m_device);
-            }
-        }
-        //#CommandPoolDuplication
     }
 
     void mainLoop(GLFWwindow* window) 
@@ -729,7 +695,10 @@ private:
 
     VkDeviceSize m_uniformBufferCpuAlignment;
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
-    VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondary;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kSizeMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kSizeMax>& vectorSafe) -- not sure why
+    
+    //#SecondaryCommandBufferMultithreading: see m_commandBufferSecondaryThreads definition for more comments
+    //VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondary;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kSizeMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kSizeMax>& vectorSafe) -- not sure why
+    
     VkCommandBuffer m_commandBufferTransfer;//automatically freed when VkCommandPool is destroyed
     VkCommandBuffer m_commandBufferTransitionImage;//automatically freed when VkCommandPool is destroyed
 
