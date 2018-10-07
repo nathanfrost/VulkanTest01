@@ -398,7 +398,6 @@ void CreateAndCopyToGpuBuffer(
     const VkPhysicalDevice& physicalDevice);
 
 void EndSingleTimeCommandsHackDeleteSoon(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device);
-void EndSingleTimeCommands(const VkCommandBuffer& commandBuffer, const VkCommandPool commandPool, const VkQueue& graphicsQueue, const VkDevice& device);
 void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queueFamilyIndex, const VkDevice& device, const VkPhysicalDevice& physicalDevice);
 void CreateDepthResources(
     VkImage*const depthImagePtr,
