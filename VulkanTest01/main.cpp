@@ -21,7 +21,8 @@ public:
         initWindow(&m_window);
         initVulkan();
 
-        CommandBufferSecondaryThreadsCreate(&m_commandBufferSecondaryThreads, &m_commandBufferThreadDoneEvents, &m_commandBufferThreadArguments, NTF_OBJECTS_NUM);
+        //#SecondaryCommandBufferMultithreading: see m_commandBufferSecondaryThreads definition for more comments
+        //CommandBufferSecondaryThreadsCreate(&m_commandBufferSecondaryThreads, &m_commandBufferThreadDoneEvents, &m_commandBufferThreadArguments, NTF_OBJECTS_NUM);
 
         mainLoop(m_window);
         cleanup();
@@ -631,30 +632,47 @@ private:
             uint32_t acquiredImageIndex;
             AcquireNextImage(&acquiredImageIndex, m_swapChain, imageAvailableSemaphore, m_device);
 
-            FillSecondaryCommandBuffers(
-                &m_commandBuffersSecondary[acquiredImageIndex],
-                &m_commandBufferSecondaryThreads,
-                &m_commandBufferThreadDoneEvents,
-                &m_commandBufferThreadArguments,
-                &m_descriptorSet,
-                &m_swapChainFramebuffers[acquiredImageIndex],
-                &m_renderPass,
-                &m_swapChainExtent,
-                &m_pipelineLayout,
-                &m_graphicsPipeline,
-                &m_texturedGeometries[0].m_vertexBuffer,
-                &m_texturedGeometries[0].m_indexBuffer,
-                &m_texturedGeometries[0].m_indicesSize,
-                &m_objectIndices,
-                NTF_OBJECTS_NUM);
+            //BEG_#SecondaryCommandBufferMultithreading: see m_commandBufferSecondaryThreads definition for more comments
+            //FillSecondaryCommandBuffers(
+            //    &m_commandBuffersSecondary[acquiredImageIndex],
+            //    &m_commandBufferSecondaryThreads,
+            //    &m_commandBufferThreadDoneEvents,
+            //    &m_commandBufferThreadArguments,
+            //    &m_descriptorSet,
+            //    &m_swapChainFramebuffers[acquiredImageIndex],
+            //    &m_renderPass,
+            //    &m_swapChainExtent,
+            //    &m_pipelineLayout,
+            //    &m_graphicsPipeline,
+            //    &m_texturedGeometries[0].m_vertexBuffer,
+            //    &m_texturedGeometries[0].m_indexBuffer,
+            //    &m_texturedGeometries[0].m_indicesSize,
+            //    &m_objectIndices,
+            //    NTF_OBJECTS_NUM);
 
-            FillPrimaryCommandBuffer(
+            //FillCommandBufferPrimary(
+            //    m_commandBuffersPrimary[acquiredImageIndex],
+            //    &m_commandBuffersSecondary[acquiredImageIndex],
+            //    NTF_OBJECTS_NUM,
+            //    m_swapChainFramebuffers[acquiredImageIndex],
+            //    m_renderPass,
+            //    m_swapChainExtent);
+            //END_#SecondaryCommandBufferMultithreading
+
+            FillCommandBufferPrimary(
                 m_commandBuffersPrimary[acquiredImageIndex],
-                &m_commandBuffersSecondary[acquiredImageIndex],
+                m_descriptorSet,
+                m_uniformBufferCpuAlignment,
                 NTF_OBJECTS_NUM,
                 m_swapChainFramebuffers[acquiredImageIndex],
                 m_renderPass,
-                m_swapChainExtent);
+                m_swapChainExtent,
+                m_pipelineLayout,
+                m_graphicsPipeline,
+                m_texturedGeometries[0].m_vertexBuffer,
+                m_texturedGeometries[0].m_indexBuffer,
+                m_texturedGeometries[0].m_indicesSize,
+                m_device);
 
             DrawFrame(
                 /*this,///#TODO_CALLBACK*/ 
@@ -715,11 +733,14 @@ private:
     VkCommandBuffer m_commandBufferTransfer;//automatically freed when VkCommandPool is destroyed
     VkCommandBuffer m_commandBufferTransitionImage;//automatically freed when VkCommandPool is destroyed
 
-    ArraySafe<CommandBufferSecondaryThread, NTF_OBJECTS_NUM> m_commandBufferSecondaryThreads;
-    ArraySafe<HANDLE, NTF_OBJECTS_NUM> m_commandBufferThreadDoneEvents;
+    //BEG_#SecondaryCommandBufferMultithreading
+    //this prototype worked as expected; but of course one secondary buffer per draw call is ridiculous, so this is removed, but commented out for reference in case command buffer construction becomes a bottleneck.  See October 7, 12:40:28, 2018 for last commit that had this code working
+    //ArraySafe<CommandBufferSecondaryThread, NTF_OBJECTS_NUM> m_commandBufferSecondaryThreads;
+    //ArraySafe<HANDLE, NTF_OBJECTS_NUM> m_commandBufferThreadDoneEvents;
 
-    ArraySafe<uint32_t, NTF_OBJECTS_NUM> m_objectIndices;
-    ArraySafe<CommandBufferThreadArguments, NTF_OBJECTS_NUM> m_commandBufferThreadArguments;
+    //ArraySafe<uint32_t, NTF_OBJECTS_NUM> m_objectIndices;
+    //ArraySafe<CommandBufferThreadArguments, NTF_OBJECTS_NUM> m_commandBufferThreadArguments;
+    //END_#SecondaryCommandBufferMultithreading
 
     /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 
         used to synchronize operations within or across command queues */

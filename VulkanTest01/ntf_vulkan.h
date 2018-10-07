@@ -363,13 +363,20 @@ void FillSecondaryCommandBuffers(
     ArraySafeRef<uint32_t> objectIndex,
     const size_t objectsNum);
 
-void FillPrimaryCommandBuffer(
+void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
-    ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
-    const size_t objectsNum,///<@todo NTF: rename objectsNum
+    const VkDescriptorSet& descriptorSet,
+    const VkDeviceSize& uniformBufferCpuAlignment,
+    const size_t objectNum,
     const VkFramebuffer& swapChainFramebuffer,
     const VkRenderPass& renderPass,
-    const VkExtent2D& swapChainExtent);
+    const VkExtent2D& swapChainExtent,
+    const VkPipelineLayout& pipelineLayout,
+    const VkPipeline& graphicsPipeline,
+    const VkBuffer& vertexBuffer,
+    const VkBuffer& indexBuffer,
+    const uint32_t& indicesNum,
+    const VkDevice& device);
 
 VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferSize, const VkPhysicalDevice& physicalDevice);
 void CreateUniformBuffer(

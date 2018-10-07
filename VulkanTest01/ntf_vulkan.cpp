@@ -155,6 +155,7 @@ static void VKAPI_CALL NTF_vkInternalFreeNotification(
 }
 //END_#AllocationCallbacks
 
+//BEG_#SecondaryCommandBufferMultithreading
 HANDLE ThreadSignalingEventCreate()
 {
     return CreateEvent(
@@ -262,6 +263,7 @@ DWORD WINAPI CommandBufferThread(void* arg)
         assert(setEventResult);
     }
 }
+//END_#SecondaryCommandBufferMultithreading
 
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device)
 {
@@ -1423,19 +1425,27 @@ void FillSecondaryCommandBuffers(
     WaitForMultipleObjects(Cast_size_t_DWORD(threadNum), commandBufferThreadDoneEvents.begin(), TRUE, INFINITE);
 }
 
-void FillPrimaryCommandBuffer(
+void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
-    ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
-    const size_t objectsNum,///<@todo NTF: rename objectsNum
+    const VkDescriptorSet& descriptorSet,
+    const VkDeviceSize& uniformBufferCpuAlignment,
+    const size_t objectNum,
     const VkFramebuffer& swapChainFramebuffer,
     const VkRenderPass& renderPass,
-    const VkExtent2D& swapChainExtent)
+    const VkExtent2D& swapChainExtent,
+    const VkPipelineLayout& pipelineLayout,
+    const VkPipeline& graphicsPipeline,
+    const VkBuffer& vertexBuffer,
+    const VkBuffer& indexBuffer,
+    const uint32_t& indicesNum,
+    const VkDevice& device)
 {
-    assert(objectsNum > 0);
+    assert(uniformBufferCpuAlignment > 0);
+    assert(objectNum > 0);
+    assert(indicesNum > 0);
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    ///@todo: seems like this should be VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;  /* options: * VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded right after executing it once
                                                                                 * VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: This is a secondary command buffer that will be entirely within a single render pass.
                                                                                 * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also already pending execution. */
@@ -1459,14 +1469,27 @@ void FillPrimaryCommandBuffer(
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassInfo.pClearValues = clearValues.data();
 
-    vkCmdBeginRenderPass(commandBufferPrimary, &renderPassInfo, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS/**<VK_SUBPASS_CONTENTS_INLINE=no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
-    vkCmdExecuteCommands(commandBufferPrimary, Cast_size_t_uint32_t(objectsNum), commandBuffersSecondary.data());
+    vkCmdBeginRenderPass(commandBufferPrimary, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
+    vkCmdBindPipeline(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+
+    VkBuffer vertexBuffers[] = { vertexBuffer };
+    VkDeviceSize offsets[] = { 0 };
+    vkCmdBindVertexBuffers(commandBufferPrimary, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(commandBufferPrimary, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+    vkCmdBindDescriptorSets(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
+    for (uint32_t objectIndex = 0; objectIndex < 2; ++objectIndex)
+    {
+        vkCmdPushConstants(commandBufferPrimary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
+        vkCmdDrawIndexed(commandBufferPrimary, indicesNum, 1, 0, 0, 0);
+    }
+    
     vkCmdEndRenderPass(commandBufferPrimary);
 
     const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBufferPrimary);
     NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
 }
-
 VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferElementSize, const VkPhysicalDevice& physicalDevice)
 {
     assert(bufferElementSize > 0);
