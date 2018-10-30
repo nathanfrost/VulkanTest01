@@ -375,6 +375,9 @@ private:
         }
         CreateTextureSampler(&m_textureSampler, m_device);
 
+        //define number of TexturedGeometry's here ///@todo: refactor into streaming units
+        m_texturedGeometries.size(1);
+
         VectorSafe<VkSemaphore, 1> transferFinishedSemaphore;
         for (auto& texturedGeometry : m_texturedGeometries)
         {
@@ -563,6 +566,10 @@ private:
                 m_textureSampler,
                 m_device);
         }
+        
+        //define number of instances to draw
+        size_t texturedGeometriesIndex = 0;
+        m_texturedGeometries[texturedGeometriesIndex++].instancesToDrawNum = NTF_OBJECTS_NUM;///<@todo: make this defined on a per texturedGeometry, per streaming unit basis, and refactor the global NTF_OBJECTS_NUM to affect uniform buffer allocation as needed
 
         //#CommandPoolDuplication
         m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
@@ -629,15 +636,12 @@ private:
                 m_commandBuffersPrimary[acquiredImageIndex],
                 m_descriptorSet,
                 m_uniformBufferCpuAlignment,
-                NTF_OBJECTS_NUM,
                 m_swapChainFramebuffers[acquiredImageIndex],
                 m_renderPass,
                 m_swapChainExtent,
                 m_pipelineLayout,
                 m_graphicsPipeline,
-                m_texturedGeometries[0].vertexBuffer,
-                m_texturedGeometries[0].indexBuffer,
-                m_texturedGeometries[0].indicesSize,
+                m_texturedGeometries,
                 m_device);
 
             DrawFrame(
@@ -687,7 +691,7 @@ private:
     VkSampler m_textureSampler;
 
     //BEG_#StreamingMemory
-    ArraySafe<TexturedGeometry,1> m_texturedGeometries;
+    VectorSafe<TexturedGeometry,1> m_texturedGeometries;
 
     VkDescriptorPool m_descriptorPool;
     VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed

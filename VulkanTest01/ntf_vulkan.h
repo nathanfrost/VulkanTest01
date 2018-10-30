@@ -174,6 +174,7 @@ struct TexturedGeometry
     std::vector<Vertex> vertices;///<@todo: #StreamingMemory: eliminate std::vector
     std::vector<uint32_t> indices;///<@todo: #StreamingMemory: eliminate std::vector
     uint32_t indicesSize;
+    uint32_t instancesToDrawNum;
 
     VkBuffer vertexBuffer;
     VkDeviceMemory vertexBufferMemory;
@@ -366,15 +367,12 @@ void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
     const VkDescriptorSet& descriptorSet,
     const VkDeviceSize& uniformBufferCpuAlignment,
-    const size_t objectNum,
     const VkFramebuffer& swapChainFramebuffer,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkPipelineLayout& pipelineLayout,
     const VkPipeline& graphicsPipeline,
-    const VkBuffer& vertexBuffer,
-    const VkBuffer& indexBuffer,
-    const uint32_t& indicesNum,
+    ConstVectorSafeRef<TexturedGeometry> texturedGeometries,
     const VkDevice& device);
 
 VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferSize, const VkPhysicalDevice& physicalDevice);

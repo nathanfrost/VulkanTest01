@@ -1429,20 +1429,15 @@ void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
     const VkDescriptorSet& descriptorSet,
     const VkDeviceSize& uniformBufferCpuAlignment,
-    const size_t objectNum,
     const VkFramebuffer& swapChainFramebuffer,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkPipelineLayout& pipelineLayout,
     const VkPipeline& graphicsPipeline,
-    const VkBuffer& vertexBuffer,
-    const VkBuffer& indexBuffer,
-    const uint32_t& indicesNum,
+    ConstVectorSafeRef<TexturedGeometry> texturedGeometries,
     const VkDevice& device)
 {
     assert(uniformBufferCpuAlignment > 0);
-    assert(objectNum > 0);
-    assert(indicesNum > 0);
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1472,19 +1467,21 @@ void FillCommandBufferPrimary(
     vkCmdBeginRenderPass(commandBufferPrimary, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
     vkCmdBindPipeline(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-    VkBuffer vertexBuffers[] = { vertexBuffer };
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(commandBufferPrimary, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBufferPrimary, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-    vkCmdBindDescriptorSets(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-
-    for (uint32_t objectIndex = 0; objectIndex < 2; ++objectIndex)
+    for (const auto& texturedGeometry : texturedGeometries)
     {
-        vkCmdPushConstants(commandBufferPrimary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
-        vkCmdDrawIndexed(commandBufferPrimary, indicesNum, 1, 0, 0, 0);
-    }
-    
+        VkBuffer vertexBuffers[] = { texturedGeometry.vertexBuffer };
+        VkDeviceSize offsets[] = { 0 };
+        vkCmdBindVertexBuffers(commandBufferPrimary, 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(commandBufferPrimary, texturedGeometry.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+        vkCmdBindDescriptorSets(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
+
+        for (uint32_t objectIndex = 0; objectIndex < texturedGeometry.instancesToDrawNum; ++objectIndex)
+        {
+            vkCmdPushConstants(commandBufferPrimary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
+            vkCmdDrawIndexed(commandBufferPrimary, texturedGeometry.indicesSize, 1, 0, 0, 0);
+        }
+    }    
     vkCmdEndRenderPass(commandBufferPrimary);
 
     const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBufferPrimary);
