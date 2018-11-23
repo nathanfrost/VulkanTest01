@@ -1,10 +1,43 @@
 #include"ntf_vulkan.h"
-
-VectorSafe<const char*, NTF_VALIDATION_LAYERS_SIZE> s_validationLayers;
+#include"ntf_vulkan_utility.h"
 
 extern StackCpu* g_stbAllocator;
 
-#include"ntf_vulkan_utility.h"
+glm::vec3 s_cameraTranslation = glm::vec3(2.6f,3.4f,.9f);
+VectorSafe<const char*, NTF_VALIDATION_LAYERS_SIZE> s_validationLayers;
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    ///@todo: timer to get framerate-independent speed
+    const float cameraSpeed = .1f;
+    if (action == GLFW_REPEAT || action == GLFW_PRESS)
+    {
+        if (key == GLFW_KEY_W)
+        {
+            s_cameraTranslation.x -= cameraSpeed;
+        }
+        else if (key == GLFW_KEY_S)
+        {
+            s_cameraTranslation.x += cameraSpeed;
+        }
+        else if (key == GLFW_KEY_A)
+        {
+            s_cameraTranslation.y -= cameraSpeed;
+        }
+        else if (key == GLFW_KEY_D)
+        {
+            s_cameraTranslation.y += cameraSpeed;
+        }
+        else if (key == GLFW_KEY_R)
+        {
+            s_cameraTranslation.z += cameraSpeed;
+        }
+        else if (key == GLFW_KEY_F)
+        {
+            s_cameraTranslation.z -= cameraSpeed;
+        }
+    }
+}
 
 //don't complain about scanf being unsafe
 #pragma warning(disable : 4996)
@@ -13,7 +46,16 @@ class VulkanRendererNTF
 {
 public:
 #define NTF_FRAMES_IN_FLIGHT_NUM 2//#FramesInFlight
-#define NTF_OBJECTS_NUM 2//number of models to draw
+
+//BEG_#StreamingMemory
+#define NTF_OBJECTS_NUM 2//number of unique models
+#define NTF_DRAWS_PER_OBJECT_NUM 2
+#define NTF_DRAW_CALLS_TOTAL (NTF_OBJECTS_NUM*NTF_DRAWS_PER_OBJECT_NUM)
+const char*const sk_texturePaths[NTF_OBJECTS_NUM] = { "textures/skull.jpg","textures/cat_diff.tga"/*,"textures/chalet.jpg"*/ };
+const char*const sk_modelPaths[NTF_OBJECTS_NUM] = { "models/skull.obj", "models/cat.obj"/*,"models/chalet.obj"*/ };
+const float sk_uniformScales[NTF_OBJECTS_NUM] = { 0.05f,1.f };
+//END_#StreamingMemory
+
 #define NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE (128 * 1024 * 1024)
 
     void run() 
@@ -118,7 +160,7 @@ public:
 private:
     VkDeviceSize UniformBufferSizeCalculate() const
     {
-        return NTF_OBJECTS_NUM*m_uniformBufferCpuAlignment;
+        return NTF_DRAW_CALLS_TOTAL*m_uniformBufferCpuAlignment;
     }
     void initWindow(GLFWwindow**const windowPtrPtr)
     {
@@ -138,6 +180,7 @@ private:
 
         glfwSetWindowUserPointer(windowPtr, this);
         glfwSetWindowSizeCallback(windowPtr, VulkanRendererNTF::onWindowResized);
+        glfwSetKeyCallback(windowPtr, key_callback);
     }
 
     /*  Viewport and scissor rectangle size is specified during graphics pipeline creation, so the pipeline also needs to be rebuilt when the window 
@@ -376,8 +419,10 @@ private:
         CreateTextureSampler(&m_textureSampler, m_device);
 
         VectorSafe<VkSemaphore, 1> transferFinishedSemaphore;
-        for (auto& texturedGeometry : m_texturedGeometries)
+        const size_t texturedGeometriesSize = m_texturedGeometries.size();
+        for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometriesSize; ++texturedGeometryIndex)
         {
+            auto& texturedGeometry = m_texturedGeometries[texturedGeometryIndex];
             int textureWidth, textureHeight;
             size_t imageSizeBytes;
             VkDeviceSize alignment;
@@ -392,7 +437,7 @@ private:
                     &m_stagingBufferMemoryMapCpuToGpu,
                     &imageSizeBytes,
                     g_stbAllocator,
-                    "textures/cat_diff.tga",//"textures/chalet.jpg",
+                    sk_texturePaths[texturedGeometryIndex],
                     imageFormat,
                     VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
                     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
@@ -433,13 +478,14 @@ private:
             ++stagingBufferGpuIndex;
 
             //BEG_#StreamingMemory
-            LoadModel(&texturedGeometry.vertices, &texturedGeometry.indices);
+            LoadModel(&texturedGeometry.vertices, &texturedGeometry.indices, sk_modelPaths[texturedGeometryIndex], sk_uniformScales[texturedGeometryIndex]);
             texturedGeometry.indicesSize = Cast_size_t_uint32_t(texturedGeometry.indices.size());//store since we need secondary buffers to point to this
             //END_#StreamingMemory
-            const size_t bufferSize = sizeof(texturedGeometry.vertices[0]) * texturedGeometry.vertices.size();
 
             ///@todo: #IndexVertexBufferUploadDuplication: consider refactor
             {
+                const size_t bufferSize = sizeof(texturedGeometry.vertices[0]) * texturedGeometry.vertices.size();
+
                 stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
                 CreateBuffer(
                     &m_stagingBuffersGpu[stagingBufferGpuIndex],
@@ -553,7 +599,7 @@ private:
                 m_physicalDevice);
 
             CreateDescriptorSet(
-                &m_descriptorSet,
+                &texturedGeometry.descriptorSet,
                 descriptorType,
                 m_descriptorSetLayout,
                 m_descriptorPool,
@@ -586,9 +632,10 @@ private:
             {
                 UpdateUniformBuffer(
                     texturedGeometry.uniformBufferCpuMemory,
+                    s_cameraTranslation,
                     texturedGeometry.uniformBufferGpuMemory,
                     texturedGeometry.uniformBufferOffsetToGpuMemory,
-                    NTF_OBJECTS_NUM,
+                    NTF_DRAW_CALLS_TOTAL,
                     UniformBufferSizeCalculate(),
                     m_swapChainExtent,
                     m_device);
@@ -604,7 +651,7 @@ private:
             //    &m_commandBufferSecondaryThreads,
             //    &m_commandBufferThreadDoneEvents,
             //    &m_commandBufferThreadArguments,
-            //    &m_descriptorSet,
+            //    &m_texturedGeometries[0].descriptorSet,
             //    &m_swapChainFramebuffers[acquiredImageIndex],
             //    &m_renderPass,
             //    &m_swapChainExtent,
@@ -627,17 +674,15 @@ private:
 
             FillCommandBufferPrimary(
                 m_commandBuffersPrimary[acquiredImageIndex],
-                m_descriptorSet,
+                &m_texturedGeometries,
                 m_uniformBufferCpuAlignment,
                 NTF_OBJECTS_NUM,
+                NTF_DRAWS_PER_OBJECT_NUM,
                 m_swapChainFramebuffers[acquiredImageIndex],
                 m_renderPass,
                 m_swapChainExtent,
                 m_pipelineLayout,
                 m_graphicsPipeline,
-                m_texturedGeometries[0].vertexBuffer,
-                m_texturedGeometries[0].indexBuffer,
-                m_texturedGeometries[0].indicesSize,
                 m_device);
 
             DrawFrame(
@@ -686,11 +731,12 @@ private:
     VkImageView m_depthImageView;
     VkSampler m_textureSampler;
 
+    glm::vec3 m_cameraTranslation;
+
     //BEG_#StreamingMemory
-    ArraySafe<TexturedGeometry,1> m_texturedGeometries;
+    ArraySafe<TexturedGeometry,2> m_texturedGeometries;
 
     VkDescriptorPool m_descriptorPool;
-    VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed
     //END_#StreamingMemory
 
     VkDeviceSize m_uniformBufferCpuAlignment;

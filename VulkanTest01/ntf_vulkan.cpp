@@ -1427,22 +1427,19 @@ void FillSecondaryCommandBuffers(
 
 void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
-    const VkDescriptorSet& descriptorSet,
+    const ArraySafeRef<TexturedGeometry> texturedGeometries,
     const VkDeviceSize& uniformBufferCpuAlignment,
     const size_t objectNum,
+    const size_t drawCallsPerObjectNum,
     const VkFramebuffer& swapChainFramebuffer,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkPipelineLayout& pipelineLayout,
     const VkPipeline& graphicsPipeline,
-    const VkBuffer& vertexBuffer,
-    const VkBuffer& indexBuffer,
-    const uint32_t& indicesNum,
     const VkDevice& device)
 {
     assert(uniformBufferCpuAlignment > 0);
     assert(objectNum > 0);
-    assert(indicesNum > 0);
 
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1472,17 +1469,32 @@ void FillCommandBufferPrimary(
     vkCmdBeginRenderPass(commandBufferPrimary, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
     vkCmdBindPipeline(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-    VkBuffer vertexBuffers[] = { vertexBuffer };
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(commandBufferPrimary, 0, 1, vertexBuffers, offsets);
-    vkCmdBindIndexBuffer(commandBufferPrimary, indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-    vkCmdBindDescriptorSets(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
-
-    for (uint32_t objectIndex = 0; objectIndex < 2; ++objectIndex)
+    for (size_t objectIndex = 0; objectIndex < objectNum; ++objectIndex)
     {
-        vkCmdPushConstants(commandBufferPrimary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &objectIndex);
-        vkCmdDrawIndexed(commandBufferPrimary, indicesNum, 1, 0, 0, 0);
+        auto& texturedGeometry = texturedGeometries[objectIndex];
+        assert(texturedGeometry.Valid());
+
+        VkBuffer vertexBuffers[] = { texturedGeometry.vertexBuffer };
+        VkDeviceSize offsets[] = { 0 };
+        vkCmdBindVertexBuffers(commandBufferPrimary, 0, 1, vertexBuffers, offsets);
+        vkCmdBindIndexBuffer(commandBufferPrimary, texturedGeometry.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+
+        vkCmdBindDescriptorSets(
+            commandBufferPrimary, 
+            VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, 
+            pipelineLayout, 
+            0, 
+            1, 
+            &texturedGeometry.descriptorSet, 
+            0, 
+            nullptr);
+
+        for (uint32_t drawCallIndex = 0; drawCallIndex < drawCallsPerObjectNum; ++drawCallIndex)
+        {
+            const uint32_t pushConstantValue = Cast_size_t_uint32_t(objectIndex*drawCallsPerObjectNum + drawCallIndex);
+            vkCmdPushConstants(commandBufferPrimary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &pushConstantValue);
+            vkCmdDrawIndexed(commandBufferPrimary, Cast_size_t_uint32_t(texturedGeometry.indicesSize), 1, 0, 0, 0);
+        }
     }
     
     vkCmdEndRenderPass(commandBufferPrimary);
@@ -1569,18 +1581,19 @@ void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDesc
 
     DescriptorTypeAssertOnInvalid(descriptorType);
 
+    ///@todo NTF: rework this to use the "one giant bound descriptor set with offsets" approach -- probably one descriptor set for each streaming unit
     const size_t kPoolSizesNum = 2;
     VectorSafe<VkDescriptorPoolSize, kPoolSizesNum> poolSizes(kPoolSizesNum);
     poolSizes[0].type = descriptorType;
-    poolSizes[0].descriptorCount = 1;
+    poolSizes[0].descriptorCount = 2;///<number of descriptors of this type that can be allocated from this pool amongst all descriptorsets allocated from this pool///<@todo NTF: should be one per frame?
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = 1;
+    poolSizes[1].descriptorCount = 2;///<@todo NTF: should be one per frame?
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());//number of elements in pPoolSizes
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = 1;//max number of descriptor sets that can be allocated from the pool
+    poolInfo.maxSets = 2;//max number of descriptor sets that can be allocated from the pool
     poolInfo.flags = 0;//if you allocate and free descriptors, don't use VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT here because that's abdicating memory allocation to the driver.  Instead use vkResetDescriptorPool() because it amounts to changing an offset for (de)allocation
 
 
@@ -1661,7 +1674,7 @@ void CreateDescriptorSet(
         0, /*copy descriptor sets from one to another*/
         nullptr);
 }
-void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*const indicesPtr)
+void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*const indicesPtr, const char*const modelPath, const float uniformScale)
 {
     assert(verticesPtr);
     auto& vertices = *verticesPtr;
@@ -1669,13 +1682,15 @@ void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*cons
     assert(indicesPtr);
     auto& indices = *indicesPtr;
 
+    assert(modelPath);
+
     //BEG_#StreamingMemory: replace OBJ with binary FBX loading
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;///<@todo: streaming memory management
     std::vector<tinyobj::material_t> materials;///<@todo: streaming memory management
     std::string err;///<@todo: streaming memory management
 
-    const bool loadObjResult = tinyobj::LoadObj(&attrib, &shapes, &materials, &err, sk_ModelPath);
+    const bool loadObjResult = tinyobj::LoadObj(&attrib, &shapes, &materials, &err, modelPath);
     assert(loadObjResult);
     //END_#StreamingMemory: replace OBJ with binary FBX loading
 
@@ -1711,6 +1726,13 @@ void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*cons
             }
 
             indices.push_back(uniqueVertices[vertex]);
+        }
+    }
+    if (uniformScale != 1.f)
+    {
+        for (auto& vertex : vertices)
+        {
+            vertex.pos *= uniformScale;
         }
     }
 }
@@ -2123,14 +2145,15 @@ void CreateFrameSyncPrimitives(
 ///@todo: use push constants instead, since it's more efficient
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
+    const glm::vec3 cameraTranslation,
     const VkDeviceMemory& uniformBufferGpuMemory, 
     const VkDeviceSize& offsetToGpuMemory,
-    const size_t objectsNum,
+    const size_t drawCallsNum,
     const VkDeviceSize uniformBufferSize, 
     const VkExtent2D& swapChainExtent, 
     const VkDevice& device)
 {
-    assert(objectsNum > 0);
+    assert(drawCallsNum > 0);
     assert(uniformBufferSize > 0);
 
     static auto startTime = std::chrono::high_resolution_clock::now();
@@ -2141,18 +2164,20 @@ void UpdateUniformBuffer(
     const glm::mat4 worldRotation = glm::rotate(glm::mat4(), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
     UniformBufferObject ubo = {};
-    for (VkDeviceSize objectIndex = 0; objectIndex < objectsNum; ++objectIndex)
+    for (VkDeviceSize drawCallIndex = 0; drawCallIndex < drawCallsNum; ++drawCallIndex)
     {
-        const glm::mat4 worldTranslation = glm::translate(glm::mat4(), glm::vec3(-1.f, -1.f, 0.f) + glm::vec3(0.f,2.f,0.f)*static_cast<float>(objectIndex));
-        const glm::mat4 modelToWorld = worldTranslation*worldRotation;
-        const glm::mat4 worldToView = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(-2.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        const glm::mat4 scale = glm::scale(glm::mat4(), glm::vec3(1.f));
+        const glm::mat4 worldTranslation = glm::translate(glm::mat4(), glm::vec3(-1.f, -1.f, 0.f) + glm::vec3(0.f,2.f,0.f)*static_cast<float>(drawCallIndex));
+        const glm::mat4 modelToWorld = worldTranslation*worldRotation*scale;
+        const glm::mat4 worldToCamera = glm::inverse(glm::translate(glm::mat4(), cameraTranslation));
+        const glm::mat4 cameraToView = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(-2.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 
         glm::mat4 viewToClip = glm::perspective(glm::radians(45.0f), swapChainExtent.width / static_cast<float>(swapChainExtent.height), 0.1f, 10.0f);
         viewToClip[1][1] *= -1;//OpenGL's clipspace y-axis points in opposite direction of Vulkan's y-axis; doing this requires counterclockwise vertex winding
 
-        ubo.modelToClip = viewToClip*worldToView*modelToWorld;
+        ubo.modelToClip = viewToClip*cameraToView*worldToCamera*modelToWorld;
         const size_t sizeofUbo = sizeof(ubo);
-        uniformBufferCpuMemory.MemcpyFromIndex(&ubo, Cast_VkDeviceSize_size_t(objectIndex)*sizeofUbo, sizeofUbo);
+        uniformBufferCpuMemory.MemcpyFromIndex(&ubo, Cast_VkDeviceSize_size_t(drawCallIndex)*sizeofUbo, sizeofUbo);
     }
 
     VkMappedMemoryRange mappedMemoryRange;

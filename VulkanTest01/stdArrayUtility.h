@@ -503,15 +503,6 @@ public:
     {
         return const_cast<reference>(static_cast<const ThisDataType*>(this)->GetChecked(pos));
     }
-    size_t GetLastValidIndex() const
-    {
-        AssertValid();
-        return *m_sizeMax - 1;
-    }
-    size_t GetOneAfterLastValidIndex() const
-    {
-        return GetLastValidIndex() + 1;
-    }
 
     reference operator[](size_type pos)
     {
@@ -540,15 +531,6 @@ public:
         return GetChecked(0);
     }
 
-    reference back()
-    {
-        return GetChecked(GetLastValidIndex());
-    }
-    const_reference back() const
-    {
-        return GetChecked(GetLastValidIndex());
-    }
-
     iterator begin() noexcept
     {
         return GetAddressOfUnderlyingArray();
@@ -561,33 +543,6 @@ public:
     {
         return end();
     }
-
-    iterator end() noexcept
-    {
-        return const_cast<iterator>(static_cast<const ThisDataType*>(this)->end());
-    }
-    const_iterator end() const noexcept
-    {
-        return const_iterator(GetAddressOfUnderlyingArray() + GetOneAfterLastValidIndex());
-    }
-    const_iterator cend() const noexcept
-    {
-        return end();
-    }
-
-    //reverse_iterator rbegin() noexcept 
-    //{
-    //    return reverse_iterator(end());
-    //}
-    //const_reverse_iterator rbegin() const noexcept 
-    //{
-    //    return const_reverse_iterator(end());
-    //}
-    //const_reverse_iterator crbegin() const noexcept 
-    //{
-    //    return rbegin();
-    //}
-    //iterator rend() and crend() not implemented
 };
 
 ///NOTE: the caller is responsible for freeing this memory with AlignedFree(); VectorSafeRef is only a reference

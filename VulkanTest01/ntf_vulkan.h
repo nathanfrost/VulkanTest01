@@ -60,10 +60,8 @@ const bool s_enableValidationLayers = false;
 extern StackCpu* g_stbAllocator;
 class VulkanPagedStackAllocator;
 
-static const uint32_t s_kWidth = 800;
-static const uint32_t s_kHeight = 600;
-
-const char*const sk_ModelPath = "models/cat.obj";//"models/chalet.obj";
+static const uint32_t s_kWidth = 1600;
+static const uint32_t s_kHeight = 1200;
 
 typedef uint32_t PushConstantBindIndexType;
 
@@ -186,6 +184,14 @@ struct TexturedGeometry
     VkDeviceMemory uniformBufferGpuMemory;
     VkDeviceSize uniformBufferOffsetToGpuMemory;
     ArraySafeRef<uint8_t> uniformBufferCpuMemory;
+    VkDescriptorSet descriptorSet;//automatically freed when the VkDescriptorPool is destroyed  ///<@todo: verify that a descriptorset per model is the best approach
+
+    bool Valid() const
+    {
+        return  indices.size() == indicesSize &&
+                indicesSize > 0 &&
+                vertices.size() > 0;
+    }
 };
 
 namespace std
@@ -364,17 +370,15 @@ void FillSecondaryCommandBuffers(
 
 void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
-    const VkDescriptorSet& descriptorSet,
+    const ArraySafeRef<TexturedGeometry> texturedGeometries,
     const VkDeviceSize& uniformBufferCpuAlignment,
     const size_t objectNum,
+    const size_t drawCallsPerObjectNum,
     const VkFramebuffer& swapChainFramebuffer,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkPipelineLayout& pipelineLayout,
     const VkPipeline& graphicsPipeline,
-    const VkBuffer& vertexBuffer,
-    const VkBuffer& indexBuffer,
-    const uint32_t& indicesNum,
     const VkDevice& device);
 
 VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferSize, const VkPhysicalDevice& physicalDevice);
@@ -406,7 +410,7 @@ void CreateDescriptorSet(
     const VkSampler& textureSampler,
     const VkDevice& device);
 
-void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*const indicesPtr);
+void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*const indicesPtr, const char*const modelPath, const float uniformScale);
 
 void CreateAndCopyToGpuBuffer(
     VulkanPagedStackAllocator*const allocatorPtr,
@@ -500,9 +504,10 @@ void CreateFrameSyncPrimitives(
 
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
+    const glm::vec3 cameraTranslation,
     const VkDeviceMemory& uniformBufferGpuMemory,
     const VkDeviceSize& offsetToGpuMemory,
-    const size_t objectsNum,
+    const size_t drawCallsNum,
     const VkDeviceSize uniformBufferSize,
     const VkExtent2D& swapChainExtent,
     const VkDevice& device);
