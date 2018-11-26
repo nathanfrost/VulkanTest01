@@ -158,10 +158,6 @@ const float sk_uniformScales[NTF_OBJECTS_NUM] = { 0.05f,1.f };
     }
 
 private:
-    VkDeviceSize UniformBufferSizeCalculate() const
-    {
-        return NTF_DRAW_CALLS_TOTAL*m_uniformBufferCpuAlignment;
-    }
     void initWindow(GLFWwindow**const windowPtrPtr)
     {
         assert(windowPtrPtr);
@@ -222,10 +218,13 @@ private:
         for (auto& texturedGeometry : m_texturedGeometries)
         {
             vkDestroyImage(m_device, texturedGeometry.textureImage, GetVulkanAllocationCallbacks());
-            vkDestroyImageView(m_device, texturedGeometry.textureImageView, GetVulkanAllocationCallbacks());
-            DestroyUniformBuffer(texturedGeometry.uniformBufferCpuMemory, texturedGeometry.uniformBufferGpuMemory, texturedGeometry.uniformBuffer, m_device);
             vkDestroyBuffer(m_device, texturedGeometry.indexBuffer, GetVulkanAllocationCallbacks());
             vkDestroyBuffer(m_device, texturedGeometry.vertexBuffer, GetVulkanAllocationCallbacks());
+        }
+        DestroyUniformBuffer(m_uniformBufferCpuMemory, m_uniformBufferGpuMemory, m_uniformBuffer, m_device);
+        for(auto& imageView: m_textureImageViews)
+        {
+            vkDestroyImageView(m_device, imageView, GetVulkanAllocationCallbacks());
         }
 
         for (size_t frameIndex = 0; frameIndex < NTF_FRAMES_IN_FLIGHT_NUM; ++frameIndex)
@@ -310,7 +309,7 @@ private:
         CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
         
         const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        CreateDescriptorSetLayout(&m_descriptorSetLayout, descriptorType, m_device);
+        CreateDescriptorSetLayout(&m_descriptorSetLayout, descriptorType, m_device, NTF_OBJECTS_NUM);
         CreateGraphicsPipeline(
             &m_pipelineLayout, 
             &m_graphicsPipeline, 
@@ -376,8 +375,8 @@ private:
             }
         }
 
-        CreateDescriptorPool(&m_descriptorPool, descriptorType, m_device);
-        m_uniformBufferCpuAlignment = UniformBufferCpuAlignmentCalculate(sm_uniformBufferElementSize, m_physicalDevice);
+        CreateDescriptorPool(&m_descriptorPool, descriptorType, m_device, NTF_OBJECTS_NUM);
+        m_uniformBufferSizeAligned = UniformBufferCpuAlignmentCalculate(sm_uniformBufferSizeUnaligned, m_physicalDevice);
 
         StackNTF<VkDeviceSize> stagingBufferGpuStack;
         VkDeviceSize stagingBufferGpuOffsetToAllocatedBlock;
@@ -474,7 +473,7 @@ private:
                 m_queueFamilyIndices.graphicsFamily,
                 m_device);
 
-            CreateTextureImageView(&texturedGeometry.textureImageView, texturedGeometry.textureImage, m_device);
+            CreateTextureImageView(&m_textureImageViews[texturedGeometryIndex], texturedGeometry.textureImage, m_device);
             ++stagingBufferGpuIndex;
 
             //BEG_#StreamingMemory
@@ -585,30 +584,29 @@ private:
                 m_graphicsQueue);
         }
 
-        for (auto& texturedGeometry : m_texturedGeometries)
-        {
-            CreateUniformBuffer(
-                &texturedGeometry.uniformBufferCpuMemory,
-                &texturedGeometry.uniformBufferGpuMemory,
-                &texturedGeometry.uniformBuffer,
-                &m_deviceLocalMemory,
-                &texturedGeometry.uniformBufferOffsetToGpuMemory,
-                UniformBufferSizeCalculate(),
-                false,
-                m_device,
-                m_physicalDevice);
+        const VkDeviceSize uniformBufferSize = m_uniformBufferSizeAligned;
+        CreateUniformBuffer(
+            &m_uniformBufferCpuMemory,
+            &m_uniformBufferGpuMemory,
+            &m_uniformBuffer,
+            &m_deviceLocalMemory,
+            &m_uniformBufferOffsetToGpuMemory,
+            uniformBufferSize,
+            false,
+            m_device,
+            m_physicalDevice);
 
-            CreateDescriptorSet(
-                &texturedGeometry.descriptorSet,
-                descriptorType,
-                m_descriptorSetLayout,
-                m_descriptorPool,
-                texturedGeometry.uniformBuffer,
-                sm_uniformBufferElementSize,
-                texturedGeometry.textureImageView,
-                m_textureSampler,
-                m_device);
-        }
+        CreateDescriptorSet(
+            &m_descriptorSet,
+            descriptorType,
+            m_descriptorSetLayout,
+            m_descriptorPool,
+            m_uniformBuffer,
+            uniformBufferSize,
+            &m_textureImageViews,///<@todo NTF: @todo: ConstArraySafeRef that does not need ambersand here
+            NTF_OBJECTS_NUM,
+            m_textureSampler,
+            m_device);
 
         //#CommandPoolDuplication
         m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
@@ -631,12 +629,12 @@ private:
             for (auto& texturedGeometry : m_texturedGeometries)
             {
                 UpdateUniformBuffer(
-                    texturedGeometry.uniformBufferCpuMemory,
+                    m_uniformBufferCpuMemory,
                     s_cameraTranslation,
-                    texturedGeometry.uniformBufferGpuMemory,
-                    texturedGeometry.uniformBufferOffsetToGpuMemory,
+                    m_uniformBufferGpuMemory,
+                    m_uniformBufferOffsetToGpuMemory,
                     NTF_DRAW_CALLS_TOTAL,
-                    UniformBufferSizeCalculate(),
+                    m_uniformBufferSizeAligned,
                     m_swapChainExtent,
                     m_device);
             }
@@ -675,7 +673,8 @@ private:
             FillCommandBufferPrimary(
                 m_commandBuffersPrimary[acquiredImageIndex],
                 &m_texturedGeometries,
-                m_uniformBufferCpuAlignment,
+                m_descriptorSet,
+                m_uniformBufferSizeAligned,
                 NTF_OBJECTS_NUM,
                 NTF_DRAWS_PER_OBJECT_NUM,
                 m_swapChainFramebuffers[acquiredImageIndex],
@@ -703,7 +702,7 @@ private:
         vkDeviceWaitIdle(m_device);
     }
 
-    const size_t sm_uniformBufferElementSize = sizeof(UniformBufferObject);
+    const size_t sm_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM;//single uniform buffer that contains all uniform information for this streaming unit; 
 
     GLFWwindow* m_window;
     VkInstance m_instance;
@@ -734,12 +733,19 @@ private:
     glm::vec3 m_cameraTranslation;
 
     //BEG_#StreamingMemory
-    ArraySafe<TexturedGeometry,2> m_texturedGeometries;
+    ArraySafe<TexturedGeometry,NTF_OBJECTS_NUM> m_texturedGeometries;
 
+    VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed  ///<@todo: verify that a descriptorset per model is the best approach
+    ArraySafe<VkImageView, NTF_OBJECTS_NUM> m_textureImageViews;
     VkDescriptorPool m_descriptorPool;
+    
+    VkBuffer m_uniformBuffer;
+    VkDeviceMemory m_uniformBufferGpuMemory;
+    VkDeviceSize m_uniformBufferOffsetToGpuMemory;
+    ArraySafeRef<uint8_t> m_uniformBufferCpuMemory;
     //END_#StreamingMemory
 
-    VkDeviceSize m_uniformBufferCpuAlignment;
+    VkDeviceSize m_uniformBufferSizeAligned;
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
     
     //#SecondaryCommandBufferMultithreading: see m_commandBufferSecondaryThreads definition for more comments

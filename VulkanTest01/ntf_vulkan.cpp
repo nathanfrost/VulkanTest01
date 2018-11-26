@@ -1007,28 +1007,40 @@ void DescriptorTypeAssertOnInvalid(const VkDescriptorType descriptorType)
     assert(descriptorType >= VK_DESCRIPTOR_TYPE_BEGIN_RANGE && descriptorType <= VK_DESCRIPTOR_TYPE_END_RANGE);
 }
 
-void CreateDescriptorSetLayout(VkDescriptorSetLayout*const descriptorSetLayoutPtr, const VkDescriptorType descriptorType, const VkDevice& device)
+void CreateDescriptorSetLayout(
+    VkDescriptorSetLayout*const descriptorSetLayoutPtr, 
+    const VkDescriptorType descriptorType, 
+    const VkDevice& device, 
+    const uint32_t texturesNum)
 {
     assert(descriptorSetLayoutPtr);
     VkDescriptorSetLayout& descriptorSetLayout = *descriptorSetLayoutPtr;
 
     DescriptorTypeAssertOnInvalid(descriptorType);
 
+    uint32_t bindingIndex = 0;
     VkDescriptorSetLayoutBinding uboLayoutBinding = {};
-    uboLayoutBinding.binding = 0;
+    uboLayoutBinding.binding = bindingIndex++;
     uboLayoutBinding.descriptorCount = 1;
     uboLayoutBinding.descriptorType = descriptorType;
     uboLayoutBinding.pImmutableSamplers = nullptr;
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
     VkDescriptorSetLayoutBinding samplerLayoutBinding = {};
-    samplerLayoutBinding.binding = 1;
+    samplerLayoutBinding.binding = bindingIndex++;
     samplerLayoutBinding.descriptorCount = 1;
-    samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
     samplerLayoutBinding.pImmutableSamplers = nullptr;///@todo: consider using this; immutable samplers compile sampler into shader, reducing latency in shader (on AMD the Scalar Arithmetic Logic Unit [SALU] is often underutilized, and is used to construct immutable samplers)
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    VectorSafe<VkDescriptorSetLayoutBinding, 2> bindings({ uboLayoutBinding,samplerLayoutBinding });
+    VkDescriptorSetLayoutBinding sampledImageLayoutBinding = {};
+    sampledImageLayoutBinding.binding = bindingIndex++;
+    sampledImageLayoutBinding.descriptorCount = texturesNum;
+    sampledImageLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    sampledImageLayoutBinding.pImmutableSamplers = nullptr;///@todo: consider using this; immutable samplers compile sampler into shader, reducing latency in shader (on AMD the Scalar Arithmetic Logic Unit [SALU] is often underutilized, and is used to construct immutable samplers)
+    sampledImageLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VectorSafe<VkDescriptorSetLayoutBinding, 3> bindings({ uboLayoutBinding,samplerLayoutBinding,sampledImageLayoutBinding });
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1232,7 +1244,7 @@ void CreateGraphicsPipeline(
     VkPushConstantRange pushConstantRange;
     pushConstantRange.offset = 0;
     pushConstantRange.size = sizeof(PushConstantBindIndexType);
-    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -1428,6 +1440,7 @@ void FillSecondaryCommandBuffers(
 void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
     const ArraySafeRef<TexturedGeometry> texturedGeometries,
+    const VkDescriptorSet descriptorSet,
     const VkDeviceSize& uniformBufferCpuAlignment,
     const size_t objectNum,
     const size_t drawCallsPerObjectNum,
@@ -1485,14 +1498,14 @@ void FillCommandBufferPrimary(
             pipelineLayout, 
             0, 
             1, 
-            &texturedGeometry.descriptorSet, 
+            &descriptorSet, 
             0, 
             nullptr);
 
         for (uint32_t drawCallIndex = 0; drawCallIndex < drawCallsPerObjectNum; ++drawCallIndex)
         {
             const uint32_t pushConstantValue = Cast_size_t_uint32_t(objectIndex*drawCallsPerObjectNum + drawCallIndex);
-            vkCmdPushConstants(commandBufferPrimary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantBindIndexType), &pushConstantValue);
+            vkCmdPushConstants(commandBufferPrimary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstantBindIndexType), &pushConstantValue);
             vkCmdDrawIndexed(commandBufferPrimary, Cast_size_t_uint32_t(texturedGeometry.indicesSize), 1, 0, 0, 0);
         }
     }
@@ -1574,26 +1587,34 @@ void DestroyUniformBuffer(
     vkDestroyBuffer(device, uniformBuffer, GetVulkanAllocationCallbacks());
 }
 
-void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDescriptorType descriptorType, const VkDevice& device)
+void CreateDescriptorPool(
+    VkDescriptorPool*const descriptorPoolPtr, 
+    const VkDescriptorType descriptorType, 
+    const VkDevice& device, 
+    const uint32_t texturesNum)
 {
     assert(descriptorPoolPtr);
     VkDescriptorPool& descriptorPool = *descriptorPoolPtr;
 
+    assert(texturesNum > 0);
+
     DescriptorTypeAssertOnInvalid(descriptorType);
 
     ///@todo NTF: rework this to use the "one giant bound descriptor set with offsets" approach -- probably one descriptor set for each streaming unit
-    const size_t kPoolSizesNum = 2;
+    const size_t kPoolSizesNum = 3;
     VectorSafe<VkDescriptorPoolSize, kPoolSizesNum> poolSizes(kPoolSizesNum);
     poolSizes[0].type = descriptorType;
-    poolSizes[0].descriptorCount = 2;///<number of descriptors of this type that can be allocated from this pool amongst all descriptorsets allocated from this pool///<@todo NTF: should be one per frame?
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = 2;///<@todo NTF: should be one per frame?
+    poolSizes[0].descriptorCount = 1;///<number of descriptors of this type that can be allocated from this pool amongst all descriptorsets allocated from this pool///<@todo NTF: should be one per frame?
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_SAMPLER;
+    poolSizes[1].descriptorCount = 1;///<@todo NTF: should be one per frame?
+    poolSizes[2].type = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    poolSizes[2].descriptorCount = texturesNum;///<@todo NTF: should be n per frame?
 
     VkDescriptorPoolCreateInfo poolInfo = {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());//number of elements in pPoolSizes
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = 2;//max number of descriptor sets that can be allocated from the pool
+    poolInfo.maxSets = 1;//max number of descriptor sets that can be allocated from the pool
     poolInfo.flags = 0;//if you allocate and free descriptors, don't use VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT here because that's abdicating memory allocation to the driver.  Instead use vkResetDescriptorPool() because it amounts to changing an offset for (de)allocation
 
 
@@ -1607,16 +1628,19 @@ void CreateDescriptorSet(
     const VkDescriptorSetLayout& descriptorSetLayout,
     const VkDescriptorPool& descriptorPool,
     const VkBuffer& uniformBuffer,
-    const size_t uniformBufferElementSize,
-    const VkImageView& textureImageView,
-    const VkSampler& textureSampler,
+    const VkDeviceSize uniformBufferSize,
+    const ArraySafeRef<VkImageView> textureImageViews,
+    const size_t texturesNum,
+    const VkSampler textureSampler,
     const VkDevice& device)
 {
     assert(descriptorSetPtr);
     VkDescriptorSet& descriptorSet = *descriptorSetPtr;
 
     DescriptorTypeAssertOnInvalid(descriptorType);
-    assert(uniformBufferElementSize > 0);
+    assert(uniformBufferSize > 0);
+
+    assert(texturesNum > 0);
 
     VkDescriptorSetLayout layouts[] = { descriptorSetLayout };
     VkDescriptorSetAllocateInfo allocInfo = {};
@@ -1631,19 +1655,30 @@ void CreateDescriptorSet(
     VkDescriptorBufferInfo bufferInfo = {};
     bufferInfo.buffer = uniformBuffer;
     bufferInfo.offset = 0;
-    bufferInfo.range = uniformBufferElementSize;
+    bufferInfo.range = uniformBufferSize;
 
-    VkDescriptorImageInfo imageInfo = {};
-    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfo.imageView = textureImageView;
-    imageInfo.sampler = textureSampler;
+    VkDescriptorImageInfo samplerInfo = {};
+    samplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    samplerInfo.imageView = VK_NULL_HANDLE;
+    samplerInfo.sampler = textureSampler;
 
-    const size_t kDescriptorWritesNum = 2;
+    const size_t texturesMax=2;
+    ArraySafe<VkDescriptorImageInfo, texturesMax> imageInfos;
+    for (size_t textureIndex = 0; textureIndex < texturesNum; ++textureIndex)
+    {
+        auto& imageInfo = imageInfos[textureIndex];
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = textureImageViews[textureIndex];
+        imageInfo.sampler = VK_NULL_HANDLE;///<@todo: should I use the combined sampler/image imageLayout?
+    }
+
+    const size_t kDescriptorWritesNum = 3;
     VectorSafe<VkWriteDescriptorSet, kDescriptorWritesNum> descriptorWrites(kDescriptorWritesNum);
 
+    uint32_t bindingIndex = 0;
     descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[0].dstSet = descriptorSet;
-    descriptorWrites[0].dstBinding = 0;
+    descriptorWrites[0].dstBinding = bindingIndex++;
     descriptorWrites[0].dstArrayElement = 0;//descriptor is not an array
     descriptorWrites[0].descriptorType = descriptorType;
     descriptorWrites[0].descriptorCount = 1;
@@ -1656,16 +1691,29 @@ void CreateDescriptorSet(
 
     descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[1].dstSet = descriptorSet;
-    descriptorWrites[1].dstBinding = 1;
+    descriptorWrites[1].dstBinding = bindingIndex++;
     descriptorWrites[1].dstArrayElement = 0;//descriptor is not an array
-    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
     descriptorWrites[1].descriptorCount = 1;
     descriptorWrites[1].pNext = nullptr;//no extension
 
     //one of the following three must be non-null
     descriptorWrites[1].pBufferInfo = nullptr;//if buffer data
-    descriptorWrites[1].pImageInfo = &imageInfo;
+    descriptorWrites[1].pImageInfo = &samplerInfo;
     descriptorWrites[1].pTexelBufferView = nullptr; //if render view
+
+    descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[2].dstSet = descriptorSet;
+    descriptorWrites[2].dstBinding = bindingIndex++;
+    descriptorWrites[2].dstArrayElement = 0;//descriptor is not an array
+    descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    descriptorWrites[2].descriptorCount = Cast_size_t_uint32_t(texturesNum);
+    descriptorWrites[2].pNext = nullptr;//no extension
+
+    //one of the following three must be non-null
+    descriptorWrites[2].pBufferInfo = nullptr;//if buffer data
+    descriptorWrites[2].pImageInfo = imageInfos.data();
+    descriptorWrites[2].pTexelBufferView = nullptr; //if render view
 
     vkUpdateDescriptorSets(
         device,

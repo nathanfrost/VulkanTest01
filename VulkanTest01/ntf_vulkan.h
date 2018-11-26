@@ -178,13 +178,7 @@ struct TexturedGeometry
     VkBuffer indexBuffer;
     VkDeviceMemory indexBufferMemory;
     VkImage textureImage;
-    VkImageView textureImageView;
     VkDeviceMemory textureBufferMemory;
-    VkBuffer uniformBuffer;
-    VkDeviceMemory uniformBufferGpuMemory;
-    VkDeviceSize uniformBufferOffsetToGpuMemory;
-    ArraySafeRef<uint8_t> uniformBufferCpuMemory;
-    VkDescriptorSet descriptorSet;//automatically freed when the VkDescriptorPool is destroyed  ///<@todo: verify that a descriptorset per model is the best approach
 
     bool Valid() const
     {
@@ -322,7 +316,11 @@ void CreateLogicalDevice(
     const VkSurfaceKHR& surface,
     const VkPhysicalDevice& physicalDevice);
 
-void CreateDescriptorSetLayout(VkDescriptorSetLayout*const descriptorSetLayoutPtr, const VkDescriptorType descriptorType, const VkDevice& device);
+void CreateDescriptorSetLayout(
+    VkDescriptorSetLayout*const descriptorSetLayoutPtr,
+    const VkDescriptorType descriptorType,
+    const VkDevice& device,
+    const uint32_t objectsNum);
 void CreateGraphicsPipeline(
     VkPipelineLayout*const pipelineLayoutPtr,
     VkPipeline*const graphicsPipelinePtr,
@@ -371,6 +369,7 @@ void FillSecondaryCommandBuffers(
 void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
     const ArraySafeRef<TexturedGeometry> texturedGeometries,
+    const VkDescriptorSet descriptorSet,
     const VkDeviceSize& uniformBufferCpuAlignment,
     const size_t objectNum,
     const size_t drawCallsPerObjectNum,
@@ -397,7 +396,11 @@ void DestroyUniformBuffer(
     const VkDeviceMemory uniformBufferGpuMemory,
     const VkBuffer uniformBuffer,
     const VkDevice& device);
-void CreateDescriptorPool(VkDescriptorPool*const descriptorPoolPtr, const VkDescriptorType descriptorType, const VkDevice& device);
+void CreateDescriptorPool(
+    VkDescriptorPool*const descriptorPoolPtr,
+    const VkDescriptorType descriptorType,
+    const VkDevice& device,
+    const uint32_t texturesNum);
 
 void CreateDescriptorSet(
     VkDescriptorSet*const descriptorSetPtr,
@@ -405,9 +408,10 @@ void CreateDescriptorSet(
     const VkDescriptorSetLayout& descriptorSetLayout,
     const VkDescriptorPool& descriptorPool,
     const VkBuffer& uniformBuffer,
-    const size_t uniformBufferSize,
-    const VkImageView& textureImageView,
-    const VkSampler& textureSampler,
+    const VkDeviceSize uniformBufferSize,
+    const ArraySafeRef<VkImageView> textureImageViews,
+    const size_t texturesNum,
+    const VkSampler textureSampler,
     const VkDevice& device);
 
 void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*const indicesPtr, const char*const modelPath, const float uniformScale);
