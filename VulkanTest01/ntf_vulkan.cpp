@@ -1482,6 +1482,16 @@ void FillCommandBufferPrimary(
     vkCmdBeginRenderPass(commandBufferPrimary, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
     vkCmdBindPipeline(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
+    //bind a single descriptorset per streaming unit.  Could also bind this descriptor set once at startup time for each primary command buffer, and then leave it bound indefinitely (this behavior was discovered on a UHD graphics 620; haven't tested on other hardware)
+    vkCmdBindDescriptorSets(
+        commandBufferPrimary,
+        VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/,
+        pipelineLayout,
+        0,
+        1,
+        &descriptorSet,
+        0,
+        nullptr);
     for (size_t objectIndex = 0; objectIndex < objectNum; ++objectIndex)
     {
         auto& texturedGeometry = texturedGeometries[objectIndex];
@@ -1491,16 +1501,6 @@ void FillCommandBufferPrimary(
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBufferPrimary, 0, 1, vertexBuffers, offsets);
         vkCmdBindIndexBuffer(commandBufferPrimary, texturedGeometry.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
-
-        vkCmdBindDescriptorSets(
-            commandBufferPrimary, 
-            VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/, 
-            pipelineLayout, 
-            0, 
-            1, 
-            &descriptorSet, 
-            0, 
-            nullptr);
 
         for (uint32_t drawCallIndex = 0; drawCallIndex < drawCallsPerObjectNum; ++drawCallIndex)
         {
