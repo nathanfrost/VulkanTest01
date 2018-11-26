@@ -626,18 +626,16 @@ private:
         {
             glfwPollEvents();
 
-            for (auto& texturedGeometry : m_texturedGeometries)
-            {
-                UpdateUniformBuffer(
-                    m_uniformBufferCpuMemory,
-                    s_cameraTranslation,
-                    m_uniformBufferGpuMemory,
-                    m_uniformBufferOffsetToGpuMemory,
-                    NTF_DRAW_CALLS_TOTAL,
-                    m_uniformBufferSizeAligned,
-                    m_swapChainExtent,
-                    m_device);
-            }
+           //#StreamingMemory: update uniforms per streaming unit
+            UpdateUniformBuffer(
+                m_uniformBufferCpuMemory,
+                s_cameraTranslation,
+                m_uniformBufferGpuMemory,
+                m_uniformBufferOffsetToGpuMemory,
+                NTF_DRAW_CALLS_TOTAL,
+                m_uniformBufferSizeAligned,
+                m_swapChainExtent,
+                m_device);
 
             const VkSemaphore imageAvailableSemaphore = m_imageAvailableSemaphore[frameIndex];
             uint32_t acquiredImageIndex;
