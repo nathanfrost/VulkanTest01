@@ -1622,6 +1622,34 @@ void CreateDescriptorPool(
     NTF_VK_ASSERT_SUCCESS(createDescriptorPoolResult);
 }
 
+void WriteDescriptorSet(
+    VkWriteDescriptorSet*const descriptorWritePtr, 
+    const VkDescriptorSet dstSet, 
+    const uint32_t dstBinding, 
+    const uint32_t dstArrayElement, 
+    const VkDescriptorType descriptorType,
+    const uint32_t descriptorCount,
+    const void*const pNext,
+    const VkDescriptorBufferInfo*const pBufferInfo,
+    const VkDescriptorImageInfo*const pImageInfo,
+    const VkBufferView*const pTexelBufferView)
+{
+    NTF_REF(descriptorWritePtr, descriptorWrite);
+
+    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrite.dstSet = dstSet;
+    descriptorWrite.dstBinding = dstBinding;
+    descriptorWrite.dstArrayElement = dstArrayElement;//might be nonzero if part of an array
+    descriptorWrite.descriptorType = descriptorType;
+    descriptorWrite.descriptorCount = descriptorCount;
+    descriptorWrite.pNext = pNext;//non-null if there's an extension
+
+    //one of the following three must be non-null
+    descriptorWrite.pBufferInfo = pBufferInfo;//if buffer data
+    descriptorWrite.pImageInfo = pImageInfo; //if image or sampler data
+    descriptorWrite.pTexelBufferView = pTexelBufferView; //if render view
+}
+
 void CreateDescriptorSet(
     VkDescriptorSet*const descriptorSetPtr,
     const VkDescriptorType descriptorType,
@@ -1676,44 +1704,34 @@ void CreateDescriptorSet(
     VectorSafe<VkWriteDescriptorSet, kDescriptorWritesNum> descriptorWrites(kDescriptorWritesNum);
 
     uint32_t bindingIndex = 0;
-    descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[0].dstSet = descriptorSet;
-    descriptorWrites[0].dstBinding = bindingIndex++;
-    descriptorWrites[0].dstArrayElement = 0;//descriptor is not an array
-    descriptorWrites[0].descriptorType = descriptorType;
-    descriptorWrites[0].descriptorCount = 1;
-    descriptorWrites[0].pNext = nullptr;//no extension
+    WriteDescriptorSet(&descriptorWrites[bindingIndex], descriptorSet, bindingIndex, 0, descriptorType, 1, nullptr, &bufferInfo, nullptr, nullptr);
+    bindingIndex++;
 
-    //one of the following three must be non-null
-    descriptorWrites[0].pBufferInfo = &bufferInfo;//if buffer data
-    descriptorWrites[0].pImageInfo = nullptr; //if image data
-    descriptorWrites[0].pTexelBufferView = nullptr; //if render view
+    WriteDescriptorSet(
+        &descriptorWrites[bindingIndex], 
+        descriptorSet, 
+        bindingIndex, 
+        0, 
+        VK_DESCRIPTOR_TYPE_SAMPLER, 
+        1, 
+        nullptr, 
+        nullptr, 
+        &samplerInfo, 
+        nullptr);
+    bindingIndex++;
 
-    descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[1].dstSet = descriptorSet;
-    descriptorWrites[1].dstBinding = bindingIndex++;
-    descriptorWrites[1].dstArrayElement = 0;//descriptor is not an array
-    descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-    descriptorWrites[1].descriptorCount = 1;
-    descriptorWrites[1].pNext = nullptr;//no extension
-
-    //one of the following three must be non-null
-    descriptorWrites[1].pBufferInfo = nullptr;//if buffer data
-    descriptorWrites[1].pImageInfo = &samplerInfo;
-    descriptorWrites[1].pTexelBufferView = nullptr; //if render view
-
-    descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrites[2].dstSet = descriptorSet;
-    descriptorWrites[2].dstBinding = bindingIndex++;
-    descriptorWrites[2].dstArrayElement = 0;//descriptor is not an array
-    descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    descriptorWrites[2].descriptorCount = Cast_size_t_uint32_t(texturesNum);
-    descriptorWrites[2].pNext = nullptr;//no extension
-
-    //one of the following three must be non-null
-    descriptorWrites[2].pBufferInfo = nullptr;//if buffer data
-    descriptorWrites[2].pImageInfo = imageInfos.data();
-    descriptorWrites[2].pTexelBufferView = nullptr; //if render view
+    WriteDescriptorSet(
+        &descriptorWrites[bindingIndex], 
+        descriptorSet, 
+        bindingIndex, 
+        0, 
+        VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 
+        Cast_size_t_uint32_t(texturesNum), 
+        nullptr, 
+        nullptr, 
+        imageInfos.data(), 
+        nullptr);
+    bindingIndex++;
 
     vkUpdateDescriptorSets(
         device,
