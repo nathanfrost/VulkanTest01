@@ -390,11 +390,12 @@ private:
         StackNTF<VkDeviceSize> stagingBufferGpuStack;
         VkDeviceSize stagingBufferGpuOffsetToAllocatedBlock;
         stagingBufferGpuStack.Allocate(NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
+        VkDeviceSize offsetToFirstByteOfStagingBuffer;
         CreateBuffer(
             &m_stagingBufferGpu,
             &m_stagingBufferGpuMemory,
             &m_deviceLocalMemory,
-            &m_offsetToFirstByteOfStagingBuffer,
+            &offsetToFirstByteOfStagingBuffer,
             NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
@@ -409,7 +410,7 @@ private:
         const VkResult vkMapMemoryResult = vkMapMemory(
             m_device, 
             m_stagingBufferGpuMemory, 
-            m_offsetToFirstByteOfStagingBuffer,
+            offsetToFirstByteOfStagingBuffer,
             NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE, 
             0, 
             &stagingBufferMemoryMapCpuToGpu);
@@ -463,7 +464,7 @@ private:
             CreateBuffer(
                 &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
                 m_stagingBufferGpuMemory,
-                m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+                offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
                 imageSizeBytes,
                 0,
                 m_device,
@@ -499,7 +500,7 @@ private:
                 CreateBuffer(
                     &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
                     m_stagingBufferGpuMemory,
-                    m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+                    offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
                     bufferSize,
                     0,
                     m_device,
@@ -539,7 +540,7 @@ private:
                 CreateBuffer(
                     &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
                     m_stagingBufferGpuMemory,
-                    m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+                    offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
                     bufferSize,
                     0,
                     m_device,
@@ -816,7 +817,6 @@ private:
     size_t m_stagingBufferGpuAllocateIndex = 0;
 
     VkDeviceMemory m_stagingBufferGpuMemory;
-    VkDeviceSize m_offsetToFirstByteOfStagingBuffer;
     VkFence m_transferQueueFence;
     //END_#StagingBuffer
     StackCpu m_stagingBufferMemoryMapCpuToGpu;
