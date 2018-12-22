@@ -342,7 +342,8 @@ VkResult SubmitCommandBuffer(
     ConstVectorSafeRef<VkSemaphore> waitSemaphores,
     ArraySafeRef<VkPipelineStageFlags> waitStages,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
-    const VkQueue& queue)
+    const VkQueue& queue,
+    const VkFence& fence)
 {
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -356,7 +357,7 @@ VkResult SubmitCommandBuffer(
     submitInfo.pWaitSemaphores = waitSemaphores.GetAddressOfUnderlyingArray();
     submitInfo.pWaitDstStageMask = waitStages.GetAddressOfUnderlyingArray();
 
-    const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+    const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, fence);
     NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
     return queueSubmitResult;
 }
@@ -370,7 +371,6 @@ void TransferImageFromCpuToGpu(
     const VkCommandBuffer commandBufferTransfer,
     const VkQueue& transferQueue,
     const uint32_t transferQueueFamilyIndex,
-    const VkSemaphore transferFinishedSemaphore,
     const VkCommandBuffer commandBufferGraphics,
     const VkQueue& graphicsQueue,
     const uint32_t graphicsQueueFamilyIndex,
@@ -2086,7 +2086,6 @@ void CreateTextureImage(
         commandBufferTransfer,
         transferQueue,
         transferQueueFamilyIndex,
-        transferFinishedSemaphore,
         commandBufferGraphics,
         graphicsQueue,
         graphicsQueueFamilyIndex,
@@ -2172,14 +2171,13 @@ void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const
 void CreateFrameSyncPrimitives(
     VectorSafeRef<VkSemaphore> imageAvailable, 
     VectorSafeRef<VkSemaphore> renderFinished, 
-    VkSemaphore*const transferFinishedSemaphorePtr,
+    const size_t transferFinishedSemaphoreSize,
+    ArraySafeRef<VkSemaphore> transferFinishedSemaphorePool,
+    ArraySafeRef<VkPipelineStageFlags> transferFinishedPipelineStageFlags,
     VectorSafeRef<VkFence> fence, 
     const size_t framesNum,
     const VkDevice& device)
 {
-    assert(transferFinishedSemaphorePtr);
-    auto& transferFinishedSemaphore = *transferFinishedSemaphorePtr;
-
     assert(framesNum);
 
     VkSemaphoreCreateInfo semaphoreInfo = {};
@@ -2203,9 +2201,14 @@ void CreateFrameSyncPrimitives(
         }
     }
 
-    const VkResult transferFinishedSemaphoreCreateResult = 
-        vkCreateSemaphore(device, &semaphoreInfo, GetVulkanAllocationCallbacks(), &transferFinishedSemaphore);
-    NTF_VK_ASSERT_SUCCESS(transferFinishedSemaphoreCreateResult);
+    for (size_t transferFinishedSemaphoreIndex = 0; transferFinishedSemaphoreIndex < transferFinishedSemaphoreSize; ++transferFinishedSemaphoreIndex)
+    {
+        const VkResult transferFinishedSemaphoreCreateResult = 
+            vkCreateSemaphore(device, &semaphoreInfo, GetVulkanAllocationCallbacks(), &transferFinishedSemaphorePool[transferFinishedSemaphoreIndex]);
+        NTF_VK_ASSERT_SUCCESS(transferFinishedSemaphoreCreateResult);
+
+        transferFinishedPipelineStageFlags[transferFinishedSemaphoreIndex] = VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
 }
 
 ///@todo: use push constants instead, since it's more efficient

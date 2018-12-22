@@ -80,7 +80,6 @@ void TransferImageFromCpuToGpu(
     const VkCommandBuffer commandBufferTransfer,
     const VkQueue& transferQueue,
     const uint32_t transferQueueFamilyIndex,
-    const VkSemaphore transferFinishedSemaphore,
     const VkCommandBuffer commandBufferGraphics,
     const VkQueue& graphicsQueue,
     const uint32_t graphicsQueueFamilyIndex,
@@ -119,7 +118,8 @@ VkResult SubmitCommandBuffer(
     ConstVectorSafeRef<VkSemaphore> waitSemaphores,
     ArraySafeRef<VkPipelineStageFlags> waitStages,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
-    const VkQueue& queue);
+    const VkQueue& queue,
+    const VkFence& fence);
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
 uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
 void CreateBuffer(
@@ -501,7 +501,9 @@ void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const
 void CreateFrameSyncPrimitives(
     VectorSafeRef<VkSemaphore> imageAvailable,
     VectorSafeRef<VkSemaphore> renderFinished,
-    VkSemaphore*const transferFinishedSemaphorePtr,
+    const size_t transferFinishedSemaphoreSize,
+    ArraySafeRef<VkSemaphore> transferFinishedSemaphorePool,
+    ArraySafeRef<VkPipelineStageFlags> transferFinishedPipelineStageFlags,
     VectorSafeRef<VkFence> fence,
     const size_t framesNum,
     const VkDevice& device);

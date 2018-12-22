@@ -233,7 +233,11 @@ private:
             vkDestroySemaphore(m_device, m_imageAvailableSemaphore[frameIndex], GetVulkanAllocationCallbacks());
             vkDestroyFence(m_device, m_fence[frameIndex], GetVulkanAllocationCallbacks());
         }
-        vkDestroySemaphore(m_device, m_transferFinishedSemaphore, GetVulkanAllocationCallbacks());
+        vkDestroyFence(m_device, m_transferQueueFence, GetVulkanAllocationCallbacks());
+        for (auto& semaphore : m_transferFinishedSemaphorePool)
+        {
+            vkDestroySemaphore(m_device, semaphore, GetVulkanAllocationCallbacks());
+        }
 
         vkDestroyCommandPool(m_device, m_commandPoolPrimary, GetVulkanAllocationCallbacks());
         if (m_commandPoolTransfer != m_commandPoolPrimary)
@@ -251,10 +255,6 @@ private:
         vkUnmapMemory(m_device, m_stagingBufferGpuMemory);
         //BEG_#StagingBuffer
         vkDestroyBuffer(m_device, m_stagingBufferGpu, GetVulkanAllocationCallbacks());
-        for (auto& buffer : m_stagingBuffersGpu)
-        {
-            vkDestroyBuffer(m_device, buffer, GetVulkanAllocationCallbacks());
-        }
         //END_#StagingBuffer
         m_stagingBufferMemoryMapCpuToGpu.Destroy();
 
@@ -346,10 +346,19 @@ private:
             1,
             m_device);
 
+        VkFenceCreateInfo fenceInfo;
+        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+        fenceInfo.pNext = nullptr;
+        fenceInfo.flags = 0;//fence starts unsignalled
+        const VkResult createTransferFenceResult = vkCreateFence(m_device, &fenceInfo, GetVulkanAllocationCallbacks(), &m_transferQueueFence);
+        NTF_VK_ASSERT_SUCCESS(createTransferFenceResult);
+
         CreateFrameSyncPrimitives(
             &m_imageAvailableSemaphore,
             &m_renderFinishedSemaphore,
-            &m_transferFinishedSemaphore,
+            m_transferFinishedSemaphorePool.size(),
+            &m_transferFinishedSemaphorePool,
+            &m_transferFinishedPipelineStageFlags,
             &m_fence,
             NTF_FRAMES_IN_FLIGHT_NUM,
             m_device);
@@ -406,7 +415,9 @@ private:
             &stagingBufferMemoryMapCpuToGpu);
         NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
         m_stagingBufferMemoryMapCpuToGpu.Initialize(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpu), NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
-        size_t stagingBufferGpuIndex = 0;
+        
+        assert(m_stagingBufferGpuAllocateIndex == 0);
+        assert(m_stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
 
         const bool unifiedGraphicsAndTransferQueue = m_graphicsQueue == m_transferQueue;
         assert(unifiedGraphicsAndTransferQueue == (m_queueFamilyIndices.transferFamily == m_queueFamilyIndices.graphicsFamily));
@@ -417,7 +428,7 @@ private:
         }
         CreateTextureSampler(&m_textureSampler, m_device);
 
-        VectorSafe<VkSemaphore, 1> transferFinishedSemaphore;
+        VectorSafe<VkSemaphore, 2> transferFinishedSemaphore;
         const size_t texturedGeometriesSize = m_texturedGeometries.size();
         for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometriesSize; ++texturedGeometryIndex)
         {
@@ -450,7 +461,7 @@ private:
             const bool pushAllocSuccess = stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, alignment, imageSizeBytes);
             assert(pushAllocSuccess);
             CreateBuffer(
-                &m_stagingBuffersGpu[stagingBufferGpuIndex],
+                &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
                 m_stagingBufferGpuMemory,
                 m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
                 imageSizeBytes,
@@ -463,18 +474,17 @@ private:
                 textureWidth,
                 textureHeight,
                 imageFormat,
-                m_stagingBuffersGpu[stagingBufferGpuIndex],
+                m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
                 m_commandBufferTransfer,
                 m_transferQueue,
                 m_queueFamilyIndices.transferFamily,
-                m_transferFinishedSemaphore,
                 m_commandBufferTransitionImage,
                 m_graphicsQueue,
                 m_queueFamilyIndices.graphicsFamily,
                 m_device);
 
             CreateTextureImageView(&m_textureImageViews[texturedGeometryIndex], texturedGeometry.textureImage, m_device);
-            ++stagingBufferGpuIndex;
+            ++m_stagingBufferGpuAllocateIndex;
 
             //BEG_#StreamingMemory
             LoadModel(&texturedGeometry.vertices, &texturedGeometry.indices, sk_modelPaths[texturedGeometryIndex], sk_uniformScales[texturedGeometryIndex]);
@@ -487,7 +497,7 @@ private:
 
                 stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
                 CreateBuffer(
-                    &m_stagingBuffersGpu[stagingBufferGpuIndex],
+                    &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
                     m_stagingBufferGpuMemory,
                     m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
                     bufferSize,
@@ -497,7 +507,7 @@ private:
 
 #if NTF_DEBUG
                 VkMemoryRequirements memRequirements;
-                vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[stagingBufferGpuIndex], &memRequirements);
+                vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex], &memRequirements);
                 assert(memRequirements.alignment == m_stagingBufferGpuAlignmentStandard);
 #endif//#if NTF_DEBUG
 
@@ -512,14 +522,14 @@ private:
                     &texturedGeometry.vertexBufferMemory,
                     vertexBufferStagingBufferCpuToGpu,
                     texturedGeometry.vertices.data(),
-                    m_stagingBuffersGpu[stagingBufferGpuIndex],
+                    m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
                     bufferSize,
                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
                     false,
                     m_commandBufferTransfer,
                     m_device,
                     m_physicalDevice);
-                ++stagingBufferGpuIndex;
+                ++m_stagingBufferGpuAllocateIndex;
             }
 
             ///@todo: #IndexVertexBufferUploadDuplication: consider refactor
@@ -527,7 +537,7 @@ private:
                 const size_t bufferSize = sizeof(texturedGeometry.indices[0]) * texturedGeometry.indices.size();
                 stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
                 CreateBuffer(
-                    &m_stagingBuffersGpu[stagingBufferGpuIndex],
+                    &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
                     m_stagingBufferGpuMemory,
                     m_offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
                     bufferSize,
@@ -537,7 +547,7 @@ private:
 
 #if NTF_DEBUG
                 VkMemoryRequirements memRequirements;
-                vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[stagingBufferGpuIndex], &memRequirements);
+                vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex], &memRequirements);
                 assert(memRequirements.alignment == m_stagingBufferGpuAlignmentStandard);
 #endif//#if NTF_DEBUG
 
@@ -552,17 +562,18 @@ private:
                     &texturedGeometry.indexBufferMemory,
                     indexBufferStagingBufferCpuToGpu,
                     texturedGeometry.indices.data(),
-                    m_stagingBuffersGpu[stagingBufferGpuIndex],
+                    m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
                     bufferSize,
                     VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                     false,
                     m_commandBufferTransfer,
                     m_device,
                     m_physicalDevice);
+                ++m_stagingBufferGpuAllocateIndex;
             }
             if (!unifiedGraphicsAndTransferQueue)
             {
-                transferFinishedSemaphore.Push(m_transferFinishedSemaphore);
+                transferFinishedSemaphore.Push(m_transferFinishedSemaphorePool[transferFinishedSemaphore.size()]);
             }
         }
         vkEndCommandBuffer(m_commandBufferTransfer);
@@ -571,17 +582,19 @@ private:
             ConstVectorSafeRef<VkSemaphore>(),
             ArraySafeRef<VkPipelineStageFlags>(),
             m_commandBufferTransfer,
-            m_transferQueue);
+            m_transferQueue,
+            m_transferQueueFence);
+
         if (!unifiedGraphicsAndTransferQueue)
         {
             vkEndCommandBuffer(m_commandBufferTransitionImage);
-            ArraySafe<VkPipelineStageFlags, 1> waitStages({ VK_PIPELINE_STAGE_TRANSFER_BIT });
             SubmitCommandBuffer(
                 ConstVectorSafeRef<VkSemaphore>(),
                 transferFinishedSemaphore,
-                &waitStages,
+                &m_transferFinishedPipelineStageFlags,
                 m_commandBufferTransitionImage,
-                m_graphicsQueue);
+                m_graphicsQueue,
+                VK_NULL_HANDLE);
         }
 
         const VkDeviceSize uniformBufferSize = m_uniformBufferSizeAligned;
@@ -625,6 +638,27 @@ private:
         while (!glfwWindowShouldClose(window)) 
         {
             glfwPollEvents();
+
+            //BEG_#StagingBuffer
+            //clean up staging buffers if they were in use but have completed their transfers
+            if (m_stagingBufferGpuAllocateIndex > 0)
+            {
+                const VkResult transferQueueStatus = vkGetFenceStatus(m_device, m_transferQueueFence);
+                if (transferQueueStatus == VK_SUCCESS)
+                {
+                    //clean up staging memory
+                    m_stagingBufferMemoryMapCpuToGpu.Clear();
+
+                    for (size_t stagingBufferGpuAllocateIndexFree = 0;
+                        stagingBufferGpuAllocateIndexFree < m_stagingBufferGpuAllocateIndex;
+                        ++stagingBufferGpuAllocateIndexFree)
+                    {
+                        vkDestroyBuffer(m_device, m_stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], GetVulkanAllocationCallbacks());
+                    }
+                    m_stagingBufferGpuAllocateIndex = 0;
+                }
+            }
+            //BEG_#StagingBuffer
 
            //#StreamingMemory: update uniforms per streaming unit
             UpdateUniformBuffer(
@@ -766,16 +800,24 @@ private:
     int m_frameIndex=0;
     VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_imageAvailableSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
     VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_renderFinishedSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
-    VkSemaphore m_transferFinishedSemaphore;
+    
+    enum { kTransferFinishedSemaphoresNum = 2 };
+    ArraySafe<VkSemaphore, kTransferFinishedSemaphoresNum> m_transferFinishedSemaphorePool;
+    ArraySafe<VkPipelineStageFlags, kTransferFinishedSemaphoresNum> m_transferFinishedPipelineStageFlags;
+    
     VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_fence = VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a true ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
 
     VulkanPagedStackAllocator m_deviceLocalMemory;
     //BEG_#StagingBuffer
     VkBuffer m_stagingBufferGpu;
     VkDeviceSize m_stagingBufferGpuAlignmentStandard;
+    
     ArraySafe<VkBuffer, 32> m_stagingBuffersGpu;
+    size_t m_stagingBufferGpuAllocateIndex = 0;
+
     VkDeviceMemory m_stagingBufferGpuMemory;
     VkDeviceSize m_offsetToFirstByteOfStagingBuffer;
+    VkFence m_transferQueueFence;
     //END_#StagingBuffer
     StackCpu m_stagingBufferMemoryMapCpuToGpu;
 };

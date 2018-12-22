@@ -22,11 +22,12 @@ public:
         m_allocated = false;
     }
 
-    inline SizeT GetFirstByteFree(){ assert(m_allocated); return m_firstByteFree; }
+    inline SizeT GetFirstByteFree() const{ assert(m_allocated); return m_firstByteFree; }
     inline bool Allocated() const { return m_allocated; }
 
     bool PushAlloc(SizeT* memoryOffsetPtr, const SizeT alignment, const SizeT size);
     bool PushAllocInternal(SizeT*const firstByteFreePtr, SizeT*const firstByteReturnedPtr, SizeT const alignment, SizeT const size) const;
+    bool IsEmptyAndAllocated() const { return m_allocated && GetFirstByteFree() == 0; }
 
 private:
     SizeT m_maxOffsetPlusOne;///<page's first invalid memory address within its allocation
@@ -59,6 +60,7 @@ public:
     bool PushAlloc(void**const memoryPtr, const size_t alignment, const size_t sizeBytes);
     inline size_t GetFirstByteFree(){ assert(m_initialized); return m_stack.GetFirstByteFree(); }
     inline uint8_t*const GetMemory() { return m_memory; }
+    inline bool IsEmptyAndAllocated() const { return m_stack.IsEmptyAndAllocated(); }
 
 private:
     void InitializeInternal(uint8_t*const p, const size_t sizeBytes);
