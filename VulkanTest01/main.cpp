@@ -492,42 +492,24 @@ private:
             texturedGeometry.indicesSize = Cast_size_t_uint32_t(texturedGeometry.indices.size());//store since we need secondary buffers to point to this
             //END_#StreamingMemory
 
-            CopyBufferToGpuPrepare(
-                &m_deviceLocalMemory,
+            CopyBufferToGpuPrepareOnTransferQueue(
                 &texturedGeometry.vertexBuffer,
                 &texturedGeometry.vertexBufferMemory,
                 &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
-                &m_stagingBufferMemoryMapCpuToGpu,
-                &m_stagingBufferGpuAllocateIndex,
                 &stagingBufferGpuStack,
-                m_stagingBufferGpuMemory,
-                m_stagingBufferGpuAlignmentStandard,
                 offsetToFirstByteOfStagingBuffer,
                 texturedGeometry.vertices.data(),
                 sizeof(texturedGeometry.vertices[0]) * texturedGeometry.vertices.size(),
-                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
-                false,
-                m_commandBufferTransfer,
-                m_device,
-                m_physicalDevice);
-            CopyBufferToGpuPrepare(
-                &m_deviceLocalMemory,
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/);
+            CopyBufferToGpuPrepareOnTransferQueue(
                 &texturedGeometry.indexBuffer,
                 &texturedGeometry.indexBufferMemory,
                 &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
-                &m_stagingBufferMemoryMapCpuToGpu,
-                &m_stagingBufferGpuAllocateIndex,
                 &stagingBufferGpuStack,
-                m_stagingBufferGpuMemory,
-                m_stagingBufferGpuAlignmentStandard,
                 offsetToFirstByteOfStagingBuffer,
                 texturedGeometry.indices.data(),
                 sizeof(texturedGeometry.indices[0]) * texturedGeometry.indices.size(),
-                VK_BUFFER_USAGE_INDEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
-                false,
-                m_commandBufferTransfer,
-                m_device,
-                m_physicalDevice);
+                VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
             if (!unifiedGraphicsAndTransferQueue)
             {
                 transferFinishedSemaphore.Push(m_transferFinishedSemaphorePool[transferFinishedSemaphore.size()]);///<@todo: attempt using just one transferFinishedSemaphore at the end of submission per streaming unit; all commands should be completed before the semaphore triggers
@@ -689,6 +671,41 @@ private:
 
         //wait for the logical device to finish operations before exiting MainLoop and destroying the window
         vkDeviceWaitIdle(m_device);
+    }
+    void CopyBufferToGpuPrepareOnTransferQueue(
+        VkBuffer*const gpuBufferPtr,
+        VkDeviceMemory*const gpuBufferMemoryPtr,
+        VkBuffer*const stagingBufferGpuPtr,
+        StackNTF<VkDeviceSize>*const stagingBufferGpuStackPtr,
+        const VkDeviceSize offsetToFirstByteOfStagingBuffer,
+        const void*const cpuBufferSource,
+        const VkDeviceSize bufferSize,
+        const VkMemoryPropertyFlags& memoryPropertyFlags,
+        const bool residentForever = false)
+    {
+        NTF_REF(gpuBufferPtr, gpuBuffer);
+        NTF_REF(gpuBufferMemoryPtr, gpuBufferMemory);
+        NTF_REF(stagingBufferGpuPtr, stagingBufferGpu);
+        NTF_REF(stagingBufferGpuStackPtr, stagingBufferGpuStack);
+
+        CopyBufferToGpuPrepare(
+            &m_deviceLocalMemory,
+            &gpuBuffer,
+            &gpuBufferMemory,
+            &stagingBufferGpu,
+            &m_stagingBufferMemoryMapCpuToGpu,
+            &m_stagingBufferGpuAllocateIndex,
+            &stagingBufferGpuStack,
+            m_stagingBufferGpuMemory,
+            m_stagingBufferGpuAlignmentStandard,
+            offsetToFirstByteOfStagingBuffer,
+            cpuBufferSource,
+            bufferSize,
+            memoryPropertyFlags,
+            residentForever,
+            m_commandBufferTransfer,
+            m_device,
+            m_physicalDevice);
     }
 
     const size_t sm_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM;//single uniform buffer that contains all uniform information for this streaming unit; 
