@@ -416,6 +416,24 @@ void CreateDescriptorSet(
 
 void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*const indicesPtr, const char*const modelPath, const float uniformScale);
 
+void CopyBufferToGpuPrepare(
+    VulkanPagedStackAllocator*const deviceLocalMemoryPtr,
+    VkBuffer*const gpuBufferPtr,
+    VkDeviceMemory*const gpuBufferMemoryPtr,
+    VkBuffer*const stagingBufferGpuPtr,
+    StackCpu*const stagingBufferMemoryMapCpuToGpuPtr,
+    size_t*const stagingBufferGpuAllocateIndexPtr,
+    StackNTF<VkDeviceSize>*const stagingBufferGpuStackPtr,
+    const VkDeviceMemory stagingBufferGpuMemory,
+    const VkDeviceSize stagingBufferGpuAlignmentStandard,
+    const VkDeviceSize offsetToFirstByteOfStagingBuffer,
+    const void*const cpuBufferSource,
+    const VkDeviceSize bufferSize,
+    const VkMemoryPropertyFlags& memoryPropertyFlags,
+    const bool residentForever,
+    const VkCommandBuffer& commandBuffer,
+    const VkDevice& device,
+    const VkPhysicalDevice& physicalDevice);
 void CreateAndCopyToGpuBuffer(
     VulkanPagedStackAllocator*const allocatorPtr,
     VkBuffer*const gpuBufferPtr,

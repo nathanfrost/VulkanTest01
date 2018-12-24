@@ -492,89 +492,45 @@ private:
             texturedGeometry.indicesSize = Cast_size_t_uint32_t(texturedGeometry.indices.size());//store since we need secondary buffers to point to this
             //END_#StreamingMemory
 
-            ///@todo: #IndexVertexBufferUploadDuplication: consider refactor
-            {
-                const size_t bufferSize = sizeof(texturedGeometry.vertices[0]) * texturedGeometry.vertices.size();
-
-                stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
-                CreateBuffer(
-                    &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
-                    m_stagingBufferGpuMemory,
-                    offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
-                    bufferSize,
-                    0,
-                    m_device,
-                    m_physicalDevice);
-
-#if NTF_DEBUG
-                VkMemoryRequirements memRequirements;
-                vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex], &memRequirements);
-                assert(memRequirements.alignment == m_stagingBufferGpuAlignmentStandard);
-#endif//#if NTF_DEBUG
-
-                ArraySafeRef<uint8_t> vertexBufferStagingBufferCpuToGpu;
-                m_stagingBufferMemoryMapCpuToGpu.PushAlloc(
-                    &vertexBufferStagingBufferCpuToGpu,
-                    Cast_VkDeviceSize_size_t(m_stagingBufferGpuAlignmentStandard),
-                    bufferSize);
-                CreateAndCopyToGpuBuffer(
-                    &m_deviceLocalMemory,
-                    &texturedGeometry.vertexBuffer,
-                    &texturedGeometry.vertexBufferMemory,
-                    vertexBufferStagingBufferCpuToGpu,
-                    texturedGeometry.vertices.data(),
-                    m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
-                    bufferSize,
-                    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
-                    false,
-                    m_commandBufferTransfer,
-                    m_device,
-                    m_physicalDevice);
-                ++m_stagingBufferGpuAllocateIndex;
-            }
-
-            ///@todo: #IndexVertexBufferUploadDuplication: consider refactor
-            {
-                const size_t bufferSize = sizeof(texturedGeometry.indices[0]) * texturedGeometry.indices.size();
-                stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, m_stagingBufferGpuAlignmentStandard, bufferSize);
-                CreateBuffer(
-                    &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
-                    m_stagingBufferGpuMemory,
-                    offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
-                    bufferSize,
-                    0,
-                    m_device,
-                    m_physicalDevice);
-
-#if NTF_DEBUG
-                VkMemoryRequirements memRequirements;
-                vkGetBufferMemoryRequirements(m_device, m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex], &memRequirements);
-                assert(memRequirements.alignment == m_stagingBufferGpuAlignmentStandard);
-#endif//#if NTF_DEBUG
-
-                ArraySafeRef<uint8_t> indexBufferStagingBufferCpuToGpu;
-                m_stagingBufferMemoryMapCpuToGpu.PushAlloc(
-                    &indexBufferStagingBufferCpuToGpu,
-                    Cast_VkDeviceSize_size_t(m_stagingBufferGpuAlignmentStandard),
-                    bufferSize);
-                CreateAndCopyToGpuBuffer(
-                    &m_deviceLocalMemory,
-                    &texturedGeometry.indexBuffer,
-                    &texturedGeometry.indexBufferMemory,
-                    indexBufferStagingBufferCpuToGpu,
-                    texturedGeometry.indices.data(),
-                    m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
-                    bufferSize,
-                    VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                    false,
-                    m_commandBufferTransfer,
-                    m_device,
-                    m_physicalDevice);
-                ++m_stagingBufferGpuAllocateIndex;
-            }
+            CopyBufferToGpuPrepare(
+                &m_deviceLocalMemory,
+                &texturedGeometry.vertexBuffer,
+                &texturedGeometry.vertexBufferMemory,
+                &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
+                &m_stagingBufferMemoryMapCpuToGpu,
+                &m_stagingBufferGpuAllocateIndex,
+                &stagingBufferGpuStack,
+                m_stagingBufferGpuMemory,
+                m_stagingBufferGpuAlignmentStandard,
+                offsetToFirstByteOfStagingBuffer,
+                texturedGeometry.vertices.data(),
+                sizeof(texturedGeometry.vertices[0]) * texturedGeometry.vertices.size(),
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
+                false,
+                m_commandBufferTransfer,
+                m_device,
+                m_physicalDevice);
+            CopyBufferToGpuPrepare(
+                &m_deviceLocalMemory,
+                &texturedGeometry.indexBuffer,
+                &texturedGeometry.indexBufferMemory,
+                &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
+                &m_stagingBufferMemoryMapCpuToGpu,
+                &m_stagingBufferGpuAllocateIndex,
+                &stagingBufferGpuStack,
+                m_stagingBufferGpuMemory,
+                m_stagingBufferGpuAlignmentStandard,
+                offsetToFirstByteOfStagingBuffer,
+                texturedGeometry.indices.data(),
+                sizeof(texturedGeometry.indices[0]) * texturedGeometry.indices.size(),
+                VK_BUFFER_USAGE_INDEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
+                false,
+                m_commandBufferTransfer,
+                m_device,
+                m_physicalDevice);
             if (!unifiedGraphicsAndTransferQueue)
             {
-                transferFinishedSemaphore.Push(m_transferFinishedSemaphorePool[transferFinishedSemaphore.size()]);
+                transferFinishedSemaphore.Push(m_transferFinishedSemaphorePool[transferFinishedSemaphore.size()]);///<@todo: attempt using just one transferFinishedSemaphore at the end of submission per streaming unit; all commands should be completed before the semaphore triggers
             }
         }
         vkEndCommandBuffer(m_commandBufferTransfer);

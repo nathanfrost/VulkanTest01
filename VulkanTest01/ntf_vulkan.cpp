@@ -1803,6 +1803,71 @@ void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*cons
     }
 }
 
+void CopyBufferToGpuPrepare(
+    VulkanPagedStackAllocator*const deviceLocalMemoryPtr,
+    VkBuffer*const gpuBufferPtr,
+    VkDeviceMemory*const gpuBufferMemoryPtr,
+    VkBuffer*const stagingBufferGpuPtr,
+    StackCpu*const stagingBufferMemoryMapCpuToGpuPtr,
+    size_t*const stagingBufferGpuAllocateIndexPtr,
+    StackNTF<VkDeviceSize>*const stagingBufferGpuStackPtr,
+    const VkDeviceMemory stagingBufferGpuMemory,
+    const VkDeviceSize stagingBufferGpuAlignmentStandard,
+    const VkDeviceSize offsetToFirstByteOfStagingBuffer,
+    const void*const cpuBufferSource,
+    const VkDeviceSize bufferSize,
+    const VkMemoryPropertyFlags& memoryPropertyFlags,
+    const bool residentForever,
+    const VkCommandBuffer& commandBuffer,
+    const VkDevice& device,
+    const VkPhysicalDevice& physicalDevice)
+{
+    NTF_REF(deviceLocalMemoryPtr, deviceLocalMemory);
+    NTF_REF(gpuBufferPtr, gpuBuffer);
+    NTF_REF(gpuBufferMemoryPtr, gpuBufferMemory);
+    NTF_REF(stagingBufferGpuPtr, stagingBufferGpu);
+    NTF_REF(stagingBufferMemoryMapCpuToGpuPtr, stagingBufferMemoryMapCpuToGpu);
+    NTF_REF(stagingBufferGpuAllocateIndexPtr, stagingBufferGpuAllocateIndex);
+    NTF_REF(stagingBufferGpuStackPtr, stagingBufferGpuStack);
+
+    VkDeviceSize stagingBufferGpuOffsetToAllocatedBlock;
+    stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, stagingBufferGpuAlignmentStandard, bufferSize);
+    CreateBuffer(
+        &stagingBufferGpu,
+        stagingBufferGpuMemory,
+        offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+        bufferSize,
+        0,
+        device,
+        physicalDevice);
+
+#if NTF_DEBUG
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(device, stagingBufferGpu, &memRequirements);
+    assert(memRequirements.alignment == stagingBufferGpuAlignmentStandard);
+#endif//#if NTF_DEBUG
+
+    ArraySafeRef<uint8_t> stagingBufferCpuToGpu;
+    stagingBufferMemoryMapCpuToGpu.PushAlloc(
+        &stagingBufferCpuToGpu,
+        Cast_VkDeviceSize_size_t(stagingBufferGpuAlignmentStandard),
+        Cast_VkDeviceSize_size_t(bufferSize));
+    CreateAndCopyToGpuBuffer(
+        &deviceLocalMemory,
+        &gpuBuffer,
+        &gpuBufferMemory,
+        stagingBufferCpuToGpu,
+        cpuBufferSource,
+        stagingBufferGpu,
+        bufferSize,
+        memoryPropertyFlags,
+        false,
+        commandBuffer,
+        device,
+        physicalDevice);
+    ++stagingBufferGpuAllocateIndex;
+}
+
 void CreateAndCopyToGpuBuffer(
     VulkanPagedStackAllocator*const allocatorPtr,
     VkBuffer*const gpuBufferPtr,
