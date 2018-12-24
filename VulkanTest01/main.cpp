@@ -495,7 +495,6 @@ private:
             CopyBufferToGpuPrepareOnTransferQueue(
                 &texturedGeometry.vertexBuffer,
                 &texturedGeometry.vertexBufferMemory,
-                &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
                 &stagingBufferGpuStack,
                 offsetToFirstByteOfStagingBuffer,
                 texturedGeometry.vertices.data(),
@@ -504,7 +503,6 @@ private:
             CopyBufferToGpuPrepareOnTransferQueue(
                 &texturedGeometry.indexBuffer,
                 &texturedGeometry.indexBufferMemory,
-                &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
                 &stagingBufferGpuStack,
                 offsetToFirstByteOfStagingBuffer,
                 texturedGeometry.indices.data(),
@@ -675,7 +673,6 @@ private:
     void CopyBufferToGpuPrepareOnTransferQueue(
         VkBuffer*const gpuBufferPtr,
         VkDeviceMemory*const gpuBufferMemoryPtr,
-        VkBuffer*const stagingBufferGpuPtr,
         StackNTF<VkDeviceSize>*const stagingBufferGpuStackPtr,
         const VkDeviceSize offsetToFirstByteOfStagingBuffer,
         const void*const cpuBufferSource,
@@ -685,16 +682,15 @@ private:
     {
         NTF_REF(gpuBufferPtr, gpuBuffer);
         NTF_REF(gpuBufferMemoryPtr, gpuBufferMemory);
-        NTF_REF(stagingBufferGpuPtr, stagingBufferGpu);
         NTF_REF(stagingBufferGpuStackPtr, stagingBufferGpuStack);
 
         CopyBufferToGpuPrepare(
             &m_deviceLocalMemory,
             &gpuBuffer,
             &gpuBufferMemory,
-            &stagingBufferGpu,
-            &m_stagingBufferMemoryMapCpuToGpu,
+            &m_stagingBuffersGpu,
             &m_stagingBufferGpuAllocateIndex,
+            &m_stagingBufferMemoryMapCpuToGpu,
             &stagingBufferGpuStack,
             m_stagingBufferGpuMemory,
             m_stagingBufferGpuAlignmentStandard,
