@@ -197,11 +197,11 @@ void CommandBufferSecondaryThreadsCreate(
             0,                                              //default stack size
             CommandBufferThread,                            //starting address to execute
             &commandBufferThreadArguments,                  //argument
-            0,                                              //run immediately; "commit" (eg map) stack memory for immediate use
+            0,                                              //Run immediately; "commit" (eg map) stack memory for immediate use
             nullptr);                                       //ignore thread id
         assert(threadHandle);///@todo: investigate SetThreadPriority() if default priority (THREAD_PRIORITY_NORMAL) seems inefficient
     }
-    ///@todo: CloseHandle() cleanup
+    ///@todo: CloseHandle() Shutdown
 }
 
 DWORD WINAPI CommandBufferThread(void* arg)
@@ -2272,7 +2272,7 @@ void AcquireNextImage(
     {
         ///#TODO_CALLBACK
         //swap chain can no longer be used for rendering
-        //hackToRecreateSwapChainIfNecessary.recreateSwapChain();//haven't seen this get hit yet, even when minimizing and resizing the window
+        //hackToRecreateSwapChainIfNecessary.SwapChainRecreate();//haven't seen this get hit yet, even when minimizing and resizing the window
         return;
     }
     else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR/*VK_SUBOPTIMAL_KHR indicates swap chain can still present image, but surface properties don't entirely match; for example, during resizing*/)
@@ -2356,7 +2356,7 @@ void DrawFrame(
         result == VK_SUBOPTIMAL_KHR/*swap chain can still present image, but surface properties don't entirely match; for example, during resizing*/)
     {
         ///#TODO_CALLBACK
-        //hackToRecreateSwapChainIfNecessary.recreateSwapChain();//haven't seen this get hit yet, even when minimizing and resizing the window
+        //hackToRecreateSwapChainIfNecessary.SwapChainRecreate();//haven't seen this get hit yet, even when minimizing and resizing the window
     }
     NTF_VK_ASSERT_SUCCESS(result);
 }

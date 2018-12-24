@@ -18,16 +18,16 @@ public:
     }
 
     T* replace() {
-        cleanup();
+        Shutdown();
         return &object;
     }
 
     ~VDeleter() {
-        cleanup();
+        Shutdown();
     }
 
     T* operator &() {
-        cleanup();
+        Shutdown();
         return &object;
     }
 
@@ -39,7 +39,7 @@ private:
     T object{ VK_NULL_HANDLE };
     std::function<void(T)> deleter;
 
-    void cleanup() {
+    void Shutdown() {
         if (object != VK_NULL_HANDLE) {
             deleter(object);
         }

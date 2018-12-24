@@ -58,16 +58,16 @@ const float sk_uniformScales[NTF_OBJECTS_NUM] = { 0.05f,1.f };
 
 #define NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE (128 * 1024 * 1024)
 
-    void run() 
+    void Run() 
 	{
-        initWindow(&m_window);
-        initVulkan();
+        WindowInitialize(&m_window);
+        VulkanInitialize();
 
         //#SecondaryCommandBufferMultithreading: see m_commandBufferSecondaryThreads definition for more comments
         //CommandBufferSecondaryThreadsCreate(&m_commandBufferSecondaryThreads, &m_commandBufferThreadDoneEvents, &m_commandBufferThreadArguments, NTF_OBJECTS_NUM);
 
-        mainLoop(m_window);
-        cleanup();
+        MainLoop(m_window);
+        Shutdown();
 
         int i;
 #if NTF_DEBUG
@@ -78,7 +78,7 @@ const float sk_uniformScales[NTF_OBJECTS_NUM] = { 0.05f,1.f };
     }
 
     ///@todo: unit test
-    void recreateSwapChain()
+    void SwapChainRecreate()
     {
         vkDeviceWaitIdle(m_device);
 
@@ -158,7 +158,7 @@ const float sk_uniformScales[NTF_OBJECTS_NUM] = { 0.05f,1.f };
     }
 
 private:
-    void initWindow(GLFWwindow**const windowPtrPtr)
+    void WindowInitialize(GLFWwindow**const windowPtrPtr)
     {
         assert(windowPtrPtr);
         GLFWwindow*& windowPtr = *windowPtrPtr;
@@ -175,13 +175,13 @@ private:
             nullptr/*no sharing objects with another window; that's OpenGL, not Vulkan anyway*/);
 
         glfwSetWindowUserPointer(windowPtr, this);
-        glfwSetWindowSizeCallback(windowPtr, VulkanRendererNTF::onWindowResized);
+        glfwSetWindowSizeCallback(windowPtr, VulkanRendererNTF::WindowResized);
         glfwSetKeyCallback(windowPtr, key_callback);
     }
 
     /*  Viewport and scissor rectangle size is specified during graphics pipeline creation, so the pipeline also needs to be rebuilt when the window 
         is resized. It is possible to avoid this by using dynamic state for the viewports and scissor rectangles */
-    static void onWindowResized(GLFWwindow* window, const int width, const int height)
+    static void WindowResized(GLFWwindow* window, const int width, const int height)
     {
         if (width == 0 || height == 0) 
 		{
@@ -189,10 +189,10 @@ private:
 		}
 
         VulkanRendererNTF* app = reinterpret_cast<VulkanRendererNTF*>(glfwGetWindowUserPointer(window));
-        app->recreateSwapChain();
+        app->SwapChainRecreate();
     }
 
-    void cleanup()
+    void Shutdown()
     {
         STBAllocatorDestroy();
 
@@ -269,7 +269,7 @@ private:
         glfwTerminate();
     }
 
-    void initVulkan()
+    void VulkanInitialize()
     {
         s_validationLayers.size(0);
         s_validationLayers.Push("VK_LAYER_LUNARG_standard_validation");
@@ -632,7 +632,7 @@ private:
             m_device);
     }
 
-    void mainLoop(GLFWwindow* window) 
+    void MainLoop(GLFWwindow* window) 
     {
         assert(window);
         size_t frameIndex = 0;
@@ -731,7 +731,7 @@ private:
             frameIndex = (frameIndex + 1) % NTF_FRAMES_IN_FLIGHT_NUM;
         }
 
-        //wait for the logical device to finish operations before exiting mainLoop and destroying the window
+        //wait for the logical device to finish operations before exiting MainLoop and destroying the window
         vkDeviceWaitIdle(m_device);
     }
 
@@ -825,6 +825,6 @@ private:
 int main() 
 {
     static VulkanRendererNTF app;
-    app.run();
+    app.Run();
     return EXIT_SUCCESS;
 }
