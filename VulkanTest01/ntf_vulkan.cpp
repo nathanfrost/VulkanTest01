@@ -155,7 +155,6 @@ static void VKAPI_CALL NTF_vkInternalFreeNotification(
 }
 //END_#AllocationCallbacks
 
-//BEG_#SecondaryCommandBufferMultithreading
 HANDLE ThreadSignalingEventCreate()
 {
     return CreateEvent(
@@ -166,18 +165,18 @@ HANDLE ThreadSignalingEventCreate()
     );
 }
 
-void CommandBufferSecondaryThreadsCreate(
+//BEG_#SecondaryCommandBufferMultithreadingTest
+void CommandBufferSecondaryThreadsCreateTest(
     ArraySafeRef<CommandBufferSecondaryThread> threadData,
     ArraySafeRef<HANDLE> threadDoneEvents,
-    ArraySafeRef<CommandBufferThreadArguments> threadArguments,
+    ArraySafeRef<CommandBufferThreadTestArguments> threadArguments,
     const size_t threadsNum)
 {
     const unsigned int threadsHardwareNum = std::thread::hardware_concurrency();
     assert(threadsHardwareNum > 0);
-    //BEG_THREADING_HACK
+
     ///@todo: cleanly handle any number of nonzero threads
     assert(threadsHardwareNum >= threadsNum);
-    //END_THREADING_HACK
 
     for (size_t threadIndex = 0; threadIndex < threadsNum; ++threadIndex)
     {
@@ -192,27 +191,20 @@ void CommandBufferSecondaryThreadsCreate(
         commandBufferThreadDone = ThreadSignalingEventCreate();
         commandBufferThreadArguments.commandBufferThreadDone = &commandBufferThreadDone;
 
-        threadHandle = CreateThread(
-            nullptr,                                        //child processes irrelevant; no suspending or resuming privileges
-            0,                                              //default stack size
-            CommandBufferThread,                            //starting address to execute
-            &commandBufferThreadArguments,                  //argument
-            0,                                              //Run immediately; "commit" (eg map) stack memory for immediate use
-            nullptr);                                       //ignore thread id
-        assert(threadHandle);///@todo: investigate SetThreadPriority() if default priority (THREAD_PRIORITY_NORMAL) seems inefficient
+        threadHandle = CreateThreadWindows(CommandBufferThreadTest, &commandBufferThreadArguments);
     }
     ///@todo: CloseHandle() Shutdown
 }
 
-DWORD WINAPI CommandBufferThread(void* arg)
+DWORD WINAPI CommandBufferThreadTest(void* arg)
 {
-    auto& commandBufferThreadArguments = *reinterpret_cast<CommandBufferThreadArguments*>(arg);
+    auto& commandBufferThreadArguments = *reinterpret_cast<CommandBufferThreadTestArguments*>(arg);
     for (;;)
     {
         HANDLE& commandBufferThreadWake = *commandBufferThreadArguments.commandBufferThreadWake;
 
         //#Wait
-        //WaitOnAddress(&signalMemory, &undesiredValue, sizeof(CommandBufferThreadArguments::SignalMemoryType), INFINITE);//#SynchronizationWindows8+Only
+        //WaitOnAddress(&signalMemory, &undesiredValue, sizeof(CommandBufferThreadTestArguments::SignalMemoryType), INFINITE);//#SynchronizationWindows8+Only
         DWORD waitForSingleObjectResult = WaitForSingleObject(commandBufferThreadWake, INFINITE);
         assert(waitForSingleObjectResult == WAIT_OBJECT_0);
 
@@ -263,7 +255,23 @@ DWORD WINAPI CommandBufferThread(void* arg)
         assert(setEventResult);
     }
 }
-//END_#SecondaryCommandBufferMultithreading
+//END_#SecondaryCommandBufferMultithreadingTest
+
+HANDLE CreateThreadWindows(LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter)
+{
+    assert(lpStartAddress);
+    assert(lpParameter);
+
+    const HANDLE threadHandle = CreateThread(
+        nullptr,                                        //child processes irrelevant; no suspending or resuming privileges
+        0,                                              //default stack size
+        lpStartAddress,                                 //starting address to execute
+        lpParameter,                                    //argument
+        0,                                              //Run immediately; "commit" (eg map) stack memory for immediate use
+        nullptr);                                       //ignore thread id
+    assert(threadHandle);
+    return threadHandle;
+}
 
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device)
 {
@@ -1379,11 +1387,11 @@ void AllocateCommandBuffers(
     NTF_VK_ASSERT_SUCCESS(allocateCommandBuffersResult);
 }
 
-void FillSecondaryCommandBuffers(
+void FillSecondaryCommandBuffersTest(
     ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
     ArraySafeRef<CommandBufferSecondaryThread> commandBuffersSecondaryThreads,
     ArraySafeRef<HANDLE> commandBufferThreadDoneEvents,
-    ArraySafeRef<CommandBufferThreadArguments> commandBufferThreadArgumentsArray,
+    ArraySafeRef<CommandBufferThreadTestArguments> commandBufferThreadArgumentsArray,
     VkDescriptorSet*const descriptorSet,
     VkFramebuffer*const swapChainFramebuffer,
     VkRenderPass*const renderPass,

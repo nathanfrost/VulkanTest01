@@ -207,7 +207,7 @@ struct CommandBufferSecondaryThread
     HANDLE wakeEventHandle;
 };
 
-struct CommandBufferThreadArguments
+struct CommandBufferThreadTestArguments
 {
     VkCommandBuffer* commandBuffer;
     VkDescriptorSet* descriptorSet;
@@ -224,7 +224,9 @@ struct CommandBufferThreadArguments
     HANDLE* commandBufferThreadWake;
 };
 
-DWORD WINAPI CommandBufferThread(void* arg);
+DWORD WINAPI CommandBufferThreadTest(void* arg);
+
+HANDLE CreateThreadWindows(LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter);
 
 void GetRequiredExtensions(VectorSafeRef<const char*>*const requiredExtensions);
 
@@ -349,11 +351,11 @@ void AcquireNextImage(
     const VkSemaphore& imageAvailableSemaphore,
     const VkDevice& device);
 
-void FillSecondaryCommandBuffers(
+void FillSecondaryCommandBuffersTest(
     ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
     ArraySafeRef<CommandBufferSecondaryThread> commandBuffersSecondaryThreads,
     ArraySafeRef<HANDLE> commandBufferThreadDoneEvents,
-    ArraySafeRef<CommandBufferThreadArguments> commandBufferThreadArgumentsArray,
+    ArraySafeRef<CommandBufferThreadTestArguments> commandBufferThreadArgumentsArray,
     VkDescriptorSet*const descriptorSet,
     VkFramebuffer*const swapChainFramebuffer,
     VkRenderPass*const renderPass,
@@ -548,10 +550,10 @@ void DrawFrame(
     const VkSemaphore& renderFinishedSemaphore,
     const VkDevice& device);
 
-void CommandBufferSecondaryThreadsCreate(
+void CommandBufferSecondaryThreadsCreateTest(
     ArraySafeRef<CommandBufferSecondaryThread> threadData,
     ArraySafeRef<HANDLE> threadDoneEvents,
-    ArraySafeRef<CommandBufferThreadArguments> threadArguments,
+    ArraySafeRef<CommandBufferThreadTestArguments> threadArguments,
     const size_t threadsNum);
 
 class VulkanMemoryHeapPage

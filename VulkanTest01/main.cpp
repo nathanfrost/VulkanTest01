@@ -63,8 +63,8 @@ const float sk_uniformScales[NTF_OBJECTS_NUM] = { 0.05f,1.f };
         WindowInitialize(&m_window);
         VulkanInitialize();
 
-        //#SecondaryCommandBufferMultithreading: see m_commandBufferSecondaryThreads definition for more comments
-        //CommandBufferSecondaryThreadsCreate(&m_commandBufferSecondaryThreads, &m_commandBufferThreadDoneEvents, &m_commandBufferThreadArguments, NTF_OBJECTS_NUM);
+        //#SecondaryCommandBufferMultithreadingTest: see m_commandBufferSecondaryThreadsTest definition for more comments
+        //CommandBufferSecondaryThreadsCreateTest(&m_commandBufferSecondaryThreadsTest, &m_commandBufferThreadDoneEventsTest, &m_commandBufferThreadArgumentsTest, NTF_OBJECTS_NUM);
 
         MainLoop(m_window);
         Shutdown();
@@ -121,7 +121,6 @@ const float sk_uniformScales[NTF_OBJECTS_NUM] = { 0.05f,1.f };
             m_device);
         
         //#CommandPoolDuplication
-        
         AllocateCommandBuffers(
             ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
             m_commandPoolTransfer,
@@ -420,6 +419,8 @@ private:
         assert(m_stagingBufferGpuAllocateIndex == 0);
         assert(m_stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
 
+        //BEG_#BackgroundStreaming
+        ///@todo: THREAD_MODE_BACKGROUND_BEGIN or THREAD_PRIORITY_BELOW_NORMAL and SetThreadPriority
         const bool unifiedGraphicsAndTransferQueue = m_graphicsQueue == m_transferQueue;
         assert(unifiedGraphicsAndTransferQueue == (m_queueFamilyIndices.transferFamily == m_queueFamilyIndices.graphicsFamily));
         BeginCommands(m_commandBufferTransfer, m_device);
@@ -558,6 +559,8 @@ private:
             m_textureSampler,
             m_device);
 
+        //END_#BackgroundStreaming
+
         //#CommandPoolDuplication
         m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
         AllocateCommandBuffers(
@@ -612,12 +615,12 @@ private:
             uint32_t acquiredImageIndex;
             AcquireNextImage(&acquiredImageIndex, m_swapChain, imageAvailableSemaphore, m_device);
 
-            //BEG_#SecondaryCommandBufferMultithreading: see m_commandBufferSecondaryThreads definition for more comments
-            //FillSecondaryCommandBuffers(
-            //    &m_commandBuffersSecondary[acquiredImageIndex],
-            //    &m_commandBufferSecondaryThreads,
-            //    &m_commandBufferThreadDoneEvents,
-            //    &m_commandBufferThreadArguments,
+            //BEG_#SecondaryCommandBufferMultithreadingTest: see m_commandBufferSecondaryThreadsTest definition for more comments
+            //FillSecondaryCommandBuffersTest(
+            //    &m_commandBuffersSecondaryTest[acquiredImageIndex],
+            //    &m_commandBufferSecondaryThreadsTest,
+            //    &m_commandBufferThreadDoneEventsTest,
+            //    &m_commandBufferThreadArgumentsTest,
             //    &m_texturedGeometries[0].descriptorSet,
             //    &m_swapChainFramebuffers[acquiredImageIndex],
             //    &m_renderPass,
@@ -627,17 +630,17 @@ private:
             //    &m_texturedGeometries[0].vertexBuffer,
             //    &m_texturedGeometries[0].indexBuffer,
             //    &m_texturedGeometries[0].indicesSize,
-            //    &m_objectIndices,
+            //    &m_objectIndicesSecondaryCommandBuffersTest,
             //    NTF_OBJECTS_NUM);
 
             //FillCommandBufferPrimary(
             //    m_commandBuffersPrimary[acquiredImageIndex],
-            //    &m_commandBuffersSecondary[acquiredImageIndex],
+            //    &m_commandBuffersSecondaryTest[acquiredImageIndex],
             //    NTF_OBJECTS_NUM,
             //    m_swapChainFramebuffers[acquiredImageIndex],
             //    m_renderPass,
             //    m_swapChainExtent);
-            //END_#SecondaryCommandBufferMultithreading
+            //END_#SecondaryCommandBufferMultithreadingTest
 
             FillCommandBufferPrimary(
                 m_commandBuffersPrimary[acquiredImageIndex],
@@ -750,20 +753,20 @@ private:
     VkDeviceSize m_uniformBufferSizeAligned;
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
     
-    //#SecondaryCommandBufferMultithreading: see m_commandBufferSecondaryThreads definition for more comments
-    //VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondary;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kSizeMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kSizeMax>& vectorSafe) -- not sure why
+    //#SecondaryCommandBufferMultithreadingTest: see m_commandBufferSecondaryThreadsTest definition for more comments
+    //VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondaryTest;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kSizeMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kSizeMax>& vectorSafe) -- not sure why
     
     VkCommandBuffer m_commandBufferTransfer;//automatically freed when VkCommandPool is destroyed
     VkCommandBuffer m_commandBufferTransitionImage;//automatically freed when VkCommandPool is destroyed
 
-    //BEG_#SecondaryCommandBufferMultithreading
+    //BEG_#SecondaryCommandBufferMultithreadingTest
     //this prototype worked as expected; but of course one secondary buffer per draw call is ridiculous, so this is removed, but commented out for reference in case command buffer construction becomes a bottleneck.  See October 7, 12:40:28, 2018 for last commit that had this code working
-    //ArraySafe<CommandBufferSecondaryThread, NTF_OBJECTS_NUM> m_commandBufferSecondaryThreads;
-    //ArraySafe<HANDLE, NTF_OBJECTS_NUM> m_commandBufferThreadDoneEvents;
+    //ArraySafe<CommandBufferSecondaryThread, NTF_OBJECTS_NUM> m_commandBufferSecondaryThreadsTest;
+    //ArraySafe<HANDLE, NTF_OBJECTS_NUM> m_commandBufferThreadDoneEventsTest;
 
-    //ArraySafe<uint32_t, NTF_OBJECTS_NUM> m_objectIndices;
-    //ArraySafe<CommandBufferThreadArguments, NTF_OBJECTS_NUM> m_commandBufferThreadArguments;
-    //END_#SecondaryCommandBufferMultithreading
+    //ArraySafe<uint32_t, NTF_OBJECTS_NUM> m_objectIndicesSecondaryCommandBuffersTest;
+    //ArraySafe<CommandBufferThreadTestArguments, NTF_OBJECTS_NUM> m_commandBufferThreadArgumentsTest;
+    //END_#SecondaryCommandBufferMultithreadingTest
 
     /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 
         used to synchronize operations within or across command queues */
