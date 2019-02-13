@@ -1,8 +1,6 @@
 #include"ntf_vulkan.h"
 #include"ntf_vulkan_utility.h"
 
-extern StackCpu* g_stbAllocator;
-
 glm::vec3 s_cameraTranslation = glm::vec3(2.6f,3.4f,.9f);
 VectorSafe<const char*, NTF_VALIDATION_LAYERS_SIZE> s_validationLayers;
 
@@ -42,6 +40,7 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 //don't complain about scanf being unsafe
 #pragma warning(disable : 4996)
 ///@todo: figure out which libraries I'm linking that trigger LNK4098 (seems like some libraries are linking /MD and /MDd and others are linking /MT and /MTd for C-runtime) -- for now, pass /IGNORE:4098 to the linker
+
 class VulkanRendererNTF 
 {
 public:
@@ -51,12 +50,7 @@ public:
 #define NTF_OBJECTS_NUM 2//number of unique models
 #define NTF_DRAWS_PER_OBJECT_NUM 2
 #define NTF_DRAW_CALLS_TOTAL (NTF_OBJECTS_NUM*NTF_DRAWS_PER_OBJECT_NUM)
-const char*const sk_texturePaths[NTF_OBJECTS_NUM] = { "textures/skull.jpg","textures/cat_diff.tga"/*,"textures/chalet.jpg"*/ };
-const char*const sk_modelPaths[NTF_OBJECTS_NUM] = { "models/skull.obj", "models/cat.obj"/*,"models/chalet.obj"*/ };
-const float sk_uniformScales[NTF_OBJECTS_NUM] = { 0.05f,1.f };
 //END_#StreamingMemory
-
-#define NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE (128 * 1024 * 1024)
 
     void Run() 
 	{
@@ -77,84 +71,85 @@ const float sk_uniformScales[NTF_OBJECTS_NUM] = { 0.05f,1.f };
         scanf("%i", &i);
     }
 
+    ///@todo: fix; not maintained so totally broken
     ///@todo: unit test
-    void SwapChainRecreate()
-    {
-        vkDeviceWaitIdle(m_device);
+    //void SwapChainRecreate()
+    //{
+    //    vkDeviceWaitIdle(m_device);
 
-        CleanupSwapChain(
-            &m_commandBuffersPrimary,
-            m_device,
-            m_depthImageView,
-            m_depthImage,
-            m_swapChainFramebuffers,
-            m_commandPoolPrimary,
-            m_commandPoolsSecondary,
-            m_graphicsPipeline,
-            m_pipelineLayout,
-            m_renderPass,
-            m_swapChainImageViews,
-            m_swapChain);
+    //    CleanupSwapChain(
+    //        &m_commandBuffersPrimary,
+    //        m_device,
+    //        m_depthImageView,
+    //        m_depthImage,
+    //        m_swapChainFramebuffers,
+    //        m_commandPoolPrimary,
+    //        m_commandPoolsSecondary,
+    //        m_graphicsPipeline,
+    //        m_pipelineLayout,
+    //        m_renderPass,
+    //        m_swapChainImageViews,
+    //        m_swapChain);
 
-        m_deviceLocalMemory.Destroy(m_device);
-        m_deviceLocalMemory.Initialize(m_device, m_physicalDevice);
+    //    m_deviceLocalMemory.Destroy(m_device);
+    //    m_deviceLocalMemory.Initialize(m_device, m_physicalDevice);
 
-        CreateSwapChain(
-            m_window, 
-            &m_swapChain, 
-            &m_swapChainImages, 
-            &m_swapChainImageFormat, 
-            &m_swapChainExtent, 
-            m_physicalDevice, 
-            NTF_FRAMES_IN_FLIGHT_NUM, 
-            m_surface, 
-            m_device);
-        CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
-        CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
-        CreateGraphicsPipeline(
-            &m_pipelineLayout, 
-            &m_graphicsPipeline, 
-            g_stbAllocator, 
-            m_renderPass, 
-            m_descriptorSetLayout, 
-            m_swapChainExtent, 
-            m_device);
-        
-        //#CommandPoolDuplication
-        AllocateCommandBuffers(
-            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
-            m_commandPoolTransfer,
-            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            1,
-            m_device);
-        AllocateCommandBuffers(
-            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
-            m_commandPoolPrimary,
-            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            1,
-            m_device);
+    //    CreateSwapChain(
+    //        m_window, 
+    //        &m_swapChain, 
+    //        &m_swapChainImages, 
+    //        &m_swapChainImageFormat, 
+    //        &m_swapChainExtent, 
+    //        m_physicalDevice, 
+    //        NTF_FRAMES_IN_FLIGHT_NUM, 
+    //        m_surface, 
+    //        m_device);
+    //    CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
+    //    CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
+    //    CreateGraphicsPipeline(
+    //        &m_pipelineLayout, 
+    //        &m_graphicsPipeline, 
+    //        g_stbAllocator, 
+    //        m_renderPass, 
+    //        m_descriptorSetLayout, 
+    //        m_swapChainExtent, 
+    //        m_device);
+    //    
+    //    //#CommandPoolDuplication
+    //    AllocateCommandBuffers(
+    //        ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
+    //        m_commandPoolTransfer,
+    //        VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    //        1,
+    //        m_device);
+    //    AllocateCommandBuffers(
+    //        ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
+    //        m_commandPoolPrimary,
+    //        VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    //        1,
+    //        m_device);
 
-        CreateDepthResources(
-            &m_depthImage,
-            &m_depthImageView,
-            &m_deviceLocalMemory,
-            m_swapChainExtent,
-            m_commandBufferTransitionImage,
-            m_graphicsQueue,
-            m_device,
-            m_physicalDevice);
-        CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
+    //    CreateDepthResources(
+    //        &m_depthImage,
+    //        &m_depthImageView,
+    //        &m_deviceLocalMemory,
+    //        m_swapChainExtent,
+    //        m_commandBufferTransitionImage,
+    //        m_graphicsQueue,
+    //        m_device,
+    //        m_physicalDevice);
+    //    CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
 
-        //#CommandPoolDuplication
-        const uint32_t swapChainFramebuffersSize = Cast_size_t_uint32_t(m_swapChainFramebuffers.size());
-        m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
-        AllocateCommandBuffers(
-            &m_commandBuffersPrimary,
-            m_commandPoolPrimary,
-            VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            swapChainFramebuffersSize,
-            m_device);
-    }
+    //    //#CommandPoolDuplication
+    //    const uint32_t swapChainFramebuffersSize = Cast_size_t_uint32_t(m_swapChainFramebuffers.size());
+    //    m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
+    //    AllocateCommandBuffers(
+    //        &m_commandBuffersPrimary,
+    //        m_commandPoolPrimary,
+    //        VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    //        swapChainFramebuffersSize,
+    //        m_device);
+    //}
 
 private:
     void WindowInitialize(GLFWwindow**const windowPtrPtr)
@@ -188,12 +183,12 @@ private:
 		}
 
         VulkanRendererNTF* app = reinterpret_cast<VulkanRendererNTF*>(glfwGetWindowUserPointer(window));
-        app->SwapChainRecreate();
+        //app->SwapChainRecreate();
     }
 
     void Shutdown()
     {
-        STBAllocatorDestroy();
+        m_streamingUnit.Free(m_device);///<@todo NTF: generalize #StreamingMemory
 
         CleanupSwapChain(
             &m_commandBuffersPrimary,
@@ -204,38 +199,15 @@ private:
             m_commandPoolPrimary,
             m_commandPoolsSecondary,
             m_graphicsPipeline,
-            m_pipelineLayout,
             m_renderPass,
             m_swapChainImageViews,
             m_swapChain);
-        
-        vkDestroySampler(m_device, m_textureSampler, GetVulkanAllocationCallbacks());
-
-        vkDestroyDescriptorPool(m_device, m_descriptorPool, GetVulkanAllocationCallbacks());
-        vkDestroyDescriptorSetLayout(m_device, m_descriptorSetLayout, GetVulkanAllocationCallbacks());
-        
-        for (auto& texturedGeometry : m_texturedGeometries)
-        {
-            vkDestroyImage(m_device, texturedGeometry.textureImage, GetVulkanAllocationCallbacks());
-            vkDestroyBuffer(m_device, texturedGeometry.indexBuffer, GetVulkanAllocationCallbacks());
-            vkDestroyBuffer(m_device, texturedGeometry.vertexBuffer, GetVulkanAllocationCallbacks());
-        }
-        DestroyUniformBuffer(m_uniformBufferCpuMemory, m_uniformBufferGpuMemory, m_uniformBuffer, m_device);
-        for(auto& imageView: m_textureImageViews)
-        {
-            vkDestroyImageView(m_device, imageView, GetVulkanAllocationCallbacks());
-        }
-
+                
         for (size_t frameIndex = 0; frameIndex < NTF_FRAMES_IN_FLIGHT_NUM; ++frameIndex)
         {
             vkDestroySemaphore(m_device, m_renderFinishedSemaphore[frameIndex], GetVulkanAllocationCallbacks());
             vkDestroySemaphore(m_device, m_imageAvailableSemaphore[frameIndex], GetVulkanAllocationCallbacks());
-            vkDestroyFence(m_device, m_fence[frameIndex], GetVulkanAllocationCallbacks());
-        }
-        vkDestroyFence(m_device, m_transferQueueFence, GetVulkanAllocationCallbacks());
-        for (auto& semaphore : m_transferFinishedSemaphorePool)
-        {
-            vkDestroySemaphore(m_device, semaphore, GetVulkanAllocationCallbacks());
+            vkDestroyFence(m_device, m_drawFrameFinishedFences[frameIndex], GetVulkanAllocationCallbacks());
         }
 
         vkDestroyCommandPool(m_device, m_commandPoolPrimary, GetVulkanAllocationCallbacks());
@@ -251,12 +223,6 @@ private:
             }
         }
 
-        vkUnmapMemory(m_device, m_stagingBufferGpuMemory);
-        //BEG_#StagingBuffer
-        vkDestroyBuffer(m_device, m_stagingBufferGpu, GetVulkanAllocationCallbacks());
-        //END_#StagingBuffer
-        m_stagingBufferMemoryMapCpuToGpu.Destroy();
-
         m_deviceLocalMemory.Destroy(m_device);
         vkDestroyDevice(m_device, GetVulkanAllocationCallbacks());
         DestroyDebugReportCallbackEXT(m_instance, m_callback, GetVulkanAllocationCallbacks());
@@ -264,6 +230,10 @@ private:
         vkDestroyInstance(m_instance, GetVulkanAllocationCallbacks());
 
         glfwDestroyWindow(m_window);
+
+        CloseHandleWindows(m_assetLoadingThreadHandles.threadHandle);
+        CloseHandleWindows(m_assetLoadingThreadHandles.doneEventHandle);
+        CloseHandleWindows(m_assetLoadingThreadHandles.wakeEventHandle);
 
         glfwTerminate();
     }
@@ -277,8 +247,6 @@ private:
 #endif//NTF_API_DUMP_VALIDATION_LAYER_ON
 
         m_deviceExtensions = VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
-
-        STBAllocatorCreate();
 
         m_instance = CreateInstance(s_validationLayers);
         m_callback = SetupDebugCallback(m_instance);
@@ -307,17 +275,6 @@ private:
         CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
         CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
         
-        const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        CreateDescriptorSetLayout(&m_descriptorSetLayout, descriptorType, m_device, NTF_OBJECTS_NUM);
-        CreateGraphicsPipeline(
-            &m_pipelineLayout, 
-            &m_graphicsPipeline, 
-            g_stbAllocator, 
-            m_renderPass, 
-            m_descriptorSetLayout, 
-            m_swapChainExtent, 
-            m_device);
-
         const QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
         CreateCommandPool(&m_commandPoolPrimary, queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
         if (queueFamilyIndices.graphicsFamily != queueFamilyIndices.transferFamily)
@@ -345,20 +302,10 @@ private:
             1,
             m_device);
 
-        VkFenceCreateInfo fenceInfo;
-        fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-        fenceInfo.pNext = nullptr;
-        fenceInfo.flags = 0;//fence starts unsignalled
-        const VkResult createTransferFenceResult = vkCreateFence(m_device, &fenceInfo, GetVulkanAllocationCallbacks(), &m_transferQueueFence);
-        NTF_VK_ASSERT_SUCCESS(createTransferFenceResult);
-
         CreateFrameSyncPrimitives(
             &m_imageAvailableSemaphore,
             &m_renderFinishedSemaphore,
-            m_transferFinishedSemaphorePool.size(),
-            &m_transferFinishedSemaphorePool,
-            &m_transferFinishedPipelineStageFlags,
-            &m_fence,
+            &m_drawFrameFinishedFences,
             NTF_FRAMES_IN_FLIGHT_NUM,
             m_device);
 
@@ -383,183 +330,35 @@ private:
             }
         }
 
-        CreateDescriptorPool(&m_descriptorPool, descriptorType, m_device, NTF_OBJECTS_NUM);
-        m_uniformBufferSizeAligned = UniformBufferCpuAlignmentCalculate(sm_uniformBufferSizeUnaligned, m_physicalDevice);
+        m_streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM;
 
-        StackNTF<VkDeviceSize> stagingBufferGpuStack;
-        VkDeviceSize stagingBufferGpuOffsetToAllocatedBlock;
-        stagingBufferGpuStack.Allocate(NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
-        VkDeviceSize offsetToFirstByteOfStagingBuffer;
-        CreateBuffer(
-            &m_stagingBufferGpu,
-            &m_stagingBufferGpuMemory,
-            &m_deviceLocalMemory,
-            &offsetToFirstByteOfStagingBuffer,
-            NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            true,
-            m_device,
-            m_physicalDevice);
-        VkMemoryRequirements memRequirements;
-        vkGetBufferMemoryRequirements(m_device, m_stagingBufferGpu, &memRequirements);
-        m_stagingBufferGpuAlignmentStandard = memRequirements.alignment;
+        AssetLoadingArguments assetLoadingArguments;
+        m_assetLoadingThreadHandles.doneEventHandle = ThreadSignalingEventCreate();
+        m_assetLoadingThreadHandles.wakeEventHandle = ThreadSignalingEventCreate();
 
-        void* stagingBufferMemoryMapCpuToGpu;
-        const VkResult vkMapMemoryResult = vkMapMemory(
-            m_device, 
-            m_stagingBufferGpuMemory, 
-            offsetToFirstByteOfStagingBuffer,
-            NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE, 
-            0, 
-            &stagingBufferMemoryMapCpuToGpu);
-        NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
-        m_stagingBufferMemoryMapCpuToGpu.Initialize(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpu), NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
-        
-        assert(m_stagingBufferGpuAllocateIndex == 0);
-        assert(m_stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
+        assetLoadingArguments.m_commandBufferTransfer = &m_commandBufferTransfer;
+        assetLoadingArguments.m_commandBufferTransitionImage = &m_commandBufferTransitionImage;
+        assetLoadingArguments.m_device = &m_device;
+        assetLoadingArguments.m_deviceLocalMemory = &m_deviceLocalMemory;
+        assetLoadingArguments.m_graphicsQueue = &m_graphicsQueue;
+        assetLoadingArguments.m_graphicsPipeline = &m_graphicsPipeline;
+        assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
+        assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
+        assetLoadingArguments.m_streamingUnit = &m_streamingUnit;
+        assetLoadingArguments.m_threadDone = &m_assetLoadingThreadHandles.doneEventHandle;
+        assetLoadingArguments.m_threadWake = &m_assetLoadingThreadHandles.wakeEventHandle;
+        assetLoadingArguments.m_transferQueue = &m_transferQueue;
 
-        //BEG_#BackgroundStreaming
+        assetLoadingArguments.m_renderPass = &m_renderPass;
+        assetLoadingArguments.m_swapChainExtent = &m_swapChainExtent;
+
         ///@todo: THREAD_MODE_BACKGROUND_BEGIN or THREAD_PRIORITY_BELOW_NORMAL and SetThreadPriority
-        const bool unifiedGraphicsAndTransferQueue = m_graphicsQueue == m_transferQueue;
-        assert(unifiedGraphicsAndTransferQueue == (m_queueFamilyIndices.transferFamily == m_queueFamilyIndices.graphicsFamily));
-        BeginCommands(m_commandBufferTransfer, m_device);
-        if (!unifiedGraphicsAndTransferQueue)
-        {
-            BeginCommands(m_commandBufferTransitionImage, m_device);
-        }
-        CreateTextureSampler(&m_textureSampler, m_device);
+        m_assetLoadingThreadHandles.threadHandle = CreateThreadWindows(AssetLoadingThread, &assetLoadingArguments);
 
-        VectorSafe<VkSemaphore, 2> transferFinishedSemaphore;
-        const size_t texturedGeometriesSize = m_texturedGeometries.size();
-        for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometriesSize; ++texturedGeometryIndex)
-        {
-            auto& texturedGeometry = m_texturedGeometries[texturedGeometryIndex];
-            int textureWidth, textureHeight;
-            size_t imageSizeBytes;
-            VkDeviceSize alignment;
-            const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
-            {
-                const bool copyPixelsIfStagingBufferHasSpaceResult = CreateImageAndCopyPixelsIfStagingBufferHasSpace(
-                    &texturedGeometry.textureImage,
-                    &m_deviceLocalMemory,
-                    &alignment,
-                    &textureWidth,
-                    &textureHeight,
-                    &m_stagingBufferMemoryMapCpuToGpu,
-                    &imageSizeBytes,
-                    g_stbAllocator,
-                    sk_texturePaths[texturedGeometryIndex],
-                    imageFormat,
-                    VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
-                    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
-                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                    false,
-                    m_device,
-                    m_physicalDevice);
-                assert(copyPixelsIfStagingBufferHasSpaceResult);
-            }
-
-            const bool pushAllocSuccess = stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, alignment, imageSizeBytes);
-            assert(pushAllocSuccess);
-            CreateBuffer(
-                &m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
-                m_stagingBufferGpuMemory,
-                offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
-                imageSizeBytes,
-                0,
-                m_device,
-                m_physicalDevice);
-
-            TransferImageFromCpuToGpu(
-                texturedGeometry.textureImage,
-                textureWidth,
-                textureHeight,
-                imageFormat,
-                m_stagingBuffersGpu[m_stagingBufferGpuAllocateIndex],
-                m_commandBufferTransfer,
-                m_transferQueue,
-                m_queueFamilyIndices.transferFamily,
-                m_commandBufferTransitionImage,
-                m_graphicsQueue,
-                m_queueFamilyIndices.graphicsFamily,
-                m_device);
-
-            CreateTextureImageView(&m_textureImageViews[texturedGeometryIndex], texturedGeometry.textureImage, m_device);
-            ++m_stagingBufferGpuAllocateIndex;
-
-            //BEG_#StreamingMemory
-            LoadModel(&texturedGeometry.vertices, &texturedGeometry.indices, sk_modelPaths[texturedGeometryIndex], sk_uniformScales[texturedGeometryIndex]);
-            texturedGeometry.indicesSize = Cast_size_t_uint32_t(texturedGeometry.indices.size());//store since we need secondary buffers to point to this
-            //END_#StreamingMemory
-
-            CopyBufferToGpuPrepareOnTransferQueue(
-                &texturedGeometry.vertexBuffer,
-                &texturedGeometry.vertexBufferMemory,
-                &stagingBufferGpuStack,
-                offsetToFirstByteOfStagingBuffer,
-                texturedGeometry.vertices.data(),
-                sizeof(texturedGeometry.vertices[0]) * texturedGeometry.vertices.size(),
-                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/);
-            CopyBufferToGpuPrepareOnTransferQueue(
-                &texturedGeometry.indexBuffer,
-                &texturedGeometry.indexBufferMemory,
-                &stagingBufferGpuStack,
-                offsetToFirstByteOfStagingBuffer,
-                texturedGeometry.indices.data(),
-                sizeof(texturedGeometry.indices[0]) * texturedGeometry.indices.size(),
-                VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-            if (!unifiedGraphicsAndTransferQueue)
-            {
-                transferFinishedSemaphore.Push(m_transferFinishedSemaphorePool[transferFinishedSemaphore.size()]);///<@todo: attempt using just one transferFinishedSemaphore at the end of submission per streaming unit; all commands should be completed before the semaphore triggers
-            }
-        }
-        vkEndCommandBuffer(m_commandBufferTransfer);
-        SubmitCommandBuffer(
-            transferFinishedSemaphore,
-            ConstVectorSafeRef<VkSemaphore>(),
-            ArraySafeRef<VkPipelineStageFlags>(),
-            m_commandBufferTransfer,
-            m_transferQueue,
-            m_transferQueueFence);
-
-        if (!unifiedGraphicsAndTransferQueue)
-        {
-            vkEndCommandBuffer(m_commandBufferTransitionImage);
-            SubmitCommandBuffer(
-                ConstVectorSafeRef<VkSemaphore>(),
-                transferFinishedSemaphore,
-                &m_transferFinishedPipelineStageFlags,
-                m_commandBufferTransitionImage,
-                m_graphicsQueue,
-                VK_NULL_HANDLE);
-        }
-
-        const VkDeviceSize uniformBufferSize = m_uniformBufferSizeAligned;
-        CreateUniformBuffer(
-            &m_uniformBufferCpuMemory,
-            &m_uniformBufferGpuMemory,
-            &m_uniformBuffer,
-            &m_deviceLocalMemory,
-            &m_uniformBufferOffsetToGpuMemory,
-            uniformBufferSize,
-            false,
-            m_device,
-            m_physicalDevice);
-
-        CreateDescriptorSet(
-            &m_descriptorSet,
-            descriptorType,
-            m_descriptorSetLayout,
-            m_descriptorPool,
-            m_uniformBuffer,
-            uniformBufferSize,
-            &m_textureImageViews,///<@todo NTF: @todo: ConstArraySafeRef that does not need ambersand here
-            NTF_OBJECTS_NUM,
-            m_textureSampler,
-            m_device);
-
-        //END_#BackgroundStreaming
+        const BOOL setEventResult = SetEvent(m_assetLoadingThreadHandles.wakeEventHandle);
+        assert(setEventResult);
+        
+        WaitForSingleObject(m_assetLoadingThreadHandles.doneEventHandle, INFINITE);
 
         //#CommandPoolDuplication
         m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
@@ -579,35 +378,14 @@ private:
         {
             glfwPollEvents();
 
-            //BEG_#StagingBuffer
-            //clean up staging buffers if they were in use but have completed their transfers
-            if (m_stagingBufferGpuAllocateIndex > 0)
-            {
-                const VkResult transferQueueStatus = vkGetFenceStatus(m_device, m_transferQueueFence);
-                if (transferQueueStatus == VK_SUCCESS)
-                {
-                    //clean up staging memory
-                    m_stagingBufferMemoryMapCpuToGpu.Clear();
-
-                    for (size_t stagingBufferGpuAllocateIndexFree = 0;
-                        stagingBufferGpuAllocateIndexFree < m_stagingBufferGpuAllocateIndex;
-                        ++stagingBufferGpuAllocateIndexFree)
-                    {
-                        vkDestroyBuffer(m_device, m_stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], GetVulkanAllocationCallbacks());
-                    }
-                    m_stagingBufferGpuAllocateIndex = 0;
-                }
-            }
-            //BEG_#StagingBuffer
-
            //#StreamingMemory: update uniforms per streaming unit
             UpdateUniformBuffer(
-                m_uniformBufferCpuMemory,
+                m_streamingUnit.m_uniformBufferCpuMemory,
                 s_cameraTranslation,
-                m_uniformBufferGpuMemory,
-                m_uniformBufferOffsetToGpuMemory,
+                m_streamingUnit.m_uniformBufferGpuMemory,
+                m_streamingUnit.m_uniformBufferOffsetToGpuMemory,
                 NTF_DRAW_CALLS_TOTAL,
-                m_uniformBufferSizeAligned,
+                m_streamingUnit.m_uniformBufferSizeAligned,
                 m_swapChainExtent,
                 m_device);
 
@@ -644,15 +422,14 @@ private:
 
             FillCommandBufferPrimary(
                 m_commandBuffersPrimary[acquiredImageIndex],
-                &m_texturedGeometries,
-                m_descriptorSet,
-                m_uniformBufferSizeAligned,
+                &m_streamingUnit.m_texturedGeometries,
+                m_streamingUnit.m_descriptorSet,
                 NTF_OBJECTS_NUM,
                 NTF_DRAWS_PER_OBJECT_NUM,
                 m_swapChainFramebuffers[acquiredImageIndex],
                 m_renderPass,
                 m_swapChainExtent,
-                m_pipelineLayout,
+                m_streamingUnit.m_pipelineLayout,
                 m_graphicsPipeline,
                 m_device);
 
@@ -663,7 +440,7 @@ private:
                 acquiredImageIndex,
                 m_graphicsQueue, 
                 m_presentQueue, 
-                m_fence[frameIndex],
+                m_drawFrameFinishedFences[frameIndex],
                 imageAvailableSemaphore,
                 m_renderFinishedSemaphore[frameIndex],
                 m_device);
@@ -673,41 +450,41 @@ private:
         //wait for the logical device to finish operations before exiting MainLoop and destroying the window
         vkDeviceWaitIdle(m_device);
     }
-    void CopyBufferToGpuPrepareOnTransferQueue(
-        VkBuffer*const gpuBufferPtr,
-        VkDeviceMemory*const gpuBufferMemoryPtr,
-        StackNTF<VkDeviceSize>*const stagingBufferGpuStackPtr,
-        const VkDeviceSize offsetToFirstByteOfStagingBuffer,
-        const void*const cpuBufferSource,
-        const VkDeviceSize bufferSize,
-        const VkMemoryPropertyFlags& memoryPropertyFlags,
-        const bool residentForever = false)
-    {
-        NTF_REF(gpuBufferPtr, gpuBuffer);
-        NTF_REF(gpuBufferMemoryPtr, gpuBufferMemory);
-        NTF_REF(stagingBufferGpuStackPtr, stagingBufferGpuStack);
+    ///@todo: consider removing
+    //void CopyBufferToGpuPrepareOnTransferQueue(
+    //    VkBuffer*const gpuBufferPtr,
+    //    VkDeviceMemory*const gpuBufferMemoryPtr,
+    //    StackNTF<VkDeviceSize>*const stagingBufferGpuStackPtr,
+    //    const VkDeviceSize offsetToFirstByteOfStagingBuffer,
+    //    const void*const cpuBufferSource,
+    //    const VkDeviceSize bufferSize,
+    //    const VkMemoryPropertyFlags& memoryPropertyFlags,
+    //    const bool residentForever = false)
+    //{
+    //    NTF_REF(gpuBufferPtr, gpuBuffer);
+    //    NTF_REF(gpuBufferMemoryPtr, gpuBufferMemory);
+    //    NTF_REF(stagingBufferGpuStackPtr, stagingBufferGpuStack);
 
-        CopyBufferToGpuPrepare(
-            &m_deviceLocalMemory,
-            &gpuBuffer,
-            &gpuBufferMemory,
-            &m_stagingBuffersGpu,
-            &m_stagingBufferGpuAllocateIndex,
-            &m_stagingBufferMemoryMapCpuToGpu,
-            &stagingBufferGpuStack,
-            m_stagingBufferGpuMemory,
-            m_stagingBufferGpuAlignmentStandard,
-            offsetToFirstByteOfStagingBuffer,
-            cpuBufferSource,
-            bufferSize,
-            memoryPropertyFlags,
-            residentForever,
-            m_commandBufferTransfer,
-            m_device,
-            m_physicalDevice);
-    }
+    //    CopyBufferToGpuPrepare(
+    //        &m_deviceLocalMemory,
+    //        &gpuBuffer,
+    //        &gpuBufferMemory,
+    //        &m_stagingBuffersGpu,
+    //        &stagingBufferGpuAllocateIndex,
+    //        &stagingBufferMemoryMapCpuToGpu,
+    //        &stagingBufferGpuStack,
+    //        stagingBufferGpuMemory,
+    //        stagingBufferGpuAlignmentStandard,
+    //        offsetToFirstByteOfStagingBuffer,
+    //        cpuBufferSource,
+    //        bufferSize,
+    //        memoryPropertyFlags,
+    //        residentForever,
+    //        m_commandBufferTransfer,
+    //        m_device,
+    //        m_physicalDevice);
+    //}
 
-    const size_t sm_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM;//single uniform buffer that contains all uniform information for this streaming unit; 
 
     GLFWwindow* m_window;
     VkInstance m_instance;
@@ -726,31 +503,15 @@ private:
     VectorSafe<VkImageView, kSwapChainImagesNumMax> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
     VectorSafe<VkFramebuffer, kSwapChainImagesNumMax> m_swapChainFramebuffers;
     VkRenderPass m_renderPass;
-    VkDescriptorSetLayout m_descriptorSetLayout;
-    VkPipelineLayout m_pipelineLayout;
     VkPipeline m_graphicsPipeline;
     VkCommandPool m_commandPoolPrimary, m_commandPoolTransfer;
     VectorSafe<ArraySafe<VkCommandPool, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandPoolsSecondary;
     VkImage m_depthImage;
     VkImageView m_depthImageView;
-    VkSampler m_textureSampler;
 
     glm::vec3 m_cameraTranslation;
 
-    //BEG_#StreamingMemory
-    ArraySafe<TexturedGeometry,NTF_OBJECTS_NUM> m_texturedGeometries;
-
-    VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed  ///<@todo: verify that a descriptorset per model is the best approach
-    ArraySafe<VkImageView, NTF_OBJECTS_NUM> m_textureImageViews;
-    VkDescriptorPool m_descriptorPool;
-    
-    VkBuffer m_uniformBuffer;
-    VkDeviceMemory m_uniformBufferGpuMemory;
-    VkDeviceSize m_uniformBufferOffsetToGpuMemory;
-    ArraySafeRef<uint8_t> m_uniformBufferCpuMemory;
-    //END_#StreamingMemory
-
-    VkDeviceSize m_uniformBufferSizeAligned;
+    StreamingUnit m_streamingUnit;
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
     
     //#SecondaryCommandBufferMultithreadingTest: see m_commandBufferSecondaryThreadsTest definition for more comments
@@ -761,37 +522,23 @@ private:
 
     //BEG_#SecondaryCommandBufferMultithreadingTest
     //this prototype worked as expected; but of course one secondary buffer per draw call is ridiculous, so this is removed, but commented out for reference in case command buffer construction becomes a bottleneck.  See October 7, 12:40:28, 2018 for last commit that had this code working
-    //ArraySafe<CommandBufferSecondaryThread, NTF_OBJECTS_NUM> m_commandBufferSecondaryThreadsTest;
+    //ArraySafe<ThreadHandles, NTF_OBJECTS_NUM> m_commandBufferSecondaryThreadsTest;
     //ArraySafe<HANDLE, NTF_OBJECTS_NUM> m_commandBufferThreadDoneEventsTest;
 
     //ArraySafe<uint32_t, NTF_OBJECTS_NUM> m_objectIndicesSecondaryCommandBuffersTest;
-    //ArraySafe<CommandBufferThreadTestArguments, NTF_OBJECTS_NUM> m_commandBufferThreadArgumentsTest;
+    //ArraySafe<CommandBufferThreadArgumentsTest, NTF_OBJECTS_NUM> m_commandBufferThreadArgumentsTest;
     //END_#SecondaryCommandBufferMultithreadingTest
 
     /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 
         used to synchronize operations within or across command queues */
     int m_frameIndex=0;
-    VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_imageAvailableSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
-    VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_renderFinishedSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
-    
-    enum { kTransferFinishedSemaphoresNum = 2 };
-    ArraySafe<VkSemaphore, kTransferFinishedSemaphoresNum> m_transferFinishedSemaphorePool;
-    ArraySafe<VkPipelineStageFlags, kTransferFinishedSemaphoresNum> m_transferFinishedPipelineStageFlags;
-    
-    VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_fence = VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor so this is a true ArraySafe (eg that doesn't have a m_sizeCurrentSet) rather than the current incarnation of this class, which is more like a VectorSafe
+    VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_imageAvailableSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor use ArraySafe
+    VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_renderFinishedSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor use ArraySafe
+        
+    VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_drawFrameFinishedFences = VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor use ArraySafe
 
-    VulkanPagedStackAllocator m_deviceLocalMemory;
-    //BEG_#StagingBuffer
-    VkBuffer m_stagingBufferGpu;
-    VkDeviceSize m_stagingBufferGpuAlignmentStandard;
-    
-    ArraySafe<VkBuffer, 32> m_stagingBuffersGpu;
-    size_t m_stagingBufferGpuAllocateIndex = 0;
-
-    VkDeviceMemory m_stagingBufferGpuMemory;
-    VkFence m_transferQueueFence;
-    //END_#StagingBuffer
-    StackCpu m_stagingBufferMemoryMapCpuToGpu;
+    VulkanPagedStackAllocator m_deviceLocalMemory;///<@todo: make threadsafe so asset loading thread and main thread can never collide --as of Feb 11, 2019, they cannot, but that would be easy to mess up
+    ThreadHandles m_assetLoadingThreadHandles;
 };
 
 int main() 

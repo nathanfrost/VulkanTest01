@@ -71,6 +71,7 @@ VkAllocationCallbacks* GetVulkanAllocationCallbacks();
 size_t GetVulkanApiCpuBytesAllocatedMax();
 #endif//#if NTF_DEBUG
 HANDLE ThreadSignalingEventCreate();
+BOOL CloseHandleWindows(const HANDLE h);
 void TransferImageFromCpuToGpu(
     const VkImage& image,
     const uint32_t width,
@@ -201,13 +202,83 @@ struct UniformBufferObject
     glm::mat4 modelToClip;
 };
 
-struct CommandBufferSecondaryThread
+struct ThreadHandles
 {
     HANDLE threadHandle;
     HANDLE wakeEventHandle;
+    HANDLE doneEventHandle;
 };
 
-struct CommandBufferThreadTestArguments
+class StreamingUnit
+{
+public:
+    VkSampler m_textureSampler;
+#define TODO_REFACTOR_NUM 2//is NTF_OBJECTS_NUM -- todo: generalize #StreamingMemory
+    ArraySafe<TexturedGeometry, TODO_REFACTOR_NUM> m_texturedGeometries;
+    ArraySafe<VkImageView, TODO_REFACTOR_NUM> m_textureImageViews;
+
+    const char*const m_texturePaths[TODO_REFACTOR_NUM] = { "textures/skull.jpg","textures/cat_diff.tga"/*,"textures/chalet.jpg"*/ };//#StreamingMemory
+    const char*const m_modelPaths[TODO_REFACTOR_NUM] = { "models/skull.obj", "models/cat.obj"/*,"models/chalet.obj"*/ };//#StreamingMemory
+    const float m_uniformScales[TODO_REFACTOR_NUM] = { 0.05f,1.f };//#StreamingMemory
+
+    VkDescriptorSetLayout m_descriptorSetLayout;
+    VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed   
+
+    VkBuffer m_uniformBuffer;
+    VkDeviceMemory m_uniformBufferGpuMemory;
+    VkDeviceSize m_uniformBufferOffsetToGpuMemory;
+    ArraySafeRef<uint8_t> m_uniformBufferCpuMemory;
+
+    VkDeviceSize m_uniformBufferSizeAligned;//single uniform buffer that contains all uniform information for this streaming unit
+    size_t m_uniformBufferSizeUnaligned;///<@todo: only exists to generate the same value but aligned
+    
+    VkPipelineLayout m_pipelineLayout;
+
+    void Free(const VkDevice device);
+};
+
+struct QueueFamilyIndices;
+class AssetLoadingArguments
+{
+public:
+    ///@todo: for arguments that allow it; const& them
+    VkCommandBuffer* m_commandBufferTransfer;
+    VkCommandBuffer* m_commandBufferTransitionImage;
+    VkDevice* m_device;
+    VulkanPagedStackAllocator* m_deviceLocalMemory; //must be threadsafe -- start with just not touching this on main thread after loading; then add thread safety
+    VkPipeline* m_graphicsPipeline;
+    VkQueue* m_graphicsQueue;
+    VkPhysicalDevice* m_physicalDevice;
+    QueueFamilyIndices* m_queueFamilyIndices;
+    StreamingUnit* m_streamingUnit;
+    HANDLE* m_threadDone;
+    HANDLE* m_threadWake;
+    VkQueue* m_transferQueue;
+
+    const VkRenderPass* m_renderPass;
+    const VkExtent2D* m_swapChainExtent;
+
+    inline void AssertValid()
+    {
+        assert(m_commandBufferTransfer);
+        assert(m_commandBufferTransitionImage);
+        assert(m_device);
+        assert(m_deviceLocalMemory);
+        assert(m_graphicsPipeline);
+        assert(m_graphicsQueue);
+        assert(m_physicalDevice);
+        assert(m_queueFamilyIndices);
+        assert(m_streamingUnit);
+        assert(m_threadDone);
+        assert(m_threadWake);
+        assert(m_transferQueue);
+
+        assert(m_renderPass);
+        assert(m_swapChainExtent);
+    }
+};
+
+struct CommandBufferThreadArgumentsTest
 {
     VkCommandBuffer* commandBuffer;
     VkDescriptorSet* descriptorSet;
@@ -225,6 +296,7 @@ struct CommandBufferThreadTestArguments
 };
 
 DWORD WINAPI CommandBufferThreadTest(void* arg);
+DWORD WINAPI AssetLoadingThread(void* arg);
 
 HANDLE CreateThreadWindows(LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter);
 
@@ -284,7 +356,6 @@ void CleanupSwapChain(
     const VkCommandPool& commandPool,
     ConstVectorSafeRef<ArraySafe<VkCommandPool, 2>> commandPoolsSecondary,///<@todo NTF: refactor out magic number 2 (meant to be NTF_OBJECTS_NUM) and either support VectorSafeRef<ArraySafeRef<T>> or repeatedly call FreeCommandBuffers on each VectorSafe outside of this function
     const VkPipeline& graphicsPipeline,
-    const VkPipelineLayout& pipelineLayout,
     const VkRenderPass& renderPass,
     ConstVectorSafeRef<VkImageView> swapChainImageViews,
     const VkSwapchainKHR& swapChain);
@@ -353,9 +424,9 @@ void AcquireNextImage(
 
 void FillSecondaryCommandBuffersTest(
     ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
-    ArraySafeRef<CommandBufferSecondaryThread> commandBuffersSecondaryThreads,
+    ArraySafeRef<ThreadHandles> commandBuffersSecondaryThreads,
     ArraySafeRef<HANDLE> commandBufferThreadDoneEvents,
-    ArraySafeRef<CommandBufferThreadTestArguments> commandBufferThreadArgumentsArray,
+    ArraySafeRef<CommandBufferThreadArgumentsTest> commandBufferThreadArgumentsArray,
     VkDescriptorSet*const descriptorSet,
     VkFramebuffer*const swapChainFramebuffer,
     VkRenderPass*const renderPass,
@@ -372,7 +443,6 @@ void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
     const ArraySafeRef<TexturedGeometry> texturedGeometries,
     const VkDescriptorSet descriptorSet,
-    const VkDeviceSize& uniformBufferCpuAlignment,
     const size_t objectNum,
     const size_t drawCallsPerObjectNum,
     const VkFramebuffer& swapChainFramebuffer,
@@ -518,15 +588,15 @@ void CreateFramebuffers(
     const VkImageView& depthImageView,
     const VkDevice& device);
 void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const VkInstance& instance);
+void CreateVulkanSemaphore(VkSemaphore*const semaphorePtr, const VkDevice& device);
 void CreateFrameSyncPrimitives(
     VectorSafeRef<VkSemaphore> imageAvailable,
     VectorSafeRef<VkSemaphore> renderFinished,
-    const size_t transferFinishedSemaphoreSize,
-    ArraySafeRef<VkSemaphore> transferFinishedSemaphorePool,
-    ArraySafeRef<VkPipelineStageFlags> transferFinishedPipelineStageFlags,
     VectorSafeRef<VkFence> fence,
     const size_t framesNum,
     const VkDevice& device);
+
+void CreateFence(VkFence*const fencePtr, const VkFenceCreateFlagBits flags, const VkDevice& device);
 
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
@@ -551,9 +621,9 @@ void DrawFrame(
     const VkDevice& device);
 
 void CommandBufferSecondaryThreadsCreateTest(
-    ArraySafeRef<CommandBufferSecondaryThread> threadData,
+    ArraySafeRef<ThreadHandles> threadData,
     ArraySafeRef<HANDLE> threadDoneEvents,
-    ArraySafeRef<CommandBufferThreadTestArguments> threadArguments,
+    ArraySafeRef<CommandBufferThreadArgumentsTest> threadArguments,
     const size_t threadsNum);
 
 class VulkanMemoryHeapPage
