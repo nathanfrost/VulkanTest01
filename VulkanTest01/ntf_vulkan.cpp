@@ -305,16 +305,9 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     assert(stagingBufferGpuAllocateIndex == 0);
     assert(stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
 
-    enum { kTransferFinishedSemaphoresNum = 2 };
-    ArraySafe<VkSemaphore, kTransferFinishedSemaphoresNum> transferFinishedSemaphorePool;
-    ArraySafe<VkPipelineStageFlags, kTransferFinishedSemaphoresNum> transferFinishedPipelineStageFlags;
-
-    const size_t transferFinishedSemaphoreSize = 2;///<@todo: attempt using just one transferFinishedSemaphore at the end of submission per streaming unit; all commands should be completed before the semaphore triggers
-    for (size_t transferFinishedSemaphoreIndex = 0; transferFinishedSemaphoreIndex < transferFinishedSemaphoreSize; ++transferFinishedSemaphoreIndex)
-    {
-        CreateVulkanSemaphore(&transferFinishedSemaphorePool[transferFinishedSemaphoreIndex], device);
-        transferFinishedPipelineStageFlags[transferFinishedSemaphoreIndex] = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    }
+    VkSemaphore transferFinishedSemaphore;
+    CreateVulkanSemaphore(&transferFinishedSemaphore, device);
+    VkPipelineStageFlags transferFinishedPipelineStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
     for (;;)
     {
@@ -378,7 +371,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         }
         CreateTextureSampler(&streamingUnit.m_textureSampler, device);
 
-        VectorSafe<VkSemaphore, 2> transferFinishedSemaphore;
+        VectorSafe<VkSemaphore, 1> transferFinishedSemaphores;
         const size_t texturedGeometriesSize = streamingUnit.m_texturedGeometries.size();
         for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometriesSize; ++texturedGeometryIndex)
         {
@@ -480,14 +473,14 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 commandBufferTransfer,
                 device,
                 physicalDevice);
-            if (!unifiedGraphicsAndTransferQueue)
-            {
-                transferFinishedSemaphore.Push(transferFinishedSemaphorePool[transferFinishedSemaphore.size()]);///<@todo: attempt using just one transferFinishedSemaphore at the end of submission per streaming unit; all commands should be completed before the semaphore triggers
-            }
+        }
+        if (!unifiedGraphicsAndTransferQueue)
+        {
+            transferFinishedSemaphores.Push(transferFinishedSemaphore);
         }
         vkEndCommandBuffer(commandBufferTransfer);
         SubmitCommandBuffer(
-            transferFinishedSemaphore,
+            transferFinishedSemaphores,
             ConstVectorSafeRef<VkSemaphore>(),
             ArraySafeRef<VkPipelineStageFlags>(),
             commandBufferTransfer,
@@ -499,8 +492,8 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             vkEndCommandBuffer(commandBufferTransitionImage);
             SubmitCommandBuffer(
                 ConstVectorSafeRef<VkSemaphore>(),
-                transferFinishedSemaphore,
-                &transferFinishedPipelineStageFlags,
+                transferFinishedSemaphores,
+                ArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),///<@todo: ArraySafeRefConst
                 commandBufferTransitionImage,
                 graphicsQueue,
                 VK_NULL_HANDLE);
@@ -540,10 +533,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     vkDestroyBuffer(device, stagingBufferGpu, GetVulkanAllocationCallbacks());
 
     stagingBufferMemoryMapCpuToGpu.Destroy();
-    for (auto& semaphore : transferFinishedSemaphorePool)
-    {
-        vkDestroySemaphore(device, semaphore, GetVulkanAllocationCallbacks());
-    }
+    vkDestroySemaphore(device, transferFinishedSemaphore, GetVulkanAllocationCallbacks());
 
     vkDestroyDescriptorPool(device, descriptorPool, GetVulkanAllocationCallbacks());
     
