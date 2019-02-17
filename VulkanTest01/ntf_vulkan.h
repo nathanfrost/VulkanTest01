@@ -72,6 +72,8 @@ size_t GetVulkanApiCpuBytesAllocatedMax();
 #endif//#if NTF_DEBUG
 HANDLE ThreadSignalingEventCreate();
 BOOL CloseHandleWindows(const HANDLE h);
+void SignalSemaphoreWindows(const HANDLE wakeEventHandle);
+void WaitUntilThreadDoneWindows(const HANDLE doneEventHandle);
 void TransferImageFromCpuToGpu(
     const VkImage& image,
     const uint32_t width,
@@ -251,6 +253,8 @@ public:
     VkPhysicalDevice* m_physicalDevice;
     QueueFamilyIndices* m_queueFamilyIndices;
     StreamingUnit* m_streamingUnit;
+    enum ThreadCommand {kFirstValidArgument, kLoadStreamingUnit=kFirstValidArgument, 
+                        kLastValidArgument, kCleanupAndTerminate=kLastValidArgument} *m_threadCommand;
     HANDLE* m_threadDone;
     HANDLE* m_threadWake;
     VkQueue* m_transferQueue;
@@ -269,6 +273,7 @@ public:
         assert(m_physicalDevice);
         assert(m_queueFamilyIndices);
         assert(m_streamingUnit);
+        assert(m_threadCommand && *m_threadCommand >= kFirstValidArgument && *m_threadCommand <= kLastValidArgument);
         assert(m_threadDone);
         assert(m_threadWake);
         assert(m_transferQueue);
@@ -276,6 +281,11 @@ public:
         assert(m_renderPass);
         assert(m_swapChainExtent);
     }
+};
+struct AssetLoadingThreadData
+{
+    ThreadHandles m_handles;
+    AssetLoadingArguments::ThreadCommand m_threadCommand;
 };
 
 struct CommandBufferThreadArgumentsTest

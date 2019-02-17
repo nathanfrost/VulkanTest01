@@ -172,6 +172,17 @@ BOOL CloseHandleWindows(const HANDLE h)
     return closeHandleResult;
 }
 
+void SignalSemaphoreWindows(const HANDLE wakeEventHandle)
+{
+    const BOOL setEventResult = SetEvent(wakeEventHandle);
+    assert(setEventResult);
+}
+void WaitUntilThreadDoneWindows(const HANDLE doneEventHandle)
+{
+    const DWORD result = WaitForSingleObject(doneEventHandle, INFINITE);
+    assert(result == WAIT_OBJECT_0);
+}
+
 //BEG_#SecondaryCommandBufferMultithreadingTest
 void CommandBufferSecondaryThreadsCreateTest(
     ArraySafeRef<ThreadHandles> threadData,
@@ -238,6 +249,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_REF(threadArguments.m_physicalDevice, physicalDevice);
     NTF_REF(threadArguments.m_queueFamilyIndices, queueFamilyIndices);
     NTF_REF(threadArguments.m_streamingUnit, streamingUnit);
+    auto& threadCommand = threadArguments.m_threadCommand;
     NTF_REF(threadArguments.m_threadDone, threadDone);
     NTF_REF(threadArguments.m_threadWake, threadWake);
     NTF_REF(threadArguments.m_transferQueue, transferQueue);
@@ -306,16 +318,9 @@ DWORD WINAPI AssetLoadingThread(void* arg)
 
     for (;;)
     {
-        NTF_REF(threadArguments.m_threadWake, m_threadWake);
-        NTF_REF(threadArguments.m_threadDone, m_threadDone);
-
-        //#Wait
-        //WaitOnAddress(&signalMemory, &undesiredValue, sizeof(AssetLoadingArguments::SignalMemoryType), INFINITE);//#SynchronizationWindows8+Only
-        DWORD waitForSingleObjectResult = WaitForSingleObject(threadWake, INFINITE);
-        assert(waitForSingleObjectResult == WAIT_OBJECT_0);
-
         //clean up staging buffers if they were in use but have completed their transfers
         ///@todo NTF: try to do this constantly and immediately after initiating transfers so this work is likely to be completed before the next transfers is requested #StreamingMemory
+        const bool loadingOperationsWereInFlight = stagingBufferGpuAllocateIndex > 0;
         while (stagingBufferGpuAllocateIndex > 0)
         {
             const VkResult transferQueueStatus = vkGetFenceStatus(device, transferQueueFinishedFence);
@@ -324,15 +329,31 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 //clean up staging memory
                 stagingBufferMemoryMapCpuToGpu.Clear();
 
-                for (size_t stagingBufferGpuAllocateIndexFree = 0;
-                    stagingBufferGpuAllocateIndexFree < stagingBufferGpuAllocateIndex;
-                    ++stagingBufferGpuAllocateIndexFree)
+                for (   size_t stagingBufferGpuAllocateIndexFree = 0;
+                        stagingBufferGpuAllocateIndexFree < stagingBufferGpuAllocateIndex;
+                        ++stagingBufferGpuAllocateIndexFree)
                 {
                     vkDestroyBuffer(device, stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], GetVulkanAllocationCallbacks());
                 }
                 stagingBufferGpuAllocateIndex = 0;
             }
         }
+        if (loadingOperationsWereInFlight)
+        {
+            //notify main thread asset loading thread is ready to load again -- @todo: could notify immediately before calling vkDestroyBuffer()'s as in "ready to render streaming unit"
+            SignalSemaphoreWindows(threadDone);///<@todo NTF: rename "threadReady"
+        }
+
+        //#Wait
+        //WaitOnAddress(&signalMemory, &undesiredValue, sizeof(AssetLoadingArguments::SignalMemoryType), INFINITE);//#SynchronizationWindows8+Only
+        DWORD waitForSingleObjectResult = WaitForSingleObject(threadWake, INFINITE);
+        assert(waitForSingleObjectResult == WAIT_OBJECT_0);
+
+        if (*threadCommand == AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate)
+        {
+            break;
+        }
+        assert(*threadCommand == AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit);
 
         ///@todo: generalize #StreamingMemory
         const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -508,9 +529,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             TODO_REFACTOR_NUM,
             streamingUnit.m_textureSampler,
             device);
-
-        const BOOL setEventResult = SetEvent(threadDone);
-        assert(setEventResult);
     }
 
     //cleanup
@@ -528,6 +546,9 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     }
 
     vkDestroyDescriptorPool(device, descriptorPool, GetVulkanAllocationCallbacks());
+    
+    SignalSemaphoreWindows(threadDone);
+    return 0;
 }
 
 DWORD WINAPI CommandBufferThreadTest(void* arg)
@@ -585,8 +606,7 @@ DWORD WINAPI CommandBufferThreadTest(void* arg)
         const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBufferSecondary);
         NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
 
-        const BOOL setEventResult = SetEvent(commandBufferThreadDone);
-        assert(setEventResult);
+        SignalSemaphoreWindows(commandBufferThreadDone);
     }
 }
 //END_#SecondaryCommandBufferMultithreadingTest
@@ -1772,8 +1792,7 @@ void FillSecondaryCommandBuffersTest(
 
         //#Wait
         //WakeByAddressSingle(commandBufferThreadArguments.signalMemory);//#SynchronizationWindows8+Only
-        const BOOL setEventResult = SetEvent(commandBuffersSecondaryThreads[threadIndex].wakeEventHandle);
-        assert(setEventResult);
+        SignalSemaphoreWindows(commandBuffersSecondaryThreads[threadIndex].wakeEventHandle);
     }
     WaitForMultipleObjects(Cast_size_t_DWORD(threadNum), commandBufferThreadDoneEvents.begin(), TRUE, INFINITE);
 }

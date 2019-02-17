@@ -60,6 +60,8 @@ public:
         //#SecondaryCommandBufferMultithreadingTest: see m_commandBufferSecondaryThreadsTest definition for more comments
         //CommandBufferSecondaryThreadsCreateTest(&m_commandBufferSecondaryThreadsTest, &m_commandBufferThreadDoneEventsTest, &m_commandBufferThreadArgumentsTest, NTF_OBJECTS_NUM);
 
+        ///@todo: #StreamingMemory: generalize
+        WaitUntilThreadDoneWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
         MainLoop(m_window);
         Shutdown();
 
@@ -189,6 +191,9 @@ private:
     void Shutdown()
     {
         m_streamingUnit.Free(m_device);///<@todo NTF: generalize #StreamingMemory
+        m_assetLoadingThreadData.m_threadCommand = AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate;
+        SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
+        WaitUntilThreadDoneWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
 
         CleanupSwapChain(
             &m_commandBuffersPrimary,
@@ -231,9 +236,9 @@ private:
 
         glfwDestroyWindow(m_window);
 
-        CloseHandleWindows(m_assetLoadingThreadHandles.threadHandle);
-        CloseHandleWindows(m_assetLoadingThreadHandles.doneEventHandle);
-        CloseHandleWindows(m_assetLoadingThreadHandles.wakeEventHandle);
+        CloseHandleWindows(m_assetLoadingThreadData.m_handles.threadHandle);
+        CloseHandleWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
+        CloseHandleWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
         glfwTerminate();
     }
@@ -332,33 +337,33 @@ private:
 
         m_streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM;
 
-        AssetLoadingArguments assetLoadingArguments;
-        m_assetLoadingThreadHandles.doneEventHandle = ThreadSignalingEventCreate();
-        m_assetLoadingThreadHandles.wakeEventHandle = ThreadSignalingEventCreate();
+        m_assetLoadingThreadData.m_handles.doneEventHandle = ThreadSignalingEventCreate();
+        m_assetLoadingThreadData.m_handles.wakeEventHandle = ThreadSignalingEventCreate();
+        m_assetLoadingThreadData.m_threadCommand = AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit;
 
-        assetLoadingArguments.m_commandBufferTransfer = &m_commandBufferTransfer;
-        assetLoadingArguments.m_commandBufferTransitionImage = &m_commandBufferTransitionImage;
-        assetLoadingArguments.m_device = &m_device;
-        assetLoadingArguments.m_deviceLocalMemory = &m_deviceLocalMemory;
-        assetLoadingArguments.m_graphicsQueue = &m_graphicsQueue;
-        assetLoadingArguments.m_graphicsPipeline = &m_graphicsPipeline;
-        assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
-        assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
-        assetLoadingArguments.m_streamingUnit = &m_streamingUnit;
-        assetLoadingArguments.m_threadDone = &m_assetLoadingThreadHandles.doneEventHandle;
-        assetLoadingArguments.m_threadWake = &m_assetLoadingThreadHandles.wakeEventHandle;
-        assetLoadingArguments.m_transferQueue = &m_transferQueue;
+        m_assetLoadingArguments.m_commandBufferTransfer = &m_commandBufferTransfer;
+        m_assetLoadingArguments.m_commandBufferTransitionImage = &m_commandBufferTransitionImage;
+        m_assetLoadingArguments.m_device = &m_device;
+        m_assetLoadingArguments.m_deviceLocalMemory = &m_deviceLocalMemory;
+        m_assetLoadingArguments.m_graphicsQueue = &m_graphicsQueue;
+        m_assetLoadingArguments.m_graphicsPipeline = &m_graphicsPipeline;
+        m_assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
+        m_assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
+        m_assetLoadingArguments.m_streamingUnit = &m_streamingUnit;
+        m_assetLoadingArguments.m_threadCommand = &m_assetLoadingThreadData.m_threadCommand;
+        m_assetLoadingArguments.m_threadDone = &m_assetLoadingThreadData.m_handles.doneEventHandle;
+        m_assetLoadingArguments.m_threadWake = &m_assetLoadingThreadData.m_handles.wakeEventHandle;
+        m_assetLoadingArguments.m_transferQueue = &m_transferQueue;
 
-        assetLoadingArguments.m_renderPass = &m_renderPass;
-        assetLoadingArguments.m_swapChainExtent = &m_swapChainExtent;
+        m_assetLoadingArguments.m_renderPass = &m_renderPass;
+        m_assetLoadingArguments.m_swapChainExtent = &m_swapChainExtent;
+        
+        m_assetLoadingArguments.AssertValid();
 
         ///@todo: THREAD_MODE_BACKGROUND_BEGIN or THREAD_PRIORITY_BELOW_NORMAL and SetThreadPriority
-        m_assetLoadingThreadHandles.threadHandle = CreateThreadWindows(AssetLoadingThread, &assetLoadingArguments);
+        m_assetLoadingThreadData.m_handles.threadHandle = CreateThreadWindows(AssetLoadingThread, &m_assetLoadingArguments);
 
-        const BOOL setEventResult = SetEvent(m_assetLoadingThreadHandles.wakeEventHandle);
-        assert(setEventResult);
-        
-        WaitForSingleObject(m_assetLoadingThreadHandles.doneEventHandle, INFINITE);
+        SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
         //#CommandPoolDuplication
         m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
@@ -538,7 +543,8 @@ private:
     VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_drawFrameFinishedFences = VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor use ArraySafe
 
     VulkanPagedStackAllocator m_deviceLocalMemory;///<@todo: make threadsafe so asset loading thread and main thread can never collide --as of Feb 11, 2019, they cannot, but that would be easy to mess up
-    ThreadHandles m_assetLoadingThreadHandles;
+    AssetLoadingThreadData m_assetLoadingThreadData;
+    AssetLoadingArguments m_assetLoadingArguments;
 };
 
 int main() 
