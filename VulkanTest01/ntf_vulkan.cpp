@@ -317,7 +317,8 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         while (stagingBufferGpuAllocateIndex > 0)
         {
             FenceWaitUntilSignalled(transferQueueFinishedFence, device);
-            
+            SignalSemaphoreWindows(threadDone);///<@todo NTF: generalize for #StreamingMemory by signalling a unique semaphore for each streaming unit loaded
+
             //clean up staging memory
             stagingBufferMemoryMapCpuToGpu.Clear();
 
@@ -328,12 +329,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 vkDestroyBuffer(device, stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], GetVulkanAllocationCallbacks());
             }
             stagingBufferGpuAllocateIndex = 0;
-            FenceReset(transferQueueFinishedFence, device);
-        }
-        if (loadingOperationsWereInFlight)
-        {
-            //notify main thread asset loading thread is ready to load again -- @todo: could notify immediately before calling vkDestroyBuffer()'s as in "ready to render streaming unit"
-            SignalSemaphoreWindows(threadDone);///<@todo NTF: rename "threadReady"
         }
 
         //#Wait
@@ -347,6 +342,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         }
         assert(*threadCommand == AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit);
 
+        FenceReset(transferQueueFinishedFence, device);//commencing loading
         ///@todo: generalize #StreamingMemory
         const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         CreateDescriptorPool(&descriptorPool, descriptorType, device, TODO_REFACTOR_NUM);
