@@ -244,42 +244,42 @@ class AssetLoadingArguments
 {
 public:
     ///@todo: for arguments that allow it; const& them
-    VkCommandBuffer* m_commandBufferTransfer;
-    VkCommandBuffer* m_commandBufferTransitionImage;
-    VkDevice* m_device;
     VulkanPagedStackAllocator* m_deviceLocalMemory; //must be threadsafe -- start with just not touching this on main thread after loading; then add thread safety
     VkPipeline* m_graphicsPipeline;
-    VkQueue* m_graphicsQueue;
-    VkPhysicalDevice* m_physicalDevice;
-    QueueFamilyIndices* m_queueFamilyIndices;
     StreamingUnit* m_streamingUnit;
     enum ThreadCommand {kFirstValidArgument, kLoadStreamingUnit=kFirstValidArgument, 
                         kLastValidArgument, kCleanupAndTerminate=kLastValidArgument} *m_threadCommand;
-    HANDLE* m_threadDone;
-    HANDLE* m_threadWake;
-    VkQueue* m_transferQueue;
 
+    const VkCommandBuffer* m_commandBufferTransfer;
+    const VkCommandBuffer* m_commandBufferTransitionImage;
+    const VkDevice* m_device;
+    const VkQueue* m_graphicsQueue;
+    const VkPhysicalDevice* m_physicalDevice;
+    const QueueFamilyIndices* m_queueFamilyIndices;
     const VkRenderPass* m_renderPass;
     const VkExtent2D* m_swapChainExtent;
+    const HANDLE* m_threadDone;
+    const HANDLE* m_threadWake;
+    const VkQueue* m_transferQueue;
 
     inline void AssertValid()
     {
+        assert(m_deviceLocalMemory);
+        assert(m_graphicsPipeline);
+        assert(m_streamingUnit);
+        assert(m_threadCommand && *m_threadCommand >= kFirstValidArgument && *m_threadCommand <= kLastValidArgument);
+
         assert(m_commandBufferTransfer);
         assert(m_commandBufferTransitionImage);
         assert(m_device);
-        assert(m_deviceLocalMemory);
-        assert(m_graphicsPipeline);
         assert(m_graphicsQueue);
         assert(m_physicalDevice);
         assert(m_queueFamilyIndices);
-        assert(m_streamingUnit);
-        assert(m_threadCommand && *m_threadCommand >= kFirstValidArgument && *m_threadCommand <= kLastValidArgument);
+        assert(m_renderPass);
+        assert(m_swapChainExtent);
         assert(m_threadDone);
         assert(m_threadWake);
         assert(m_transferQueue);
-
-        assert(m_renderPass);
-        assert(m_swapChainExtent);
     }
 };
 struct AssetLoadingThreadData
