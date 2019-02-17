@@ -606,7 +606,9 @@ void CreateFrameSyncPrimitives(
     const size_t framesNum,
     const VkDevice& device);
 
-void CreateFence(VkFence*const fencePtr, const VkFenceCreateFlagBits flags, const VkDevice& device);
+void FenceCreate(VkFence*const fencePtr, const VkFenceCreateFlagBits flags, const VkDevice& device);
+void FenceWaitUntilSignalled(const VkFence& fence, const VkDevice& device);
+void FenceReset(const VkFence& fence, const VkDevice& device);
 
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,

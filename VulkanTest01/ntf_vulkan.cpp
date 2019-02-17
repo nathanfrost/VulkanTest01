@@ -271,7 +271,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     VkDescriptorPool descriptorPool;
 
     VkFence transferQueueFinishedFence;
-    CreateFence(&transferQueueFinishedFence, static_cast<VkFenceCreateFlagBits>(0), device);
+    FenceCreate(&transferQueueFinishedFence, static_cast<VkFenceCreateFlagBits>(0), device);
 
     CreateBuffer(
         &stagingBufferGpu,
@@ -316,20 +316,19 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         const bool loadingOperationsWereInFlight = stagingBufferGpuAllocateIndex > 0;
         while (stagingBufferGpuAllocateIndex > 0)
         {
-            const VkResult transferQueueStatus = vkGetFenceStatus(device, transferQueueFinishedFence);
-            if (transferQueueStatus == VK_SUCCESS)
-            {
-                //clean up staging memory
-                stagingBufferMemoryMapCpuToGpu.Clear();
+            FenceWaitUntilSignalled(transferQueueFinishedFence, device);
+            
+            //clean up staging memory
+            stagingBufferMemoryMapCpuToGpu.Clear();
 
-                for (   size_t stagingBufferGpuAllocateIndexFree = 0;
-                        stagingBufferGpuAllocateIndexFree < stagingBufferGpuAllocateIndex;
-                        ++stagingBufferGpuAllocateIndexFree)
-                {
-                    vkDestroyBuffer(device, stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], GetVulkanAllocationCallbacks());
-                }
-                stagingBufferGpuAllocateIndex = 0;
+            for (   size_t stagingBufferGpuAllocateIndexFree = 0;
+                    stagingBufferGpuAllocateIndexFree < stagingBufferGpuAllocateIndex;
+                    ++stagingBufferGpuAllocateIndexFree)
+            {
+                vkDestroyBuffer(device, stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], GetVulkanAllocationCallbacks());
             }
+            stagingBufferGpuAllocateIndex = 0;
+            FenceReset(transferQueueFinishedFence, device);
         }
         if (loadingOperationsWereInFlight)
         {
@@ -2605,11 +2604,11 @@ void CreateFrameSyncPrimitives(
     {
         CreateVulkanSemaphore(&imageAvailable[frameIndex], device);
         CreateVulkanSemaphore(&renderFinished[frameIndex], device);
-        CreateFence(&fence[frameIndex], VK_FENCE_CREATE_SIGNALED_BIT, device);
+        FenceCreate(&fence[frameIndex], VK_FENCE_CREATE_SIGNALED_BIT, device);
     }
 }
 
-void CreateFence(VkFence*const fencePtr, const VkFenceCreateFlagBits flags, const VkDevice& device)
+void FenceCreate(VkFence*const fencePtr, const VkFenceCreateFlagBits flags, const VkDevice& device)
 {
     NTF_REF(fencePtr, fence);
 
@@ -2620,6 +2619,15 @@ void CreateFence(VkFence*const fencePtr, const VkFenceCreateFlagBits flags, cons
 
     const VkResult createTransferFenceResult = vkCreateFence(device, &fenceInfo, GetVulkanAllocationCallbacks(), &fence);
     NTF_VK_ASSERT_SUCCESS(createTransferFenceResult);
+}
+void FenceWaitUntilSignalled(const VkFence& fence, const VkDevice& device)
+{
+    vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX/*wait until fence is signaled*/);
+    assert(vkGetFenceStatus(device, fence) == VK_SUCCESS);
+}
+void FenceReset(const VkFence& fence, const VkDevice& device)
+{
+    vkResetFences(device, 1, &fence);
 }
 
 ///@todo: use push constants instead, since it's more efficient
@@ -2721,13 +2729,13 @@ void DrawFrame(
     //auto& hackToRecreateSwapChainIfNecessary = *hackToRecreateSwapChainIfNecessaryPtr;
 
     WIN_TIMER_DEF_START(waitForFences);
-    vkWaitForFences(device, 1, &fence,  VK_TRUE, UINT64_MAX/*wait until fence is signaled*/);
+    FenceWaitUntilSignalled(fence, device);
     WIN_TIMER_STOP(waitForFences);
     //const int maxLen = 256;
     //char buf[maxLen];
     //snprintf(&buf[0], maxLen, "waitForFences:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(waitForFences));
     //fwrite(&buf[0], sizeof(buf[0]), strlen(&buf[0]), s_winTimer);
-    vkResetFences(device, 1, &fence);//queue has completed on the GPU and is ready to be prepared on the CPU
+    FenceReset(fence, device);//queue has completed on the GPU and is ready to be prepared on the CPU
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;//only value allowed
