@@ -219,9 +219,13 @@ public:
     ArraySafe<TexturedGeometry, TODO_REFACTOR_NUM> m_texturedGeometries;
     ArraySafe<VkImageView, TODO_REFACTOR_NUM> m_textureImageViews;
 
-    const char*const m_texturePaths[TODO_REFACTOR_NUM] = { "textures/skull.jpg","textures/cat_diff.tga"/*,"textures/chalet.jpg"*/ };//#StreamingMemory
-    const char*const m_modelPaths[TODO_REFACTOR_NUM] = { "models/skull.obj", "models/cat.obj"/*,"models/chalet.obj"*/ };//#StreamingMemory
-    const float m_uniformScales[TODO_REFACTOR_NUM] = { 0.05f,1.f };//#StreamingMemory
+    /*@todo NTF: 
+        1. Make StreamingUnit be entirely allocated from a StackNTF by methods like AddTexturePaths(const char*const* texturePaths, const size_t texturePathsNum) so that it can contain a variable amount of everything up to the stack limit.  Use ArraySafe<>'s to index each container subset within the bytestream
+        2. Pull texture and model loading code into cooking module that accepts StreamingUnitOld ("StreamingUnitTemplate") and spits out StreamingUnitNew, which is still allocated from a StackNTF and uses ArraySafe<>'s but contains the ready-to-pass-to-Vulkan model and texture data as well as the other variables
+    */
+    const char*const m_texturePaths[TODO_REFACTOR_NUM] = { "textures/skull.jpg","textures/Banana.jpg" /*"textures/HumanFighter_01_Diff.tga"*/ /*"textures/container_clean_diffuse01.jpeg"*//*"textures/appleD.jpg"*/,/*"textures/cat_diff.tga"*//*,"textures/chalet.jpg"*/ };//#StreamingMemory
+    const char*const m_modelPaths[TODO_REFACTOR_NUM] = { "models/skull.obj", "models/Banana.obj" /*"models/Orange.obj"*/, /*"models/Container_OBJ.obj",*/ /*"models/apple textured obj.obj"*//*"models/cat.obj"*//*,"models/chalet.obj"*/ };//#StreamingMemory
+    const float m_uniformScales[TODO_REFACTOR_NUM] = { .05f, .005f, /*0.5f,*//*,.0025f*//*.01f,*/ /*1.f*/ };//#StreamingMemory
 
     VkDescriptorSetLayout m_descriptorSetLayout;
     VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed   
