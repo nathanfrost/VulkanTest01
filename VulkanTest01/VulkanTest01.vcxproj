@@ -156,8 +156,8 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(NTF_LIBS_DIR)\glm-0.9.7.6\glm;$(NTF_LIBS_DIR)\glfw-3.2.1.bin.WIN32\include;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);NTF_ARRAY_SAFE_DEBUG</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
     <Link>
@@ -175,9 +175,9 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);NTF_ARRAY_SAFE_DEBUG</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <AdditionalIncludeDirectories>$(NTF_LIBS_DIR)\glm-0.9.7.6\glm;$(NTF_LIBS_DIR)\glfw-3.2.1.bin.WIN64\include;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -196,8 +196,8 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;_CONSOLE;%(PreprocessorDefinitions);</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(NTF_LIBS_DIR)\glm-0.9.7.6\glm;$(NTF_LIBS_DIR)\glfw-3.2.1.bin.WIN32\include;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_CONSOLE;%(PreprocessorDefinitions);NTF_ARRAY_SAFE_DEBUG</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
     <Link>
@@ -220,7 +220,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(NTF_LIBS_DIR)\glm-0.9.7.6\glm;$(NTF_LIBS_DIR)\glfw-3.2.1.bin.WIN32\include;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
     <Link>
@@ -243,7 +243,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;NTF_WIN_TIMER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>$(NTF_LIBS_DIR)\glm-0.9.7.6\glm;$(NTF_LIBS_DIR)\glfw-3.2.1.bin.WIN32\include;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
     </ClCompile>
     <Link>
@@ -265,9 +265,9 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <PreprocessorDefinitions>_CONSOLE;%(PreprocessorDefinitions);</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CONSOLE;%(PreprocessorDefinitions);NTF_ARRAY_SAFE_DEBUG</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <AdditionalIncludeDirectories>$(NTF_LIBS_DIR)\glm-0.9.7.6\glm;$(NTF_LIBS_DIR)\glfw-3.2.1.bin.WIN64\include;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -290,7 +290,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <AdditionalIncludeDirectories>$(NTF_LIBS_DIR)\glm-0.9.7.6\glm;$(NTF_LIBS_DIR)\glfw-3.2.1.bin.WIN64\include;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -313,7 +313,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;NTF_WIN_TIMER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
-      <AdditionalIncludeDirectories>$(NTF_LIBS_DIR)\glm-0.9.7.6\glm;$(NTF_LIBS_DIR)\glfw-3.2.1.bin.WIN64\include;$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -330,6 +330,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ntf_vulkan.cpp" />
     <ClCompile Include="StackNTF.cpp" />
+    <ClCompile Include="StreamingUnit.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MemoryUtil.h" />
@@ -338,6 +339,7 @@
     <ClInclude Include="ntf_vulkan_utility.h" />
     <ClInclude Include="StackNTF.h" />
     <ClInclude Include="stdArrayUtility.h" />
+    <ClInclude Include="StreamingUnit.h" />
     <ClInclude Include="VDeleter.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

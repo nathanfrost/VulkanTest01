@@ -1,6 +1,8 @@
 #include"ntf_vulkan.h"
 #include"ntf_vulkan_utility.h"
 
+VectorSafe<uint8_t, 8192 * 8192 * 4> s_pixelBufferScratch;
+
 glm::vec3 s_cameraTranslation = glm::vec3(2.6f,3.4f,.9f);
 VectorSafe<const char*, NTF_VALIDATION_LAYERS_SIZE> s_validationLayers;
 
@@ -61,7 +63,7 @@ public:
         //CommandBufferSecondaryThreadsCreateTest(&m_commandBufferSecondaryThreadsTest, &m_commandBufferThreadDoneEventsTest, &m_commandBufferThreadArgumentsTest, NTF_OBJECTS_NUM);
 
         ///@todo: #StreamingMemory: generalize
-        WaitUntilThreadDoneWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
+        WaitForSignalWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
         MainLoop(m_window);
         Shutdown();
 
@@ -193,7 +195,7 @@ private:
         m_streamingUnit.Free(m_device);///<@todo NTF: generalize #StreamingMemory
         m_assetLoadingThreadData.m_threadCommand = AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate;
         SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
-        WaitUntilThreadDoneWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
+        WaitForSignalWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
 
         CleanupSwapChain(
             &m_commandBuffersPrimary,
@@ -236,9 +238,9 @@ private:
 
         glfwDestroyWindow(m_window);
 
-        CloseHandleWindows(m_assetLoadingThreadData.m_handles.threadHandle);
-        CloseHandleWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
-        CloseHandleWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
+        HandleCloseWindows(&m_assetLoadingThreadData.m_handles.threadHandle);
+        HandleCloseWindows(&m_assetLoadingThreadData.m_handles.doneEventHandle);
+        HandleCloseWindows(&m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
         glfwTerminate();
     }
@@ -251,6 +253,7 @@ private:
         s_validationLayers.Push("VK_LAYER_LUNARG_api_dump");///<this produces "file not found" after outputting to (I believe) stdout for a short while; seems like it overruns Windows 7's file descriptor or something.  Weirdly, running from Visual Studio 2015 does not seem to have this problem, but then I'm limited to 9999 lines of the command prompt VS2015 uses for output.  Not ideal
 #endif//NTF_API_DUMP_VALIDATION_LAYER_ON
 
+        
         m_deviceExtensions = VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
 
         m_instance = CreateInstance(s_validationLayers);
@@ -292,7 +295,7 @@ private:
         }
 
         m_deviceLocalMemory.Initialize(m_device, m_physicalDevice);
-
+         
         //#CommandPoolDuplication
         AllocateCommandBuffers(
             ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
@@ -335,7 +338,7 @@ private:
             }
         }
 
-        m_streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM;
+        m_streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemory
 
         m_assetLoadingThreadData.m_handles.doneEventHandle = ThreadSignalingEventCreate();
         m_assetLoadingThreadData.m_handles.wakeEventHandle = ThreadSignalingEventCreate();
@@ -350,6 +353,7 @@ private:
         m_assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
         m_assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
         m_assetLoadingArguments.m_streamingUnit = &m_streamingUnit;
+        m_assetLoadingArguments.m_streamingUnitFilenameNoExtension = m_streamingUnitTestNameNoExtension;
         m_assetLoadingArguments.m_threadCommand = &m_assetLoadingThreadData.m_threadCommand;
         m_assetLoadingArguments.m_threadDone = &m_assetLoadingThreadData.m_handles.doneEventHandle;
         m_assetLoadingArguments.m_threadWake = &m_assetLoadingThreadData.m_handles.wakeEventHandle;
@@ -516,7 +520,8 @@ private:
 
     glm::vec3 m_cameraTranslation;
 
-    StreamingUnit m_streamingUnit;
+    const char* m_streamingUnitTestNameNoExtension = "unitTest0";
+    StreamingUnitRuntime m_streamingUnit;
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
     
     //#SecondaryCommandBufferMultithreadingTest: see m_commandBufferSecondaryThreadsTest definition for more comments
@@ -542,7 +547,7 @@ private:
         
     VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_drawFrameFinishedFences = VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor use ArraySafe
 
-    VulkanPagedStackAllocator m_deviceLocalMemory;///<@todo: make threadsafe so asset loading thread and main thread can never collide --as of Feb 11, 2019, they cannot, but that would be easy to mess up
+    VulkanPagedStackAllocator m_deviceLocalMemory;
     AssetLoadingThreadData m_assetLoadingThreadData;
     AssetLoadingArguments m_assetLoadingArguments;
 };

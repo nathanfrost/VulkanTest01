@@ -10,6 +10,51 @@
 
 #define NTF_REF(ptrIdentifier, refIdentifier) assert(ptrIdentifier); auto& refIdentifier = *ptrIdentifier
 
+inline void Fopen(FILE**const f, const char*const filename, const char*const mode)
+{
+    assert(f);
+    assert(filename && filename[0]);
+    assert(mode && mode[0]);
+    
+    const errno_t fopen_sRet = fopen_s(f, filename, mode);
+    
+    assert(*f);
+    assert(fopen_sRet == 0);
+}
+
+inline void Fclose(FILE*const f)
+{
+    assert(f);
+    const int fcloseRet = fclose(f);
+    assert(fcloseRet == 0);
+}
+
+/*  users of this translation unit should directly use this function only for non-array elements; array elements should reside in an array 
+    with its own assert-safe Fwrite method*/
+inline void Fwrite(FILE*const file, const void*const buf, const size_t sizeOfElement, const size_t elementsNum)
+{
+    assert(file);
+    assert(buf);
+    assert(sizeOfElement);
+    assert(elementsNum);
+
+    const size_t fwriteRet = fwrite(buf, sizeOfElement, elementsNum, file);
+    assert(fwriteRet == elementsNum);
+}
+
+/*  users of this translation unit should directly use this function only for non-array elements; array elements should reside in an array 
+    with its own assert-safe Fread method */
+inline void Fread(FILE*const file, void*const buf, const size_t sizeOfElement, const size_t elementsNum)
+{
+    assert(file);
+    assert(buf);
+    assert(sizeOfElement);
+    assert(elementsNum);
+
+    const size_t freadRet = fread(buf, sizeOfElement, elementsNum, file);
+    assert(freadRet == elementsNum);
+}
+
 template<class T, size_t kSize>
 class VectorSafe;
 
@@ -155,6 +200,18 @@ public:
         memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
         SetSizeCurrent(inputBytesNum / sizeof(T));
         AssertValid();
+    }
+    ///@todo: unit tests
+    void MemcpyFromFread(FILE*const f, const size_t elementsNum)
+    {
+        AssertValid();
+        assert(f);
+        assert(elementsNum > 0);
+#if NTF_ARRAY_SAFE_DEBUG
+        assert(elementsNum <= m_sizeMax);
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+        Fread(f, &m_array[0], sizeof(T), elementsNum);
+        SetSizeCurrent(elementsNum);
     }
 
     size_type size() const noexcept
@@ -334,9 +391,6 @@ private:
     void SetArray(T* p)
     {
         m_array = p;
-#if NTF_ARRAY_SAFE_DEBUG
-        m_arraySet = true;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
     void SetSizeMax(const size_t sizeMax)
     {
@@ -414,6 +468,17 @@ public:
         AssertValid();
     }
     ///@todo: unit tests
+    void SetArray(FILE*const f, const size_t elementsNum)
+    {
+        AssertValid();//assumes correctly initialized ArraySafe reference
+        assert(f);
+        assert(elementsNum > 0);
+#if NTF_ARRAY_SAFE_DEBUG
+        assert(elementsNum <= m_sizeMax);
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+        Fread(f, m_array, sizeof(T), elementsNum);
+    }
+    ///@todo: unit tests
     void Reset()
     {
         m_array = nullptr;
@@ -434,6 +499,10 @@ public:
 
     void AssertValid() const
     {
+#if NTF_ARRAY_SAFE_DEBUG
+        assert(m_sizeMax > 0);
+        assert(m_array);
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
     ///@todo: have to pass in number of bytes explicitly
@@ -441,6 +510,17 @@ public:
     //{
     //    MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
     //}
+    ///@todo: totally untested; and unit tests
+    void MemcpyFromFread(FILE*const f, const size_t elementsNum)
+    {
+        AssertValid();
+        assert(f);
+        assert(elementsNum > 0);
+#if NTF_ARRAY_SAFE_DEBUG
+        assert(elementsNum <= m_sizeMax);
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+        Fread(f, &m_array[0], sizeof(T), elementsNum);
+    }
     ///@todo: unit tests
     void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
     {
@@ -484,7 +564,6 @@ public:
     }
     const T* GetAddressOfUnderlyingArray() const
     {
-        AssertValid();
         return &m_array[0];
     }
     T* GetAddressOfUnderlyingArray()
@@ -696,7 +775,7 @@ public:
     }
 };
 
-template<class T, size_t kSize>
+template<class T, size_t kSize>///<@todo: rename kElementsNum
 class ArraySafe
 {
 public:
@@ -712,6 +791,14 @@ private:
 public:
     ArraySafe()
     {
+    }
+    ///@todo: totally untested; use and unit test
+    ArraySafe(FILE*const f, const size_t elementsNum)
+    {
+        assert(f);
+        assert(elementsNum > 0);
+        assert(elementsNum <= kSize);
+        Fread(f, &m_array[0], sizeof(T), elementsNum);
     }
     ArraySafe(const std::initializer_list<T>& initializerList)
     {
@@ -731,6 +818,39 @@ public:
     void Copy(const ArraySafe<T, kSizeOther>& arraySafeOther)
     {
         MemcpyFromStart(arraySafeOther.GetAddressOfUnderlyingArray(), arraySafeOther.SizeInBytes());
+    }
+
+    void Fwrite(FILE*const f, const size_t elementsNum)
+    {
+        assert(f);
+        assert(elementsNum > 0);
+        assert(elementsNum <= kSize);
+        ::Fwrite(f, &m_array[0], sizeof(m_array[0]), elementsNum);
+    }
+
+    ///@todo NTF: eliminate code duplication with VectorSafe
+    ///@todo: unit test
+    void Snprintf(const char*const formatString, ...)
+    {
+        NTF_STATIC_ASSERT(sizeof(T) == sizeof(char));//this function is intended to be used only when *this holds ASCII characters
+#if NTF_ARRAY_SAFE_DEBUG
+        assert(formatString);
+
+        const char bellAsciiKeyCode = 7;
+        char*const lastElement = &m_array[GetLastValidIndex()];
+        *lastElement = bellAsciiKeyCode;//no "bell key" allowed -- use it as a sentinel to guard against the possibility of vsnprintf truncation
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+        assert(strlen(formatString) > 0);
+
+        va_list args;
+        va_start(args, formatString);
+        vsnprintf(&m_array[0], kSize, formatString, args);
+        va_end(args);
+
+#if NTF_ARRAY_SAFE_DEBUG
+        assert(m_array);
+        assert(*lastElement == bellAsciiKeyCode);//vsnprintf may have had to truncate its result to stay within the buffer
+#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
     ///@todo: unit test
@@ -913,6 +1033,31 @@ public:
         return VectorSafeRef(this);
     }
 
+    ///@todo NTF: eliminate code duplication with ArraySafe
+    ///@todo: unit test
+    void Snprintf(const char*const formatString, ...)
+    {
+        NTF_STATIC_ASSERT(sizeof(T) == sizeof(char));//this function is intended to be used only when *this holds ASCII characters
+#if NTF_ARRAY_SAFE_DEBUG
+        assert(formatString);
+
+        const char bellAsciiKeyCode = 7;
+        char*const lastElement = &m_array[GetLastValidIndex()];
+        *lastElement = bellAsciiKeyCode;//no "bell key" allowed -- use it as a sentinel to guard against the possibility of vsnprintf truncation
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+        assert(strlen(formatString) > 0);
+
+        va_list args;
+        va_start(args, formatString);
+        vsnprintf(&m_array[0], kSize, formatString, args);
+        va_end(args);
+
+#if NTF_ARRAY_SAFE_DEBUG
+        assert(m_array);
+        assert(*lastElement == bellAsciiKeyCode);//vsnprintf may have had to truncate its result to stay within the buffer
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+    }
+
     template<size_t kSizeMaxOther>
     void Copy(const VectorSafe<T, kSizeMaxOther>& vectorSafeOther)
     {
@@ -940,6 +1085,11 @@ public:
     {
         m_sizeCurrent = size;
         AssertValid();
+    }
+    size_t SizeCurrentInBytes()
+    {
+        AssertValid();
+        return m_sizeCurrent*sizeof(T);
     }
     ///@todo: unit tests
     void sizeIncrement()
@@ -1093,7 +1243,6 @@ public:
         return m_sizeCurrent == 0;
     }
 };
-
 
 template< class T, std::size_t N >
 bool operator==(const VectorSafe<T, N>& lhs,

@@ -32,4 +32,5 @@ mayaExporterTestPlugin/_UpgradeReport_Files
 */Release/*.lib
 */ReleaseDebug/*.lib
 !VulkanTest01/models/*.obj
+VulkanTest01/cooked/*
 *.VC.db

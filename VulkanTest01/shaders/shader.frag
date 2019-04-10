@@ -17,5 +17,6 @@ layout(location = 0) out vec4 outColor;
 void main() 
 {
     //outColor = vec4(fragTexCoord, 0.0, 0.0);
+    //texture indexing hack: assume first two objects are drawn with zeroth texture and second two objects are drawn with first texture
     outColor = texture(sampler2D(textures[pushConstants.objectIndex >> 1], texSampler), fragTexCoord);
 }

@@ -6,18 +6,19 @@
 #include <GLFW/glfw3.h>
 
 ///@todo: alphabetize and place immediately below WinTimer.h
-#include<iostream>
-#include<fstream>
-#include<stdexcept>
-#include<functional>
-#include<vector>
-#include<assert.h>
-#include <unordered_map>
 #include<algorithm>
-#include <chrono>
-#include <thread>
-#include"StackNTF.h"
+#include<assert.h>
+#include<chrono>
+#include<fstream>
+#include<functional>
+#include<iostream>
+#include<stdexcept>
+#include<thread>
+#include<unordered_map>
+#include<vector>
 
+#include"StackNTF.h"
+#include"StreamingUnit.h"
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
@@ -70,10 +71,12 @@ VkAllocationCallbacks* GetVulkanAllocationCallbacks();
 #if NTF_DEBUG
 size_t GetVulkanApiCpuBytesAllocatedMax();
 #endif//#if NTF_DEBUG
+HANDLE MutexCreate();
+void MutexRelease(const HANDLE mutex);
 HANDLE ThreadSignalingEventCreate();
-BOOL CloseHandleWindows(const HANDLE h);
+BOOL HandleCloseWindows(HANDLE*const h);
 void SignalSemaphoreWindows(const HANDLE wakeEventHandle);
-void WaitUntilThreadDoneWindows(const HANDLE doneEventHandle);
+void WaitForSignalWindows(const HANDLE doneEventHandle);
 void TransferImageFromCpuToGpu(
     const VkImage& image,
     const uint32_t width,
@@ -211,7 +214,7 @@ struct ThreadHandles
     HANDLE doneEventHandle;
 };
 
-class StreamingUnit
+class StreamingUnitRuntime
 {
 public:
     VkSampler m_textureSampler;
@@ -220,10 +223,9 @@ public:
     ArraySafe<VkImageView, TODO_REFACTOR_NUM> m_textureImageViews;
 
     /*@todo NTF: 
-        1. Make StreamingUnit be entirely allocated from a StackNTF by methods like AddTexturePaths(const char*const* texturePaths, const size_t texturePathsNum) so that it can contain a variable amount of everything up to the stack limit.  Use ArraySafe<>'s to index each container subset within the bytestream
+        1. Make StreamingUnitRuntime be entirely allocated from a StackNTF by methods like AddTexturePaths(const char*const* texturePaths, const size_t texturePathsNum) so that it can contain a variable amount of everything up to the stack limit.  Use ArraySafe<>'s to index each container subset within the bytestream
         2. Pull texture and model loading code into cooking module that accepts StreamingUnitOld ("StreamingUnitTemplate") and spits out StreamingUnitNew, which is still allocated from a StackNTF and uses ArraySafe<>'s but contains the ready-to-pass-to-Vulkan model and texture data as well as the other variables
     */
-    const char*const m_texturePaths[TODO_REFACTOR_NUM] = { "textures/skull.jpg","textures/Banana.jpg" /*"textures/HumanFighter_01_Diff.tga"*/ /*"textures/container_clean_diffuse01.jpeg"*//*"textures/appleD.jpg"*/,/*"textures/cat_diff.tga"*//*,"textures/chalet.jpg"*/ };//#StreamingMemory
     const char*const m_modelPaths[TODO_REFACTOR_NUM] = { "models/skull.obj", "models/Banana.obj" /*"models/Orange.obj"*/, /*"models/Container_OBJ.obj",*/ /*"models/apple textured obj.obj"*//*"models/cat.obj"*//*,"models/chalet.obj"*/ };//#StreamingMemory
     const float m_uniformScales[TODO_REFACTOR_NUM] = { .05f, .005f, /*0.5f,*//*,.0025f*//*.01f,*/ /*1.f*/ };//#StreamingMemory
 
@@ -247,10 +249,9 @@ struct QueueFamilyIndices;
 class AssetLoadingArguments
 {
 public:
-    ///@todo: for arguments that allow it; const& them
-    VulkanPagedStackAllocator* m_deviceLocalMemory; //must be threadsafe -- start with just not touching this on main thread after loading; then add thread safety
+    VulkanPagedStackAllocator* m_deviceLocalMemory;
     VkPipeline* m_graphicsPipeline;
-    StreamingUnit* m_streamingUnit;
+    StreamingUnitRuntime* m_streamingUnit;
     enum ThreadCommand {kFirstValidArgument, kLoadStreamingUnit=kFirstValidArgument, 
                         kLastValidArgument, kCleanupAndTerminate=kLastValidArgument} *m_threadCommand;
 
@@ -261,6 +262,7 @@ public:
     const VkPhysicalDevice* m_physicalDevice;
     const QueueFamilyIndices* m_queueFamilyIndices;
     const VkRenderPass* m_renderPass;
+    const char* m_streamingUnitFilenameNoExtension;
     const VkExtent2D* m_swapChainExtent;
     const HANDLE* m_threadDone;
     const HANDLE* m_threadWake;
@@ -280,6 +282,8 @@ public:
         assert(m_physicalDevice);
         assert(m_queueFamilyIndices);
         assert(m_renderPass);
+        assert(m_streamingUnitFilenameNoExtension);
+        assert(strlen(m_streamingUnitFilenameNoExtension) > 0);
         assert(m_swapChainExtent);
         assert(m_threadDone);
         assert(m_threadWake);
@@ -563,12 +567,12 @@ bool CreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VkImage*const imagePtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const alignmentPtr,
-    int*const textureWidthPtr,
-    int*const textureHeightPtr,
+    StreamingUnitTextureDimension*const textureWidthPtr,
+    StreamingUnitTextureDimension*const textureHeightPtr,
     StackCpu*const stagingBufferMemoryMapCpuToGpuStackPtr,
     size_t*const imageSizeBytesPtr,
-    StackCpu*const stbAllocatorPtr,
-    const char*const texturePathRelative,
+    FILE*const streamingUnitFile,
+    VectorSafeRef<uint8_t> pixelBufferScratch,
     const VkFormat& format,
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
@@ -729,6 +733,7 @@ class VulkanPagedStackAllocator
 public:
     VulkanPagedStackAllocator()
     {
+        m_mutex = 0;
 #if NTF_DEBUG
         m_initialized = false;
 #endif//#if NTF_DEBUG
@@ -757,7 +762,8 @@ private:
     VectorSafe<VulkanMemoryHeap, 32> m_vulkanMemoryHeaps;
     VkDevice m_device;
     VkPhysicalDevice m_physicalDevice;
+    HANDLE m_mutex;
 };
 
-void STBAllocatorCreate();
-void STBAllocatorDestroy();
+void STBAllocatorCreate(StackCpu**const stbAllocatorPtrPtr);
+void STBAllocatorDestroy(StackCpu**const stbAllocatorPtrPtr);

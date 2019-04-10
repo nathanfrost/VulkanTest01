@@ -25,21 +25,25 @@ void __cdecl stb_nullFree(void* const block) {}
 FILE* s_winTimer;
 #endif//NTF_WIN_TIMER
 
-//BEG_#StbMemoryManagement
-void STBAllocatorCreate()
+//BEG_#StbMemoryManagement ///@todo: eliminate from Vulkan runtime; should exist only in cooker
+void STBAllocatorCreate(StackCpu**const stbAllocatorPtrPtr)
 {
-    g_stbAllocator = new StackCpu();
-    const size_t sizeBytes = 128 * 1024 * 1024;
-    g_stbAllocator->Initialize(reinterpret_cast<uint8_t*>(malloc(sizeBytes)), sizeBytes);
-}
-void STBAllocatorDestroy()
-{
-    free(g_stbAllocator->GetMemory());
-    g_stbAllocator->Destroy();
-    delete g_stbAllocator;
-}
-//END_#StbMemoryManagement
+    NTF_REF(stbAllocatorPtrPtr, stbAllocatorPtr);
 
+    stbAllocatorPtr = new StackCpu();
+    const size_t sizeBytes = 128 * 1024 * 1024;
+    stbAllocatorPtr->Initialize(reinterpret_cast<uint8_t*>(malloc(sizeBytes)), sizeBytes);
+}
+void STBAllocatorDestroy(StackCpu**const stbAllocatorPtrPtr)
+{
+    NTF_REF(stbAllocatorPtrPtr, stbAllocatorPtr);
+
+    free(stbAllocatorPtr->GetMemory());
+    stbAllocatorPtr->Destroy();
+    delete stbAllocatorPtr;
+    stbAllocatorPtr = nullptr;
+    //END_#StbMemoryManagement
+}
 //BEG_#AllocationCallbacks
 static VkAllocationCallbacks s_allocationCallbacks;
 VkAllocationCallbacks* GetVulkanAllocationCallbacks() { return nullptr;/* &s_allocationCallbacks;*/ }
@@ -155,20 +159,39 @@ static void VKAPI_CALL NTF_vkInternalFreeNotification(
 }
 //END_#AllocationCallbacks
 
+HANDLE MutexCreate()
+{
+    const HANDLE mutexHandle = CreateMutex(
+        NULL,              // default security attributes
+        FALSE,             // initially not owned
+        NULL);             // unnamed mutex
+    assert(mutexHandle);
+    return mutexHandle;
+}
+void MutexRelease(const HANDLE mutex)
+{
+    assert(mutex);
+    const BOOL releaseMutexResult = ReleaseMutex(mutex);
+    assert(releaseMutexResult == TRUE);
+}
 HANDLE ThreadSignalingEventCreate()
 {
-    return CreateEvent(
+    const HANDLE ret = CreateEvent(
         NULL,               // default security attributes
         FALSE,              // auto-reset; after signaling immediately set to nonsignaled
         FALSE,              // initial state is nonsignaled
         NULL                // no name -- if you have two events with the same name, the more recent one stomps the less recent one
     );
+    assert(ret);
+    return ret;
 }
 
-BOOL CloseHandleWindows(const HANDLE h)
+BOOL HandleCloseWindows(HANDLE*const h)
 {
-    const BOOL closeHandleResult = CloseHandle(h);
+    assert(h);
+    const BOOL closeHandleResult = CloseHandle(*h);
     assert(closeHandleResult);
+    *h = NULL;
     return closeHandleResult;
 }
 
@@ -177,7 +200,8 @@ void SignalSemaphoreWindows(const HANDLE wakeEventHandle)
     const BOOL setEventResult = SetEvent(wakeEventHandle);
     assert(setEventResult);
 }
-void WaitUntilThreadDoneWindows(const HANDLE doneEventHandle)
+//use for both semaphores and mutexes
+void WaitForSignalWindows(const HANDLE doneEventHandle)
 {
     const DWORD result = WaitForSingleObject(doneEventHandle, INFINITE);
     assert(result == WAIT_OBJECT_0);
@@ -214,7 +238,7 @@ void CommandBufferSecondaryThreadsCreateTest(
     ///@todo: CloseHandle() Shutdown
 }
 
-void StreamingUnit::Free(const VkDevice device)
+void StreamingUnitRuntime::Free(const VkDevice device)
 {
     vkDestroySampler(device, m_textureSampler, GetVulkanAllocationCallbacks());
 
@@ -236,6 +260,7 @@ void StreamingUnit::Free(const VkDevice device)
 }
 
 #define NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE (128 * 1024 * 1024)
+static VectorSafe<uint8_t, 8192 * 8192 * 4> pixelBufferScratch;
 DWORD WINAPI AssetLoadingThread(void* arg)
 {
     auto& threadArguments = *reinterpret_cast<AssetLoadingArguments*>(arg);
@@ -257,7 +282,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_REF(threadArguments.m_renderPass, renderPass);
     NTF_REF(threadArguments.m_swapChainExtent, swapChainExtent);
 
-    STBAllocatorCreate();
+    STBAllocatorCreate(&g_stbAllocator);
 
     StackNTF<VkDeviceSize> stagingBufferGpuStack;
     stagingBufferGpuStack.Allocate(NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
@@ -367,11 +392,24 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         CreateTextureSampler(&streamingUnit.m_textureSampler, device);
 
         VectorSafe<VkSemaphore, 1> transferFinishedSemaphores;
-        const size_t texturedGeometriesSize = streamingUnit.m_texturedGeometries.size();
-        for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometriesSize; ++texturedGeometryIndex)
+
+        ArraySafe<char,512> streamingUnitFilePathRelative;
+        streamingUnitFilePathRelative.Snprintf("%s\\%s.%s", 
+            CookedFileDirectoryGet(), threadArguments.m_streamingUnitFilenameNoExtension, StreamingUnitFilenameExtensionGet());
+        FILE* streamingUnitFile;
+
+        Fopen(&streamingUnitFile, streamingUnitFilePathRelative.begin(), "rb");
+
+        //BEG_GENERALIZE_READER_WRITER
+        StreamingUnitVersion version;
+        StreamingUnitTexturesNum texturesNum;
+        Fread(streamingUnitFile, &version, sizeof(version), 1);
+        Fread(streamingUnitFile, &texturesNum, sizeof(texturesNum), 1);
+        //END_GENERALIZE_READER_WRITER
+        for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturesNum; ++texturedGeometryIndex)
         {
+            StreamingUnitTextureDimension textureWidth, textureHeight;
             auto& texturedGeometry = streamingUnit.m_texturedGeometries[texturedGeometryIndex];
-            int textureWidth, textureHeight;
             size_t imageSizeBytes;
             VkDeviceSize alignment;
             const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
@@ -384,8 +422,8 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                     &textureHeight,
                     &stagingBufferMemoryMapCpuToGpu,
                     &imageSizeBytes,
-                    g_stbAllocator,
-                    streamingUnit.m_texturePaths[texturedGeometryIndex],
+                    streamingUnitFile,
+                    &pixelBufferScratch,
                     imageFormat,
                     VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
                     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
@@ -469,6 +507,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 device,
                 physicalDevice);
         }
+        Fclose(streamingUnitFile);
         if (!unifiedGraphicsAndTransferQueue)
         {
             transferFinishedSemaphores.Push(transferFinishedSemaphore);
@@ -520,7 +559,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     }
 
     //cleanup
-    STBAllocatorDestroy();
+    STBAllocatorDestroy(&g_stbAllocator);
 
     vkDestroyFence(device, transferQueueFinishedFence, GetVulkanAllocationCallbacks());
 
@@ -1075,8 +1114,7 @@ void ReadFile(char**const fileData, StackCpu*const allocatorPtr, size_t*const fi
     auto& fileSizeBytes = *fileSizeBytesPtr;
 
     FILE* f;
-    fopen_s(&f, filename, "rb");
-    assert(f);
+    Fopen(&f, filename, "rb");
 
     struct stat fileInfo;
     const int fileStatResult = stat(filename, &fileInfo);
@@ -1885,14 +1923,11 @@ void CreateUniformBuffer(
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
+    NTF_REF(uniformBufferCpuMemoryPtr, uniformBufferCpuMemory);
+    NTF_REF(uniformBufferGpuMemoryPtr, uniformBufferGpuMemory);
+
     assert(uniformBufferPtr);
     auto& uniformBuffer = *uniformBufferPtr;
-
-    assert(uniformBufferGpuMemoryPtr);
-    auto& uniformBufferGpuMemory = *uniformBufferGpuMemoryPtr;
-
-    assert(uniformBufferCpuMemoryPtr);
-    auto& uniformBufferCpuMemory = *uniformBufferCpuMemoryPtr;
 
     assert(allocatorPtr);
     auto& allocator = *allocatorPtr;
@@ -2381,12 +2416,12 @@ bool CreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VkImage*const imagePtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const alignmentPtr,
-    int*const textureWidthPtr,
-    int*const textureHeightPtr,
+    StreamingUnitTextureDimension*const textureWidthPtr,
+    StreamingUnitTextureDimension*const textureHeightPtr,
     StackCpu*const stagingBufferMemoryMapCpuToGpuStackPtr,
     size_t*const imageSizeBytesPtr,
-    StackCpu*const stbAllocatorPtr, 
-    const char*const texturePathRelative,
+    FILE*const streamingUnitFile,
+    VectorSafeRef<uint8_t> pixelBufferScratch,
     const VkFormat& format,
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
@@ -2405,19 +2440,18 @@ bool CreateImageAndCopyPixelsIfStagingBufferHasSpace(
     assert(textureHeightPtr);
     auto& textureHeight = *textureHeightPtr;
 
+    assert(streamingUnitFile);
     NTF_REF(stagingBufferMemoryMapCpuToGpuStackPtr, stagingBufferMemoryMapCpuToGpuStack);
     NTF_REF(imageSizeBytesPtr, imageSizeBytes);
 
-    assert(stbAllocatorPtr);
-    auto& stbAllocator = *stbAllocatorPtr;
-
-    assert(texturePathRelative);
-
-    int textureChannels;
-    assert(stbAllocator.GetFirstByteFree() == 0);//ensure we can Clear() the whole stack correctly in STBIImageFree() (eg there's nothing already allocated in the stack)
-    stbi_uc* pixels = stbi_load(texturePathRelative, &textureWidth, &textureHeight, &textureChannels, STBI_rgb_alpha);
-    assert(pixels);
-    imageSizeBytes = textureWidth * textureHeight * 4;
+    StreamingUnitTextureChannels textureChannels;
+    //BEG_GENERALIZE_READER_WRITER
+    Fread(streamingUnitFile, &textureWidth, sizeof(textureWidth), 1);
+    Fread(streamingUnitFile, &textureHeight, sizeof(textureHeight), 1);
+    Fread(streamingUnitFile, &textureChannels, sizeof(textureChannels), 1);
+    imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
+    pixelBufferScratch.MemcpyFromFread(streamingUnitFile, imageSizeBytes);
+    //END_GENERALIZE_READER_WRITER
 
     CreateAllocateBindImageIfAllocatorHasSpace(
         &image,
@@ -2437,10 +2471,9 @@ bool CreateImageAndCopyPixelsIfStagingBufferHasSpace(
     const bool stagingBufferHasSpace = 
         stagingBufferMemoryMapCpuToGpuStack.MemcpyIfPushAllocSucceeds(
             &stagingBufferSuballocatedFromStack, 
-            pixels, 
+            pixelBufferScratch.begin(), 
             Cast_VkDeviceSize_size_t(alignment), 
-            imageSizeBytes);
-    STBIImageFree(pixels, &stbAllocator);
+            pixelBufferScratch.SizeCurrentInBytes());
     return stagingBufferHasSpace;
 }
 void CreateTextureImage(
@@ -2713,10 +2746,9 @@ void DrawFrame(
 {
 #if NTF_WIN_TIMER
     WIN_TIMER_STOP(s_frameTimer);
-    const int maxLen = 256;
-    char buf[maxLen];
-    snprintf(&buf[0], maxLen, "s_frameTimer:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(s_frameTimer));
-    fwrite(&buf[0], sizeof(buf[0]), strlen(&buf[0]), s_winTimer);
+    ArraySafe<char, 256> string;
+    string.Snprintf("s_frameTimer:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(s_frameTimer));
+    string.Fwrite(s_winTimer, strlen(string.begin()));
     WIN_TIMER_START(s_frameTimer);
 #endif//#if NTF_WIN_TIMER
 
@@ -2805,8 +2837,7 @@ VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers)
     //END_#AllocationCallbacks
 
 #if NTF_WIN_TIMER
-    fopen_s(&s_winTimer, "WinTimer.txt", "w+");
-    assert(s_winTimer);
+    Fopen(&s_winTimer, "WinTimer.txt", "w+");
 #endif//NTF_WIN_TIMER
 
     if (s_enableValidationLayers && !CheckValidationLayerSupport(validationLayers))
@@ -3173,6 +3204,10 @@ void CreateImageViews(
 
 void VulkanPagedStackAllocator::Initialize(const VkDevice& device,const VkPhysicalDevice& physicalDevice)
 {
+    assert(m_mutex == NULL);
+    m_mutex = MutexCreate();
+    WaitForSignalWindows(m_mutex);
+
 #if NTF_DEBUG
     assert(!m_initialized);
     m_initialized = true;
@@ -3188,10 +3223,13 @@ void VulkanPagedStackAllocator::Initialize(const VkDevice& device,const VkPhysic
     {
         m_vulkanMemoryHeaps[memoryTypeIndex].Initialize(Cast_size_t_uint32_t(memoryTypeIndex), 128 * 1024 * 1024);
     }
+
+    MutexRelease(m_mutex);
 }
 
 void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
 {
+    WaitForSignalWindows(m_mutex);
 #if NTF_DEBUG
     assert(m_initialized);
     m_initialized = false;
@@ -3201,6 +3239,9 @@ void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
     {
         heap.Destroy(m_device);
     }
+
+    MutexRelease(m_mutex);
+    HandleCloseWindows(&m_mutex);
 }
 
 ///@todo: unit test
@@ -3214,6 +3255,7 @@ bool VulkanPagedStackAllocator::PushAlloc(
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
+    WaitForSignalWindows(m_mutex);
     assert(m_initialized);
 
     assert(memoryOffsetPtr);
@@ -3237,6 +3279,8 @@ bool VulkanPagedStackAllocator::PushAlloc(
         device, 
         physicalDevice);
     assert(allocResult);
+
+    MutexRelease(m_mutex);
     return allocResult;
 }
 
@@ -3377,8 +3421,16 @@ bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMaxBytes, const uin
     allocInfo.memoryTypeIndex = memoryTypeIndex;
     allocInfo.pNext = nullptr;
 
-    const VkResult allocateMemoryResult = vkAllocateMemory(device, &allocInfo, GetVulkanAllocationCallbacks(), &m_memoryHandle);
-    printf("vkAllocateMemory(memoryTypeIndex=%u, memoryMaxBytes=%u)=%x; m_memoryHandle=%p\n", memoryTypeIndex, Cast_VkDeviceSize_uint32_t(memoryMaxBytes), allocateMemoryResult, (void*)m_memoryHandle);
+    //on a Windows 10 laptop (Intel UHD 620 with unified memory -- that is, the same pool for both CPU and GPU memory) for the x86 non-Debug build, I sometimes get VK_ERROR_OUT_OF_DEVICE_MEMORY 1-5 times when requesting (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) memory.  Changing timing with Sleep(10) seems to fix it, as does this polling code.  All calls to vkAllocateMemory are mutexed, and allocations seem to never occur at a very similar timing.  My theory is that Windows is too fragmented to succeed on the allocation, and then quickly defragments itself and then succeeds
+    VkResult allocateMemoryResult;
+    do
+    {
+        allocateMemoryResult = vkAllocateMemory(device, &allocInfo, GetVulkanAllocationCallbacks(), &m_memoryHandle);
+        LARGE_INTEGER perfCount;
+        QueryPerformanceCounter(&perfCount);
+        printf("vkAllocateMemory(memoryTypeIndex=%u, memoryMaxBytes=%u)=%i; m_memoryHandle=%p at time %llu\n", memoryTypeIndex, 
+            Cast_VkDeviceSize_uint32_t(memoryMaxBytes), allocateMemoryResult, (void*)m_memoryHandle, perfCount.QuadPart);
+    } while(allocateMemoryResult != VK_SUCCESS);
     NTF_VK_ASSERT_SUCCESS(allocateMemoryResult);
     return NTF_VK_SUCCESS(allocateMemoryResult);
 }
