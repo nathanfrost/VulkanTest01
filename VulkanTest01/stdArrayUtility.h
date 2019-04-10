@@ -1033,31 +1033,6 @@ public:
         return VectorSafeRef(this);
     }
 
-    ///@todo NTF: eliminate code duplication with ArraySafe
-    ///@todo: unit test
-    void Snprintf(const char*const formatString, ...)
-    {
-        NTF_STATIC_ASSERT(sizeof(T) == sizeof(char));//this function is intended to be used only when *this holds ASCII characters
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(formatString);
-
-        const char bellAsciiKeyCode = 7;
-        char*const lastElement = &m_array[GetLastValidIndex()];
-        *lastElement = bellAsciiKeyCode;//no "bell key" allowed -- use it as a sentinel to guard against the possibility of vsnprintf truncation
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-        assert(strlen(formatString) > 0);
-
-        va_list args;
-        va_start(args, formatString);
-        vsnprintf(&m_array[0], kElementsMax, formatString, args);
-        va_end(args);
-
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(m_array);
-        assert(*lastElement == bellAsciiKeyCode);//vsnprintf may have had to truncate its result to stay within the buffer
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-    }
-
     template<size_t kElementsMaxOther>
     void Copy(const VectorSafe<T, kElementsMaxOther>& vectorSafeOther)
     {
