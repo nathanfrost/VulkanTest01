@@ -525,7 +525,7 @@ private:
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
     
     //#SecondaryCommandBufferMultithreadingTest: see m_commandBufferSecondaryThreadsTest definition for more comments
-    //VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondaryTest;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kSizeMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kSizeMax>& vectorSafe) -- not sure why
+    //VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondaryTest;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kElementsMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kElementsMax>& vectorSafe) -- not sure why
     
     VkCommandBuffer m_commandBufferTransfer;//automatically freed when VkCommandPool is destroyed
     VkCommandBuffer m_commandBufferTransitionImage;//automatically freed when VkCommandPool is destroyed

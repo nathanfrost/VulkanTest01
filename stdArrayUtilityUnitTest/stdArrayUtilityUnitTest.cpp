@@ -87,8 +87,8 @@ static void ConstMethodTesting(const VectorSafe<T,kMaxSize>& vectorSafe, const i
 
 int main()
 {
-    enum { kSizeMax = 16 };
-    VectorSafe<int,kSizeMax> vectorSafe;
+    enum { kElementsMax = 16 };
+    VectorSafe<int,kElementsMax> vectorSafe;
     
     const size_t actualSize = 12;
     vectorSafe.size(actualSize);
@@ -96,7 +96,7 @@ int main()
     {
         ExitOnFail(__LINE__);
     }
-    if (vectorSafe.SizeMaxInBytes() != kSizeMax*sizeof(int))
+    if (vectorSafe.SizeMaxInBytes() != kElementsMax*sizeof(int))
     {
         ExitOnFail(__LINE__);
     }
@@ -172,7 +172,7 @@ int main()
     {
         ExitOnFail(__LINE__);
     }
-    VectorSafe<int, kSizeMax> vectorSafeEmpty;
+    VectorSafe<int, kElementsMax> vectorSafeEmpty;
     vectorSafeEmpty.size(0);
     if (!vectorSafeEmpty.empty())
     {
@@ -192,7 +192,7 @@ int main()
         ExitOnFail(__LINE__);
     }
 
-    VectorSafe<int, kSizeMax> vectorSafeTwo(vectorSafe.size());
+    VectorSafe<int, kElementsMax> vectorSafeTwo(vectorSafe.size());
     for (size_t i = 0; i < vectorSafe.size(); ++i)
     {
         vectorSafeTwo[i] = vectorSafe[i];
@@ -220,14 +220,14 @@ int main()
         ExitOnFail(__LINE__);
     }
 
-    VectorSafe<int, kSizeMax> vectorSafeCopy;
+    VectorSafe<int, kElementsMax> vectorSafeCopy;
     vectorSafeCopy.Copy(vectorSafe);
     if (vectorSafeCopy != vectorSafe)
     {
         ExitOnFail(__LINE__);
     }
 
-    VectorSafe<int, kSizeMax> vectorSafeInitializerList({0, 1, 2 });
+    VectorSafe<int, kElementsMax> vectorSafeInitializerList({0, 1, 2 });
     for (int i = 0; i < 3; ++i)
     {
         if (vectorSafeInitializerList[i] != i)
@@ -237,7 +237,7 @@ int main()
     }
 
     const int kDuplicateTestMaxNum = 7;
-    VectorSafe<int, kSizeMax> vectorSafeDuplicateTest({0,4,3,1,1,1,2,5,6,6,kDuplicateTestMaxNum,5,5});
+    VectorSafe<int, kElementsMax> vectorSafeDuplicateTest({0,4,3,1,1,1,2,5,6,6,kDuplicateTestMaxNum,5,5});
     SortAndRemoveDuplicatesFromVectorSafe(&vectorSafeDuplicateTest);
     if (vectorSafeDuplicateTest.size() != kDuplicateTestMaxNum + 1)
     {

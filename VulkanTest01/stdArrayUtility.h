@@ -55,10 +55,10 @@ inline void Fread(FILE*const file, void*const buf, const size_t sizeOfElement, c
     assert(freadRet == elementsNum);
 }
 
-template<class T, size_t kSize>
+template<class T, size_t kElementsMax>
 class VectorSafe;
 
-template<class T, size_t kSize>
+template<class T, size_t kElementsNum>
 class ArraySafe;
 
 template<class T>
@@ -124,8 +124,8 @@ public:
     //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     //    AssertValid();
     //}
-    template<size_t kSizeMax>
-    VectorSafeRef(VectorSafe<T, kSizeMax>*const vectorSafe)
+    template<size_t kElementsMax>
+    VectorSafeRef(VectorSafe<T, kElementsMax>*const vectorSafe)
     {
         assert(vectorSafe);
 
@@ -415,8 +415,8 @@ public:
     //    AssertValid();
     //}
 
-    template<size_t kSizeMax>
-    ArraySafeRef(VectorSafe<T, kSizeMax>*const vectorSafe)
+    template<size_t kElementsMax>
+    ArraySafeRef(VectorSafe<T, kElementsMax>*const vectorSafe)
     {
         assert(vectorSafe);
         SetSizeMax(vectorSafe->size());
@@ -429,8 +429,8 @@ public:
         SetArray(vectorSafe->begin());
     }
 
-    template<size_t kSizeMax>
-    ArraySafeRef(ArraySafe<T, kSizeMax>*const arraySafe)
+    template<size_t kElementsMax>
+    ArraySafeRef(ArraySafe<T, kElementsMax>*const arraySafe)
     {
         assert(arraySafe);
         SetSizeMax(arraySafe->size());
@@ -678,8 +678,8 @@ public:
         SetSizeMax(sizeMax);
         AssertValid();
     }
-    template<size_t kSizeMax>
-    ConstVectorSafeRef(const VectorSafe<T, kSizeMax>& arraySafe)
+    template<size_t kElementsMax>
+    ConstVectorSafeRef(const VectorSafe<T, kElementsMax>& arraySafe)
     {
         SetArray(arraySafe.begin());
         SetSizeMax(arraySafe.size());
@@ -775,11 +775,11 @@ public:
     }
 };
 
-template<class T, size_t kSize>///<@todo: rename kElementsNum
+template<class T, size_t kElementsNum>
 class ArraySafe
 {
 public:
-    typedef ArraySafe<T, kSize> ThisDataType;
+    typedef ArraySafe<T, kElementsNum> ThisDataType;
     typedef T* iterator;
     typedef const T* const_iterator;
     typedef T& reference;
@@ -787,7 +787,7 @@ public:
     typedef size_t size_type;
 
 private:
-    T m_array[kSize];
+    T m_array[kElementsNum];
 public:
     ArraySafe()
     {
@@ -797,7 +797,7 @@ public:
     {
         assert(f);
         assert(elementsNum > 0);
-        assert(elementsNum <= kSize);
+        assert(elementsNum <= kElementsNum);
         Fread(f, &m_array[0], sizeof(T), elementsNum);
     }
     ArraySafe(const std::initializer_list<T>& initializerList)
@@ -808,14 +808,14 @@ public:
     {
         MemcpyFromStart(r.begin(), r.size()*sizeof(T));
     }
-    template<class T, size_t kSize>
+    template<class T, size_t kElementsNum>
     operator ArraySafeRef<T>()
     {
         return ArraySafeRef(this);
     }
 
-    template<size_t kSizeOther>
-    void Copy(const ArraySafe<T, kSizeOther>& arraySafeOther)
+    template<size_t kElementsNumOther>
+    void Copy(const ArraySafe<T, kElementsNumOther>& arraySafeOther)
     {
         MemcpyFromStart(arraySafeOther.GetAddressOfUnderlyingArray(), arraySafeOther.SizeInBytes());
     }
@@ -824,7 +824,7 @@ public:
     {
         assert(f);
         assert(elementsNum > 0);
-        assert(elementsNum <= kSize);
+        assert(elementsNum <= kElementsNum);
         ::Fwrite(f, &m_array[0], sizeof(m_array[0]), elementsNum);
     }
 
@@ -844,7 +844,7 @@ public:
 
         va_list args;
         va_start(args, formatString);
-        vsnprintf(&m_array[0], kSize, formatString, args);
+        vsnprintf(&m_array[0], kElementsNum, formatString, args);
         va_end(args);
 
 #if NTF_ARRAY_SAFE_DEBUG
@@ -866,7 +866,7 @@ public:
 
     size_type size() const noexcept
     {
-        return kSize;
+        return kElementsNum;
     }
     size_t SizeInBytes() const
     {
@@ -890,7 +890,7 @@ public:
     }
     const_reference GetChecked(const size_type pos) const
     {
-        assert(pos < kSize);
+        assert(pos < kElementsNum);
         return m_array[pos];
     }
     reference GetChecked(const size_type pos)
@@ -899,7 +899,7 @@ public:
     }
     size_t GetLastValidIndex() const
     {
-        return kSize - 1;
+        return kElementsNum - 1;
     }
     size_t GetOneAfterLastValidIndex() const
     {
@@ -983,11 +983,11 @@ public:
     //iterator rend() and crend() not implemented
 };
 
-template<class T, size_t kSizeMax>
+template<class T, size_t kElementsMax>
 class VectorSafe///@todo: rename VectorSafe
 {
 public:
-    typedef VectorSafe<T, kSizeMax> ThisDataType;
+    typedef VectorSafe<T, kElementsMax> ThisDataType;
     typedef T* iterator;
     typedef const T* const_iterator;
     typedef T& reference;
@@ -995,7 +995,7 @@ public:
     typedef size_t size_type;
 
 private:
-    T m_array[kSizeMax];
+    T m_array[kElementsMax];
     size_t m_sizeCurrent;
 
     friend class VectorSafeRef<T>;
@@ -1004,9 +1004,9 @@ private:
     void AssertValid() const
     {
 #if NTF_ARRAY_SAFE_DEBUG
-        assert(m_sizeCurrent <= kSizeMax);
+        assert(m_sizeCurrent <= kElementsMax);
 
-        static_assert(kSizeMax > 0, "VectorSafe<T>::kSizeMax must be greater than 0");
+        static_assert(kElementsMax > 0, "VectorSafe<T>::kElementsMax must be greater than 0");
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
@@ -1027,7 +1027,7 @@ public:
     {
         MemcpyFromStart(r.begin(), r.size()*sizeof(T));
     }
-    template<class T, size_t kSizeMax>
+    template<class T, size_t kElementsMax>
     operator VectorSafeRef<T>()
     {
         return VectorSafeRef(this);
@@ -1049,7 +1049,7 @@ public:
 
         va_list args;
         va_start(args, formatString);
-        vsnprintf(&m_array[0], kSize, formatString, args);
+        vsnprintf(&m_array[0], kElementsMax, formatString, args);
         va_end(args);
 
 #if NTF_ARRAY_SAFE_DEBUG
@@ -1058,8 +1058,8 @@ public:
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
-    template<size_t kSizeMaxOther>
-    void Copy(const VectorSafe<T, kSizeMaxOther>& vectorSafeOther)
+    template<size_t kElementsMaxOther>
+    void Copy(const VectorSafe<T, kElementsMaxOther>& vectorSafeOther)
     {
         MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
     }
@@ -1110,7 +1110,7 @@ public:
     }
     size_t SizeMax() const
     {
-        return kSizeMax;
+        return kElementsMax;
     }
     size_t SizeMaxInBytes() const
     {
@@ -1143,7 +1143,7 @@ public:
     {
         AssertValid();
         assert(pos < m_sizeCurrent);
-        assert(pos < kSizeMax);
+        assert(pos < kElementsMax);
         return m_array[pos];
     }
     reference GetChecked(const size_type pos)

@@ -90,7 +90,7 @@ void StreamingUnitCooker::Cook()
         rootDirectoryWithTrailingBackslash + StreamingUnitCookerString(CookedFileDirectoryGet()) + StreamingUnitCookerString("\\");
     FILE* f;
     StreamingUnitCookerString filePathOutput = cookedFileDirectoryWithTrailingBackslash + m_fileNameOutput;
-    Fopen(&f, filePathOutput.c_str(), "wb");
+    Fopen(&f, filePathOutput.c_str(), "wb");///<@todo: make directory if necessary
 
     //BEG_GENERALIZE_READER_WRITER
     Fwrite(f, &version, sizeof(version), 1);
