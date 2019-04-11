@@ -81,15 +81,15 @@ private:
         m_arraySet = true;
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
-    void SetSizeCurrent(const size_t sizeCurrent)
+    void SetElementsNumCurrent(const size_t elementsNumCurrent)
     {
-        assert(m_sizeCurrent);
-        *m_sizeCurrent = sizeCurrent;
+        assert(m_elementsNumCurrent);
+        *m_elementsNumCurrent = elementsNumCurrent;
     }
-    void SetSizeCurrentPtr(size_t* const sizeCurrentPtr)
+    void SetElementsNumCurrentPtr(size_t* const elementsNumCurrentPtr)
     {
-        assert(sizeCurrentPtr);
-        m_sizeCurrent = sizeCurrentPtr;
+        assert(elementsNumCurrentPtr);
+        m_elementsNumCurrent = elementsNumCurrentPtr;
     }
     void SetSizeMax(const size_t sizeMax)
     {
@@ -101,7 +101,7 @@ private:
 
     ///@todo: reduce code duplication with VectorSafe
     T* m_array;
-    size_t* m_sizeCurrent;///<@todo: rename m_elementsNumCurrent for clarity; also associated functions
+    size_t* m_elementsNumCurrent;
 #if NTF_ARRAY_SAFE_DEBUG
     size_t m_sizeMax;
     bool m_arraySet;
@@ -112,7 +112,7 @@ public:
 //    VectorSafeRef()
 //    {
 //#if NTF_ARRAY_SAFE_DEBUG
-//        m_arraySet = m_sizeCurrentSet = false;
+//        m_arraySet = m_elementsNumCurrentSet = false;
 //        m_sizeMax = 0;
 //#endif//#if NTF_ARRAY_SAFE_DEBUG
 //    }
@@ -129,7 +129,7 @@ public:
     {
         assert(vectorSafe);
 
-        SetSizeCurrentPtr(&vectorSafe->m_sizeCurrent);
+        SetElementsNumCurrentPtr(&vectorSafe->m_elementsNumCurrent);
         SetSizeMax(vectorSafe->SizeMax());
         SetArray(vectorSafe->begin());
     }
@@ -153,7 +153,7 @@ public:
     void Reset()
     {
         m_array = nullptr;
-        m_sizeCurrent = 0;
+        m_elementsNumCurrent = 0;
 
 #if NTF_ARRAY_SAFE_DEBUG
         m_arraySet = false;
@@ -161,7 +161,7 @@ public:
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
-    ///@todo: AssertCurrentSufficient() //m_sizeMax - m_sizeCurrent >= elementsNum
+    ///@todo: AssertCurrentSufficient() //m_sizeMax - m_elementsNumCurrent >= elementsNum
     void AssertSufficient(const size_t elementsNum) const
     {
 #if NTF_ARRAY_SAFE_DEBUG
@@ -174,8 +174,8 @@ public:
     {
 #if NTF_ARRAY_SAFE_DEBUG
         assert(m_arraySet);
-        assert(m_sizeCurrent);
-        assert(*m_sizeCurrent <= m_sizeMax);       
+        assert(m_elementsNumCurrent);
+        assert(*m_elementsNumCurrent <= m_sizeMax);       
         assert(m_sizeMax > 0);
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
@@ -191,7 +191,7 @@ public:
     {
         AssertValid();
         assert(f);
-        ::Fwrite(f, &m_array[0], sizeof(m_array[0]), *m_sizeCurrent);
+        ::Fwrite(f, &m_array[0], sizeof(m_array[0]), *m_elementsNumCurrent);
     }
 
     void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
@@ -206,7 +206,7 @@ public:
         assert(inputBytesNum % sizeof(T) == 0);
 
         memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
-        SetSizeCurrent(inputBytesNum / sizeof(T));
+        SetElementsNumCurrent(inputBytesNum / sizeof(T));
         AssertValid();
     }
     ///@todo: unit tests
@@ -219,30 +219,30 @@ public:
         assert(elementsNum <= m_sizeMax);
 #endif//#if NTF_ARRAY_SAFE_DEBUG
         Fread(f, &m_array[0], sizeof(T), elementsNum);
-        SetSizeCurrent(elementsNum);
+        SetElementsNumCurrent(elementsNum);
     }
 
     size_type size() const noexcept
     {
         AssertValid();
-        return *m_sizeCurrent;
+        return *m_elementsNumCurrent;
     }
     void size(const size_t size)
     {
-        SetSizeCurrent(size);
+        SetElementsNumCurrent(size);
         AssertValid();
     }
     ///@todo: unit tests
     void sizeIncrement()
     {
         AssertValid();
-        ++(*m_sizeCurrent);
+        ++(*m_elementsNumCurrent);
         AssertValid();
     }
     void sizeDecrement()
     {
         AssertValid();
-        --(*m_sizeCurrent);
+        --(*m_elementsNumCurrent);
         AssertValid();
     }
     size_t SizeCurrentInBytes() const
@@ -257,7 +257,7 @@ public:
     void Push(const T& item)
     {
         AssertValid();
-        const size_t indexForItem = *m_sizeCurrent;
+        const size_t indexForItem = *m_elementsNumCurrent;
         sizeIncrement();
         m_array[indexForItem] = item;
     }
@@ -282,7 +282,7 @@ public:
     const_reference GetChecked(const size_type pos) const
     {
         AssertValid();
-        assert(pos < *m_sizeCurrent);
+        assert(pos < *m_elementsNumCurrent);
         return m_array[pos];
     }
     reference GetChecked(const size_type pos)
@@ -292,7 +292,7 @@ public:
     size_t GetLastValidIndex() const
     {
         AssertValid();
-        return *m_sizeCurrent - 1;
+        return *m_elementsNumCurrent - 1;
     }
     size_t GetOneAfterLastValidIndex() const
     {
@@ -378,7 +378,7 @@ public:
     bool empty() const noexcept
     {
         AssertValid();
-        return *m_sizeCurrent == 0;
+        return *m_elementsNumCurrent == 0;
     }
 };
 
@@ -496,7 +496,7 @@ public:
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
-    ///@todo: AssertCurrentSufficient() //m_sizeMax - m_sizeCurrent >= elementsNum
+    ///@todo: AssertCurrentSufficient() //m_sizeMax - m_elementsNumCurrent >= elementsNum
     void AssertSufficient(const size_t elementsNum) const
     {
 #if NTF_ARRAY_SAFE_DEBUG
@@ -1004,7 +1004,7 @@ public:
 
 private:
     T m_array[kElementsMax];
-    size_t m_sizeCurrent;
+    size_t m_elementsNumCurrent;
 
     friend class VectorSafeRef<T>;
     friend class ConstVectorSafeRef<T>;
@@ -1012,7 +1012,7 @@ private:
     void AssertValid() const
     {
 #if NTF_ARRAY_SAFE_DEBUG
-        assert(m_sizeCurrent <= kElementsMax);
+        assert(m_elementsNumCurrent <= kElementsMax);
 
         static_assert(kElementsMax > 0, "VectorSafe<T>::kElementsMax must be greater than 0");
 #endif//#if NTF_ARRAY_SAFE_DEBUG
@@ -1062,29 +1062,29 @@ public:
     size_type size() const noexcept
     {
         AssertValid();
-        return m_sizeCurrent;
+        return m_elementsNumCurrent;
     }
     void size(const size_t size)
     {
-        m_sizeCurrent = size;
+        m_elementsNumCurrent = size;
         AssertValid();
     }
     size_t SizeCurrentInBytes()
     {
         AssertValid();
-        return m_sizeCurrent*sizeof(T);
+        return m_elementsNumCurrent*sizeof(T);
     }
     ///@todo: unit tests
     void sizeIncrement()
     {
         AssertValid();
-        ++m_sizeCurrent;
+        ++m_elementsNumCurrent;
         AssertValid();
     }
     void sizeDecrement()
     {
         AssertValid();
-        --m_sizeCurrent;
+        --m_elementsNumCurrent;
         AssertValid();
     }
     size_t SizeCurrentInBytes() const
@@ -1101,7 +1101,7 @@ public:
     }
     void Push(const T& item)
     {
-        size_t indexForItem = m_sizeCurrent;
+        size_t indexForItem = m_elementsNumCurrent;
         sizeIncrement();
         operator[](indexForItem) = item;
     }
@@ -1125,7 +1125,7 @@ public:
     const_reference GetChecked(const size_type pos) const
     {
         AssertValid();
-        assert(pos < m_sizeCurrent);
+        assert(pos < m_elementsNumCurrent);
         assert(pos < kElementsMax);
         return m_array[pos];
     }
@@ -1136,7 +1136,7 @@ public:
     size_t GetLastValidIndex() const
     {
         AssertValid();
-        return m_sizeCurrent - 1;
+        return m_elementsNumCurrent - 1;
     }
     size_t GetOneAfterLastValidIndex() const
     {
@@ -1223,7 +1223,7 @@ public:
     bool empty() const noexcept 
     {
         AssertValid();
-        return m_sizeCurrent == 0;
+        return m_elementsNumCurrent == 0;
     }
 };
 
