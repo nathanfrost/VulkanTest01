@@ -1,5 +1,4 @@
 #include"StreamingUnit.h"
-#include"string.h"
 
 const char* StreamingUnitFilenameExtensionGet()
 {

@@ -101,7 +101,7 @@ private:
 
     ///@todo: reduce code duplication with VectorSafe
     T* m_array;
-    size_t* m_sizeCurrent;
+    size_t* m_sizeCurrent;///<@todo: rename m_elementsNumCurrent for clarity; also associated functions
 #if NTF_ARRAY_SAFE_DEBUG
     size_t m_sizeMax;
     bool m_arraySet;
@@ -185,6 +185,14 @@ public:
     //{
     //    MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
     //}
+
+    ///@todo: totally untested; also unit tests
+    void Fwrite(FILE*const f)
+    {
+        AssertValid();
+        assert(f);
+        ::Fwrite(f, &m_array[0], sizeof(m_array[0]), *m_sizeCurrent);
+    }
 
     void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
     {

@@ -2445,13 +2445,8 @@ bool CreateImageAndCopyPixelsIfStagingBufferHasSpace(
     NTF_REF(imageSizeBytesPtr, imageSizeBytes);
 
     StreamingUnitTextureChannels textureChannels;
-    //BEG_GENERALIZE_READER_WRITER
-    Fread(streamingUnitFile, &textureWidth, sizeof(textureWidth), 1);
-    Fread(streamingUnitFile, &textureHeight, sizeof(textureHeight), 1);
-    Fread(streamingUnitFile, &textureChannels, sizeof(textureChannels), 1);
+    TextureSerialize<SerializerRead>(streamingUnitFile, &textureWidth, &textureHeight, &textureChannels, pixelBufferScratch, nullptr);
     imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
-    pixelBufferScratch.MemcpyFromFread(streamingUnitFile, imageSizeBytes);
-    //END_GENERALIZE_READER_WRITER
 
     CreateAllocateBindImageIfAllocatorHasSpace(
         &image,

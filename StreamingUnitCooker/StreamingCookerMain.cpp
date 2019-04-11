@@ -105,22 +105,16 @@ void StreamingUnitCooker::Cook()
         int textureWidth, textureHeight, textureChannels;
         
         assert(g_stbAllocator->GetFirstByteFree() == 0);//ensure we can Clear() the whole stack correctly in STBIImageFree() (eg there's nothing already allocated in the stack)
-        stbi_uc* pixels = stbi_load(texturePath.c_str(), &textureWidth, &textureHeight, &textureChannels, STBI_rgb_alpha);
         NTF_STATIC_ASSERT(sizeof(stbi_uc) == sizeof(StreamingUnitByte));
-         assert(pixels);
+        StreamingUnitByte* pixels = stbi_load(texturePath.c_str(), &textureWidth, &textureHeight, &textureChannels, STBI_rgb_alpha);
+        assert(pixels);
         textureChannels = 4;///<this is true because we passed STBI_rgb_alpha; stbi_load() reports the number of textures actually present even as it respects this flag
 
-        const StreamingUnitTextureDimension textureWidthCook = CastWithAssert<int,StreamingUnitTextureDimension>(textureWidth);
-        const StreamingUnitTextureDimension textureHeightCook = CastWithAssert<int, StreamingUnitTextureDimension>(textureHeight);
-        const StreamingUnitTextureChannels textureChannelsCook = CastWithAssert<int, StreamingUnitTextureChannels>(textureChannels);
+        StreamingUnitTextureDimension textureWidthCook = CastWithAssert<int,StreamingUnitTextureDimension>(textureWidth);
+        StreamingUnitTextureDimension textureHeightCook = CastWithAssert<int, StreamingUnitTextureDimension>(textureHeight);
+        StreamingUnitTextureChannels textureChannelsCook = CastWithAssert<int, StreamingUnitTextureChannels>(textureChannels);
 
-        //BEG_GENERALIZE_READER_WRITER
-        Fwrite(f, &textureWidthCook, sizeof(textureWidthCook), 1);
-        Fwrite(f, &textureHeightCook, sizeof(textureHeightCook), 1);
-        Fwrite(f, &textureChannelsCook, sizeof(textureChannelsCook), 1);
-        Fwrite(f, pixels, sizeof(*pixels), ImageSizeBytesCalculate(textureWidthCook, textureHeightCook, textureChannelsCook));
-        //END_GENERALIZE_READER_WRITER
-
+        TextureSerialize<SerializerWrite>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook, VectorSafeRef<StreamingUnitByte>(), pixels);
         g_stbAllocator->Clear();
     }
 
