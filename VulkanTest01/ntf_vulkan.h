@@ -24,7 +24,6 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/hash.hpp>
 
 #include"stdArrayUtility.h"
 
@@ -161,47 +160,6 @@ VkResult CreateDebugReportCallbackEXT(
 void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator);
 void BeginCommands(const VkCommandBuffer& commandBuffer, const VkDevice& device);
 
-struct Vertex
-{
-    glm::vec3 pos;
-    glm::vec3 color;
-    glm::vec2 texCoord;
-
-    static VkVertexInputBindingDescription GetBindingDescription();
-    static void GetAttributeDescriptions(VectorSafeRef<VkVertexInputAttributeDescription> attributeDescriptions);
-
-    bool operator==(const Vertex& other) const;
-};
-
-struct TexturedGeometry
-{
-    std::vector<Vertex> vertices;///<@todo: #StreamingMemory: eliminate std::vector
-    std::vector<uint32_t> indices;///<@todo: #StreamingMemory: eliminate std::vector
-    uint32_t indicesSize;
-
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
-    VkBuffer indexBuffer;
-    VkDeviceMemory indexBufferMemory;
-    VkImage textureImage;
-    VkDeviceMemory textureBufferMemory;
-
-    bool Valid() const
-    {
-        return  indices.size() == indicesSize &&
-                indicesSize > 0 &&
-                vertices.size() > 0;
-    }
-};
-
-namespace std
-{
-    template<> struct hash<Vertex>
-    {
-        size_t operator()(Vertex const& vertex) const;
-    };
-}
-
 struct UniformBufferObject
 {
     glm::mat4 modelToClip;
@@ -226,8 +184,6 @@ public:
         1. Make StreamingUnitRuntime be entirely allocated from a StackNTF by methods like AddTexturePaths(const char*const* texturePaths, const size_t texturePathsNum) so that it can contain a variable amount of everything up to the stack limit.  Use ArraySafe<>'s to index each container subset within the bytestream
         2. Pull texture and model loading code into cooking module that accepts StreamingUnitOld ("StreamingUnitTemplate") and spits out StreamingUnitNew, which is still allocated from a StackNTF and uses ArraySafe<>'s but contains the ready-to-pass-to-Vulkan model and texture data as well as the other variables
     */
-    const char*const m_modelPaths[TODO_REFACTOR_NUM] = { "models/skull.obj", "models/Banana.obj" /*"models/Orange.obj"*/, /*"models/Container_OBJ.obj",*/ /*"models/apple textured obj.obj"*//*"models/cat.obj"*//*,"models/chalet.obj"*/ };//#StreamingMemory
-    const float m_uniformScales[TODO_REFACTOR_NUM] = { .05f, .005f, /*0.5f,*//*,.0025f*//*.01f,*/ /*1.f*/ };//#StreamingMemory
 
     VkDescriptorSetLayout m_descriptorSetLayout;
     VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed   
@@ -504,8 +460,6 @@ void CreateDescriptorSet(
     const VkSampler textureSampler,
     const VkDevice& device);
 
-void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*const indicesPtr, const char*const modelPath, const float uniformScale);
-
 void CopyBufferToGpuPrepare(
     VulkanPagedStackAllocator*const deviceLocalMemoryPtr,
     VkBuffer*const gpuBufferPtr,
@@ -563,7 +517,7 @@ bool HasStencilComponent(VkFormat format);
             the transitions and copy in the CreateTextureImage function. Try to experiment with this by creating a
             setupCommandBuffer that the helper functions record commands into, and add a flushSetupCommands to
             execute the commands that have been recorded so far.*/
-bool CreateImageAndCopyPixelsIfStagingBufferHasSpace(
+bool ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VkImage*const imagePtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const alignmentPtr,

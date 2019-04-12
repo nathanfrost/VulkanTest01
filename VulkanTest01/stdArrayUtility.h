@@ -410,7 +410,7 @@ private:
     ///@todo: reduce code duplication with VectorSafe
     T* m_array;
 #if NTF_ARRAY_SAFE_DEBUG
-    size_t m_sizeMax;
+    size_t m_sizeMax;///<@todo: rename m_elementsNumMax for clarity
 #endif//#if NTF_ARRAY_SAFE_DEBUG
 
 public:
@@ -548,6 +548,16 @@ public:
         assert(inputBytesNum % sizeof(T) == 0);
 
         memcpy(&GetAddressOfUnderlyingArray()[index], input, inputBytesNum);
+    }
+
+    void Fwrite(FILE*const f, const size_t elementsNum)
+    {
+        assert(f);
+        assert(elementsNum > 0);
+#if NTF_ARRAY_SAFE_DEBUG
+        assert(elementsNum <= m_sizeMax);
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+        ::Fwrite(f, &m_array[0], sizeof(m_array[0]), elementsNum);
     }
 
 #if NTF_ARRAY_SAFE_DEBUG

@@ -1,6 +1,10 @@
 ﻿#include"ntf_vulkan.h"
 #include"ntf_vulkan_utility.h"
 
+///<@todo: eliminate this memcpy by reading directly into the suballocation
+ArraySafe<Vertex, 65536> g_verticesScratchHack;
+ArraySafe<IndexBufferValue, 65536*8> g_indicesScratchHack;
+
 #define STB_IMAGE_IMPLEMENTATION
 //BEG_#StbMemoryManagement
 StackCpu* g_stbAllocator;
@@ -17,9 +21,6 @@ void* __cdecl stb_assertRealloc(void*  _Block, size_t _Size) { assert(false); re
 void __cdecl stb_nullFree(void* const block) {}
 #include"stb_image.h"
 //END_#StbMemoryManagement
-
-#define TINYOBJLOADER_IMPLEMENTATION
-#include"tiny_obj_loader.h"
 
 #if NTF_WIN_TIMER
 FILE* s_winTimer;
@@ -402,19 +403,20 @@ DWORD WINAPI AssetLoadingThread(void* arg)
 
         //BEG_GENERALIZE_READER_WRITER
         StreamingUnitVersion version;
-        StreamingUnitTexturesNum texturesNum;
+        StreamingUnitTexturedGeometryNum texturedGeometryNum;
         Fread(streamingUnitFile, &version, sizeof(version), 1);
-        Fread(streamingUnitFile, &texturesNum, sizeof(texturesNum), 1);
+        Fread(streamingUnitFile, &texturedGeometryNum, sizeof(texturedGeometryNum), 1);
         //END_GENERALIZE_READER_WRITER
-        for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturesNum; ++texturedGeometryIndex)
+        for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometryNum; ++texturedGeometryIndex)
         {
+            //load texture
             StreamingUnitTextureDimension textureWidth, textureHeight;
             auto& texturedGeometry = streamingUnit.m_texturedGeometries[texturedGeometryIndex];
             size_t imageSizeBytes;
             VkDeviceSize alignment;
             const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
             {
-                const bool copyPixelsIfStagingBufferHasSpaceResult = CreateImageAndCopyPixelsIfStagingBufferHasSpace(
+                const bool copyPixelsIfStagingBufferHasSpaceResult = ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
                     &texturedGeometry.textureImage,
                     &deviceLocalMemory,
                     &alignment,
@@ -462,14 +464,12 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             CreateTextureImageView(&streamingUnit.m_textureImageViews[texturedGeometryIndex], texturedGeometry.textureImage, device);
             ++stagingBufferGpuAllocateIndex;
 
-            //BEG_#StreamingMemory
-            LoadModel(
-                &texturedGeometry.vertices, 
-                &texturedGeometry.indices, 
-                streamingUnit.m_modelPaths[texturedGeometryIndex], 
-                streamingUnit.m_uniformScales[texturedGeometryIndex]);
-            texturedGeometry.indicesSize = Cast_size_t_uint32_t(texturedGeometry.indices.size());//store since we need secondary buffers to point to this
-                                                                                                 //END_#StreamingMemory
+            //load vertex and index buffer
+            StreamingUnitVerticesNum verticesNum;
+            StreamingUnitIndicesNum indicesNum;
+            ModelSerialize<SerializerRead>(streamingUnitFile, &g_verticesScratchHack, &verticesNum, &g_indicesScratchHack, &indicesNum);
+            texturedGeometry.indicesSize = CastWithAssert<size_t, uint32_t>(indicesNum);
+
             CopyBufferToGpuPrepare(
                 &deviceLocalMemory,
                 &texturedGeometry.vertexBuffer,
@@ -481,8 +481,8 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 stagingBufferGpuMemory,
                 stagingBufferGpuAlignmentStandard,
                 offsetToFirstByteOfStagingBuffer,
-                texturedGeometry.vertices.data(),
-                sizeof(texturedGeometry.vertices[0]) * texturedGeometry.vertices.size(),
+                g_verticesScratchHack.begin(),
+                sizeof(g_verticesScratchHack[0]) * verticesNum,
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
                 false,
                 commandBufferTransfer,
@@ -499,8 +499,8 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 stagingBufferGpuMemory,
                 stagingBufferGpuAlignmentStandard,
                 offsetToFirstByteOfStagingBuffer,
-                texturedGeometry.indices.data(),
-                sizeof(texturedGeometry.indices[0]) * texturedGeometry.indices.size(),
+                g_indicesScratchHack.begin(),
+                sizeof(g_indicesScratchHack[0]) * indicesNum,
                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                 false,
                 commandBufferTransfer,
@@ -1168,39 +1168,6 @@ void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT
     }
 }
 
-/*static*/VkVertexInputBindingDescription Vertex::GetBindingDescription()
-{
-    VkVertexInputBindingDescription bindingDescription = {};
-    bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(Vertex);
-    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;//not using instanced rendering, so index vertex attributes by vertex, not instance
-
-    return bindingDescription;
-}
-
-/*static*/ void Vertex::GetAttributeDescriptions(VectorSafeRef<VkVertexInputAttributeDescription> attributeDescriptions)
-{
-    attributeDescriptions[0].binding = 0;
-    attributeDescriptions[0].location = 0;///<mirrored in the vertex shader
-    attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;//equivalent to vec3 layout
-    attributeDescriptions[0].offset = offsetof(Vertex, pos);//defines address of first byte of the relevant datafield
-
-    attributeDescriptions[1].binding = 0;
-    attributeDescriptions[1].location = 1;
-    attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-    attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-    attributeDescriptions[2].binding = 0;
-    attributeDescriptions[2].location = 2;
-    attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-    attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
-}
-
-bool Vertex::operator==(const Vertex& other) const
-{
-    return pos == other.pos && color == other.color && texCoord == other.texCoord;
-}
-
 void BeginCommands(const VkCommandBuffer& commandBuffer, const VkDevice& device)
 {
     VkCommandBufferBeginInfo beginInfo = {};
@@ -1208,11 +1175,6 @@ void BeginCommands(const VkCommandBuffer& commandBuffer, const VkDevice& device)
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
     vkBeginCommandBuffer(commandBuffer, &beginInfo);
-}
-
-size_t std::hash<Vertex>::operator()(Vertex const& vertex) const
-{
-    return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1);
 }
 
 bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstVectorSafeRef<const char*> deviceExtensions)
@@ -1887,7 +1849,7 @@ void FillCommandBufferPrimary(
         {
             const uint32_t pushConstantValue = Cast_size_t_uint32_t(objectIndex*drawCallsPerObjectNum + drawCallIndex);
             vkCmdPushConstants(commandBufferPrimary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstantBindIndexType), &pushConstantValue);
-            vkCmdDrawIndexed(commandBufferPrimary, Cast_size_t_uint32_t(texturedGeometry.indicesSize), 1, 0, 0, 0);
+            vkCmdDrawIndexed(commandBufferPrimary, texturedGeometry.indicesSize, 1, 0, 0, 0);
         }
     }
     
@@ -2118,69 +2080,6 @@ void CreateDescriptorSet(
         0, /*copy descriptor sets from one to another*/
         nullptr);
 }
-void LoadModel(std::vector<Vertex>*const verticesPtr, std::vector<uint32_t>*const indicesPtr, const char*const modelPath, const float uniformScale)
-{
-    assert(verticesPtr);
-    auto& vertices = *verticesPtr;
-
-    assert(indicesPtr);
-    auto& indices = *indicesPtr;
-
-    assert(modelPath);
-
-    //BEG_#StreamingMemory: replace OBJ with binary FBX loading
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;///<@todo: streaming memory management
-    std::vector<tinyobj::material_t> materials;///<@todo: streaming memory management
-    std::string err;///<@todo: streaming memory management
-
-    const bool loadObjResult = tinyobj::LoadObj(&attrib, &shapes, &materials, &err, modelPath);
-    assert(loadObjResult);
-    //END_#StreamingMemory: replace OBJ with binary FBX loading
-
-    ///@todo: #StreamingMemory: replace this STL with a good, static-memory hashmap
-    //build index list and un-duplicate vertices
-    std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
-
-    for (const auto& shape : shapes)
-    {
-        for (const auto& index : shape.mesh.indices)
-        {
-            Vertex vertex = {};
-
-            vertex.pos =
-            {
-                attrib.vertices[3 * index.vertex_index + 0],
-                attrib.vertices[3 * index.vertex_index + 1],
-                attrib.vertices[3 * index.vertex_index + 2]
-            };
-
-            vertex.texCoord =
-            {
-                attrib.texcoords[2 * index.texcoord_index + 0],
-                1.0f - attrib.texcoords[2 * index.texcoord_index + 1] //the origin of texture coordinates in Vulkan is the top-left corner, whereas the OBJ format assumes the bottom-left corner
-            };
-
-            vertex.color = { 1.0f, 1.0f, 1.0f };
-
-            if (uniqueVertices.count(vertex) == 0)
-            {
-                uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
-                vertices.push_back(vertex);
-            }
-
-            indices.push_back(uniqueVertices[vertex]);
-        }
-    }
-    if (uniformScale != 1.f)
-    {
-        for (auto& vertex : vertices)
-        {
-            vertex.pos *= uniformScale;
-        }
-    }
-}
-
 void CopyBufferToGpuPrepare(
     VulkanPagedStackAllocator*const deviceLocalMemoryPtr,
     VkBuffer*const gpuBufferPtr,
@@ -2272,7 +2171,7 @@ void CreateAndCopyToGpuBuffer(
     assert(cpuBufferSource);
     assert(bufferSize > 0);
 
-    stagingBufferMemoryMapCpuToGpu.MemcpyFromStart(cpuBufferSource, static_cast<size_t>(bufferSize));
+    stagingBufferMemoryMapCpuToGpu.MemcpyFromStart(cpuBufferSource, static_cast<size_t>(bufferSize));///<@todo: eliminate this memcpy by reading directly into the suballocation
 
     VkDeviceSize dummy;
     CreateBuffer(
@@ -2412,7 +2311,7 @@ void STBIImageFree(void*const retval_from_stbi_load, StackCpu*const stbAllocator
     stbAllocator.Clear();
 }
 
-bool CreateImageAndCopyPixelsIfStagingBufferHasSpace(
+bool ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VkImage*const imagePtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const alignmentPtr,
@@ -2462,7 +2361,7 @@ bool CreateImageAndCopyPixelsIfStagingBufferHasSpace(
         device,
         physicalDevice);
 
-    ArraySafeRef<uint8_t> stagingBufferSuballocatedFromStack;
+    ArraySafeRef<uint8_t> stagingBufferSuballocatedFromStack;///<@todo NTF: eliminate pixelBufferScratch and write directly to suballocated stagingBufferMemoryMapCpuToGpuStack
     const bool stagingBufferHasSpace = 
         stagingBufferMemoryMapCpuToGpuStack.MemcpyIfPushAllocSucceeds(
             &stagingBufferSuballocatedFromStack, 

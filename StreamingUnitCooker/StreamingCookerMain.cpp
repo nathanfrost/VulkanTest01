@@ -1,9 +1,13 @@
 #include<assert.h>
+///@todo: replace STL with more performant datastructures
 #include<string>
 #include<vector>
 #include"MemoryUtil.h"
 #include"ntf_vulkan.h"
 #include"StreamingUnit.h"
+
+#define TINYOBJLOADER_IMPLEMENTATION
+#include"tiny_obj_loader.h"
 
 //BEG_STB_IMAGE
 #define STB_IMAGE_IMPLEMENTATION
@@ -46,12 +50,18 @@ void STBAllocatorDestroy(StackCpu**const stbAllocatorPtrPtr)
 using namespace std;
 
 typedef string StreamingUnitCookerString;
-typedef vector<StreamingUnitCookerString> StreamingUnitCookerPaths;
-typedef vector<float> StreamingUnitCookerScalars;
+typedef float StreamingUnitCookerScalar;
+struct StreamingUnitCookerTexturedGeometry
+{
+    StreamingUnitCookerString m_texturePathRelativeFromRoot;
+    StreamingUnitCookerString m_modelPathRelativeFromRoot;
+    StreamingUnitCookerScalar m_uniformScale;
+};
+typedef vector<StreamingUnitCookerTexturedGeometry> StreamingUnitCookerTexturedGeometries;
 struct StreamingUnitCooker
 {
     void FileNameOutputSet(const char*const filenameNoExtension);
-    void TexturedModelAdd(
+    void TexturedGeometryAdd(
         const StreamingUnitCookerString& texturePath,
         const StreamingUnitCookerString& modelPath,
         const float uniformScale);
@@ -60,9 +70,7 @@ struct StreamingUnitCooker
 
 
     StreamingUnitCookerString m_fileNameOutput;
-    StreamingUnitCookerPaths m_texturePaths;
-    StreamingUnitCookerPaths m_modelPaths;
-    StreamingUnitCookerScalars m_uniformScales;
+    StreamingUnitCookerTexturedGeometries m_texturedGeometries;
 };
 
 void StreamingUnitCooker::FileNameOutputSet(const char*const filenameNoExtension)
@@ -72,14 +80,16 @@ void StreamingUnitCooker::FileNameOutputSet(const char*const filenameNoExtension
     m_fileNameOutput = StreamingUnitCookerString(filenameExtension.begin());
 }
 
-void StreamingUnitCooker::TexturedModelAdd(
+void StreamingUnitCooker::TexturedGeometryAdd(
     const StreamingUnitCookerString& texturePath,
     const StreamingUnitCookerString& modelPath,
     const float uniformScale)
 {
-    m_texturePaths.push_back(texturePath);
-    m_modelPaths.push_back(modelPath);
-    m_uniformScales.push_back(uniformScale);
+    StreamingUnitCookerTexturedGeometry texturedGeometry;
+    texturedGeometry.m_texturePathRelativeFromRoot = texturePath;
+    texturedGeometry.m_modelPathRelativeFromRoot = modelPath;
+    texturedGeometry.m_uniformScale = uniformScale;
+    m_texturedGeometries.push_back(texturedGeometry);
 }
 
 void StreamingUnitCooker::Cook()
@@ -94,14 +104,16 @@ void StreamingUnitCooker::Cook()
 
     //BEG_GENERALIZE_READER_WRITER
     Fwrite(f, &version, sizeof(version), 1);
-    const uint32_t texturesNum = Cast_size_t_uint32_t(m_texturePaths.size());
-    Fwrite(f, &texturesNum, sizeof(texturesNum), 1);
+    const StreamingUnitTexturedGeometryNum texturedGeometryNum = CastWithAssert<size_t, StreamingUnitTexturedGeometryNum>(m_texturedGeometries.size());
+    Fwrite(f, &texturedGeometryNum, sizeof(texturedGeometryNum), 1);
     //END_GENERALIZE_READER_WRITER
 
-    for (size_t textureIndex = 0; textureIndex < texturesNum; ++textureIndex)
+    for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometryNum; ++texturedGeometryIndex)
     {
-        const char*const texturePathRelativeFromRoot = m_texturePaths[textureIndex].c_str();
-        const StreamingUnitCookerString texturePath = rootDirectoryWithTrailingBackslash + StreamingUnitCookerString(texturePathRelativeFromRoot);
+        const StreamingUnitCookerTexturedGeometry& texturedGeometry = m_texturedGeometries[texturedGeometryIndex];
+
+        //cook and write texture
+        const StreamingUnitCookerString texturePath = rootDirectoryWithTrailingBackslash + StreamingUnitCookerString(texturedGeometry.m_texturePathRelativeFromRoot.c_str());
         int textureWidth, textureHeight, textureChannels;
         
         assert(g_stbAllocator->GetFirstByteFree() == 0);//ensure we can Clear() the whole stack correctly in STBIImageFree() (eg there's nothing already allocated in the stack)
@@ -116,27 +128,83 @@ void StreamingUnitCooker::Cook()
 
         TextureSerialize<SerializerWrite>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook, VectorSafeRef<StreamingUnitByte>(), pixels);
         g_stbAllocator->Clear();
+
+
+        //cook and write vertex and index buffers
+        std::vector<Vertex> vertices;
+        std::vector<IndexBufferValue> indices;
+
+        ///@todo: replace OBJ with binary FBX loading
+        tinyobj::attrib_t attrib;
+        std::vector<tinyobj::shape_t> shapes;
+        std::vector<tinyobj::material_t> materials;
+        std::string err;
+
+        const bool loadObjResult = tinyobj::LoadObj(
+            &attrib, 
+            &shapes, 
+            &materials, 
+            &err, 
+            (rootDirectoryWithTrailingBackslash + texturedGeometry.m_modelPathRelativeFromRoot).c_str());
+        assert(loadObjResult);
+
+        ///@todo: #StreamingMemory: replace this STL with a good, static-memory hashmap
+        //build index list and un-duplicate vertices
+        std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
+
+        for (const auto& shape : shapes)
+        {
+            for (const auto& index : shape.mesh.indices)
+            {
+                Vertex vertex = {};
+
+                vertex.pos =
+                {
+                    attrib.vertices[3 * index.vertex_index + 0],
+                    attrib.vertices[3 * index.vertex_index + 1],
+                    attrib.vertices[3 * index.vertex_index + 2]
+                };
+
+                vertex.texCoord =
+                {
+                    attrib.texcoords[2 * index.texcoord_index + 0],
+                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1] //the origin of texture coordinates in Vulkan is the top-left corner, whereas the OBJ format assumes the bottom-left corner
+                };
+
+                vertex.color = { 1.0f, 1.0f, 1.0f };
+
+                if (uniqueVertices.count(vertex) == 0)
+                {
+                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+                    vertices.push_back(vertex);
+                }
+
+                indices.push_back(uniqueVertices[vertex]);
+            }
+        }
+        if (texturedGeometry.m_uniformScale != 1.f)
+        {
+            for (auto& vertex : vertices)
+            {
+                vertex.pos *= texturedGeometry.m_uniformScale;
+            }
+        }
+
+        assert(vertices.size() > 0);
+        assert(indices.size() > 0);
+        StreamingUnitVerticesNum verticesNum = CastWithAssert<size_t, StreamingUnitVerticesNum>(vertices.size());
+        ArraySafeRef<Vertex> verticesArraySafe(&vertices[0], verticesNum);
+        StreamingUnitIndicesNum indicesNum = CastWithAssert<size_t, StreamingUnitIndicesNum>(indices.size());
+        ArraySafeRef<IndexBufferValue> indicesArraySafe(&indices[0], indices.size());
+        ModelSerialize<SerializerWrite>(f, verticesArraySafe, &verticesNum, indicesArraySafe, &indicesNum);
     }
-
-    const uint32_t modelPathsNum = Cast_size_t_uint32_t(m_modelPaths.size());
-    Fwrite(f, &modelPathsNum, sizeof(modelPathsNum), 1);
-    //todo
-
-    const uint32_t uniformScalesNum  = Cast_size_t_uint32_t(m_uniformScales.size());
-    Fwrite(f, &uniformScalesNum, sizeof(uniformScalesNum), 1);
-    //todo
-
-    //todo: uniform buffer
-
     Fclose(f);
 }
 
 void StreamingUnitCooker::Clear()
 {
     m_fileNameOutput.clear();
-    m_texturePaths.clear();
-    m_modelPaths.clear();
-    m_uniformScales.clear();
+    m_texturedGeometries.clear();
 }
 int main()
 {
@@ -144,10 +212,14 @@ int main()
 
     StreamingUnitCooker streamingUnitCooker;
     //,  /*"textures/HumanFighter_01_Diff.tga"*/ /*"textures/container_clean_diffuse01.jpeg"*//*"textures/appleD.jpg"*/,/*"textures/cat_diff.tga"*//*,"textures/chalet.jpg"*/
-    //streamingUnitCooker.TexturedModelAdd();///<@todo: once they're all working, use the convenience API
+    //const char*const m_modelPath[TODO_REFACTOR_NUM] = { /*"models/Orange.obj"*/, /*"models/Container_OBJ.obj",*/ /*"models/apple textured obj.obj"*//*"models/cat.obj"*//*,"models/chalet.obj"*/ };//#StreamingMemory
+    //const float m_uniformScale[TODO_REFACTOR_NUM] = { /*0.5f,*//*,.0025f*//*.01f,*/ /*1.f*/ };//#StreamingMemory
+
+    //streamingUnitCooker.TexturedGeometryAdd();///<@todo: once they're all working, use the convenience API
     streamingUnitCooker.FileNameOutputSet("unitTest0");
-    streamingUnitCooker.m_texturePaths.push_back(StreamingUnitCookerString("textures/skull.jpg"));
-    streamingUnitCooker.m_texturePaths.push_back(StreamingUnitCookerString("textures/Banana.jpg"));
+
+    streamingUnitCooker.TexturedGeometryAdd("textures/skull.jpg", "models/skull.obj", .05f);
+    streamingUnitCooker.TexturedGeometryAdd("textures/Banana.jpg", "models/Banana.obj", .005f);
 
     streamingUnitCooker.Cook();
 
