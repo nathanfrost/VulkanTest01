@@ -91,11 +91,11 @@ private:
         assert(elementsNumCurrentPtr);
         m_elementsNumCurrent = elementsNumCurrentPtr;
     }
-    void SetSizeMax(const size_t sizeMax)
+    void SetElementsNumMax(const size_t elementsNumMax)
     {
-        assert(sizeMax > 0);
+        assert(elementsNumMax > 0);
 #if NTF_ARRAY_SAFE_DEBUG
-        m_sizeMax = sizeMax;
+        m_elementsNumMax = elementsNumMax;
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
@@ -103,7 +103,7 @@ private:
     T* m_array;
     size_t* m_elementsNumCurrent;
 #if NTF_ARRAY_SAFE_DEBUG
-    size_t m_sizeMax;
+    size_t m_elementsNumMax;
     bool m_arraySet;
 #endif//#if NTF_ARRAY_SAFE_DEBUG
 
@@ -113,14 +113,14 @@ public:
 //    {
 //#if NTF_ARRAY_SAFE_DEBUG
 //        m_arraySet = m_elementsNumCurrentSet = false;
-//        m_sizeMax = 0;
+//        m_elementsNumMax = 0;
 //#endif//#if NTF_ARRAY_SAFE_DEBUG
 //    }
     ///@todo
     //VectorSafeRef(T*const pointer, const std::initializer_list<T>& initializerList, const size_t maxSize)
     //{
     //    SetArray(pointer);
-    //    SetSizeMax(maxSize);
+    //    SetElementsNumMax(maxSize);
     //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     //    AssertValid();
     //}
@@ -130,17 +130,17 @@ public:
         assert(vectorSafe);
 
         SetElementsNumCurrentPtr(&vectorSafe->m_elementsNumCurrent);
-        SetSizeMax(vectorSafe->SizeMax());
+        SetElementsNumMax(vectorSafe->SizeMax());
         SetArray(vectorSafe->begin());
     }
 
     ///@todo: unit tests
-    VectorSafeRef(T*const p, const size_t sizeMax, const size_t alignment)
+    VectorSafeRef(T*const p, const size_t elementsNumMax, const size_t alignment)
     {
         assert((uintptr_t)p % alignment == 0);
-        assert(sizeMax % alignment == 0);
+        assert((elementsNumMax*sizeof(T)) % alignment == 0);
 
-        SetSizeMax(sizeMax);
+        SetElementsNumMax(elementsNumMax);
         SetArray(p);
     }
 
@@ -157,16 +157,16 @@ public:
 
 #if NTF_ARRAY_SAFE_DEBUG
         m_arraySet = false;
-        m_sizeMax = 0;
+        m_elementsNumMax = 0;
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
-    ///@todo: AssertCurrentSufficient() //m_sizeMax - m_elementsNumCurrent >= elementsNum
+    ///@todo: AssertCurrentSufficient() //m_elementsNumMax - m_elementsNumCurrent >= elementsNum
     void AssertSufficient(const size_t elementsNum) const
     {
 #if NTF_ARRAY_SAFE_DEBUG
         AssertValid();
-        assert(m_sizeMax >= elementsNum);
+        assert(m_elementsNumMax >= elementsNum);
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
@@ -175,8 +175,8 @@ public:
 #if NTF_ARRAY_SAFE_DEBUG
         assert(m_arraySet);
         assert(m_elementsNumCurrent);
-        assert(*m_elementsNumCurrent <= m_sizeMax);       
-        assert(m_sizeMax > 0);
+        assert(*m_elementsNumCurrent <= m_elementsNumMax);       
+        assert(m_elementsNumMax > 0);
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
@@ -216,7 +216,7 @@ public:
         assert(f);
         assert(elementsNum > 0);
 #if NTF_ARRAY_SAFE_DEBUG
-        assert(elementsNum <= m_sizeMax);
+        assert(elementsNum <= m_elementsNumMax);
 #endif//#if NTF_ARRAY_SAFE_DEBUG
         Fread(f, &m_array[0], sizeof(T), elementsNum);
         SetElementsNumCurrent(elementsNum);
@@ -252,7 +252,7 @@ public:
     size_t SizeMaxInBytes() const
     {
         AssertValid();
-        return m_sizeMax*sizeof(T);
+        return m_elementsNumMax*sizeof(T);
     }
     void Push(const T& item)
     {
@@ -400,17 +400,17 @@ private:
     {
         m_array = p;
     }
-    void SetSizeMax(const size_t sizeMax)
+    void SetElementsNumMax(const size_t elementsNumMax)
     {
 #if NTF_ARRAY_SAFE_DEBUG
-        m_sizeMax = sizeMax;
+        m_elementsNumMax = elementsNumMax;
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
     ///@todo: reduce code duplication with VectorSafe
     T* m_array;
 #if NTF_ARRAY_SAFE_DEBUG
-    size_t m_sizeMax;///<@todo: rename m_elementsNumMax for clarity
+    size_t m_elementsNumMax;///<@todo: rename m_elementsNumMax for clarity
 #endif//#if NTF_ARRAY_SAFE_DEBUG
 
 public:
@@ -418,7 +418,7 @@ public:
     //ArraySafeRef(T*const pointer, const std::initializer_list<T>& initializerList, const size_t maxSize)
     //{
     //    SetArray(pointer);
-    //    SetSizeMax(maxSize);
+    //    SetElementsNumMax(maxSize);
     //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     //    AssertValid();
     //}
@@ -427,13 +427,13 @@ public:
     ArraySafeRef(VectorSafe<T, kElementsMax>*const vectorSafe)
     {
         assert(vectorSafe);
-        SetSizeMax(vectorSafe->size());
+        SetElementsNumMax(vectorSafe->size());
         SetArray(vectorSafe->begin());
     }
     ArraySafeRef(VectorSafeRef<T>*const vectorSafe)
     {
         assert(vectorSafe);
-        SetSizeMax(vectorSafe->size());
+        SetElementsNumMax(vectorSafe->size());
         SetArray(vectorSafe->begin());
     }
 
@@ -441,24 +441,24 @@ public:
     ArraySafeRef(ArraySafe<T, kElementsMax>*const arraySafe)
     {
         assert(arraySafe);
-        SetSizeMax(arraySafe->size());
+        SetElementsNumMax(arraySafe->size());
         SetArray(arraySafe->begin());
     }
 
     ///@todo: unit tests
-    ArraySafeRef(T*const p, const size_t sizeMax)
+    ArraySafeRef(T*const p, const size_t elementsNumMax)
     {
-        SetSizeMax(sizeMax);
+        SetElementsNumMax(elementsNumMax);
         SetArray(p);
     }
 
     ///@todo: unit tests
-    ArraySafeRef(T*const p, const size_t sizeMax, const size_t alignment)
+    ArraySafeRef(T*const p, const size_t elementsNumMax, const size_t alignment)
     {
         assert((uintptr_t)p % alignment == 0);
-        assert(sizeMax % alignment == 0);
+        assert((elementsNumMax*sizeof(T)) % alignment == 0);
 
-        SetSizeMax(sizeMax);
+        SetElementsNumMax(elementsNumMax);
         SetArray(p);
     }
 
@@ -469,10 +469,10 @@ public:
     }
     ///@todo: unit tests
     ///<use Reset() to set this array to null, not this function
-    void SetArray(T* p, const size_t sizeMax)
+    void SetArray(T* p, const size_t elementsNumMax)
     {
         SetArray(p);
-        SetSizeMax(sizeMax);
+        SetElementsNumMax(elementsNumMax);
         AssertValid();
     }
     ///@todo: unit tests
@@ -482,7 +482,7 @@ public:
         assert(f);
         assert(elementsNum > 0);
 #if NTF_ARRAY_SAFE_DEBUG
-        assert(elementsNum <= m_sizeMax);
+        assert(elementsNum <= m_elementsNumMax);
 #endif//#if NTF_ARRAY_SAFE_DEBUG
         Fread(f, m_array, sizeof(T), elementsNum);
     }
@@ -492,23 +492,23 @@ public:
         m_array = nullptr;
 
 #if NTF_ARRAY_SAFE_DEBUG
-        m_sizeMax = 0;
+        m_elementsNumMax = 0;
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
-    ///@todo: AssertCurrentSufficient() //m_sizeMax - m_elementsNumCurrent >= elementsNum
+    ///@todo: AssertCurrentSufficient() //m_elementsNumMax - m_elementsNumCurrent >= elementsNum
     void AssertSufficient(const size_t elementsNum) const
     {
 #if NTF_ARRAY_SAFE_DEBUG
         AssertValid();
-        assert(m_sizeMax >= elementsNum);
+        assert(m_elementsNumMax >= elementsNum);
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
     void AssertValid() const
     {
 #if NTF_ARRAY_SAFE_DEBUG
-        assert(m_sizeMax > 0);
+        assert(m_elementsNumMax > 0);
         assert(m_array);
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
@@ -525,7 +525,7 @@ public:
         assert(f);
         assert(elementsNum > 0);
 #if NTF_ARRAY_SAFE_DEBUG
-        assert(elementsNum <= m_sizeMax);
+        assert(elementsNum <= m_elementsNumMax);
 #endif//#if NTF_ARRAY_SAFE_DEBUG
         Fread(f, &m_array[0], sizeof(T), elementsNum);
     }
@@ -555,7 +555,7 @@ public:
         assert(f);
         assert(elementsNum > 0);
 #if NTF_ARRAY_SAFE_DEBUG
-        assert(elementsNum <= m_sizeMax);
+        assert(elementsNum <= m_elementsNumMax);
 #endif//#if NTF_ARRAY_SAFE_DEBUG
         ::Fwrite(f, &m_array[0], sizeof(m_array[0]), elementsNum);
     }
@@ -564,7 +564,7 @@ public:
     size_type size() const noexcept
     {
         AssertValid();
-        return m_sizeMax;
+        return m_elementsNumMax;
     }
     size_t SizeMaxInBytes() const
     {
@@ -673,34 +673,34 @@ private:
     {
         m_array = p;
     }
-    void SetSizeMax(const size_t sizeMax)
+    void SetElementsNumMax(const size_t elementsNumMax)
     {
-        m_sizeMax = sizeMax;
+        m_elementsNumMax = elementsNumMax;
     }
 
     ///@todo: reduce code duplication with VectorSafe
     const T* m_array;
-    size_t m_sizeMax;
+    size_t m_elementsNumMax;
 
 public:
     ConstVectorSafeRef()
     {
         SetArray(nullptr);
-        SetSizeMax(0);
+        SetElementsNumMax(0);
         AssertValid();
     }
 
-    ConstVectorSafeRef(const T*const pointer, const size_t sizeMax)
+    ConstVectorSafeRef(const T*const pointer, const size_t elementsNumMax)
     {
         SetArray(pointer);
-        SetSizeMax(sizeMax);
+        SetElementsNumMax(elementsNumMax);
         AssertValid();
     }
     template<size_t kElementsMax>
     ConstVectorSafeRef(const VectorSafe<T, kElementsMax>& arraySafe)
     {
         SetArray(arraySafe.begin());
-        SetSizeMax(arraySafe.size());
+        SetElementsNumMax(arraySafe.size());
         AssertValid();
     }
 
@@ -711,7 +711,7 @@ public:
     size_type size() const noexcept
     {
         AssertValid();
-        return m_sizeMax;
+        return m_elementsNumMax;
     }
     size_t SizeMaxInBytes() const
     {
@@ -729,12 +729,12 @@ public:
     const_reference GetChecked(const size_type pos) const
     {
         AssertValid();
-        assert(pos < m_sizeMax);
+        assert(pos < m_elementsNumMax);
         return m_array[pos];
     }
     size_t GetLastValidIndex() const
     {
-        return m_sizeMax - 1;
+        return m_elementsNumMax - 1;
     }
     size_t GetOneAfterLastValidIndex() const
     {
@@ -789,7 +789,7 @@ public:
     bool empty() const noexcept
     {
         AssertValid();
-        return m_sizeMax == 0;
+        return m_elementsNumMax == 0;
     }
 };
 
