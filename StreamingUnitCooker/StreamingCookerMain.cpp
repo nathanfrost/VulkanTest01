@@ -126,7 +126,7 @@ void StreamingUnitCooker::Cook()
         StreamingUnitTextureDimension textureHeightCook = CastWithAssert<int, StreamingUnitTextureDimension>(textureHeight);
         StreamingUnitTextureChannels textureChannelsCook = CastWithAssert<int, StreamingUnitTextureChannels>(textureChannels);
 
-        TextureSerialize<SerializerWrite>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook, VectorSafeRef<StreamingUnitByte>(), pixels);
+        TextureSerialize<SerializerCookerOut>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook, pixels, VectorSafeRef<StreamingUnitByte>());
         g_stbAllocator->Clear();
 
 
@@ -196,7 +196,18 @@ void StreamingUnitCooker::Cook()
         ArraySafeRef<Vertex> verticesArraySafe(&vertices[0], verticesNum);
         StreamingUnitIndicesNum indicesNum = CastWithAssert<size_t, StreamingUnitIndicesNum>(indices.size());
         ArraySafeRef<IndexBufferValue> indicesArraySafe(&indices[0], indices.size());
-        ModelSerialize<SerializerWrite>(f, verticesArraySafe, &verticesNum, indicesArraySafe, &indicesNum);
+        ModelSerialize<SerializerCookerOut>(
+            f, 
+            nullptr, 
+            0, 
+            &verticesNum, 
+            verticesArraySafe, 
+            ArraySafeRef<StreamingUnitByte>(), 
+            nullptr,
+            &indicesNum, 
+            indicesArraySafe, 
+            ArraySafeRef<StreamingUnitByte>(),
+            nullptr);
     }
     Fclose(f);
 }

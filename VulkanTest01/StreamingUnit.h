@@ -4,6 +4,7 @@
 #include <glm/gtx/hash.hpp>
 #include<stdint.h>
 #include <vulkan/vulkan.h>
+#include"StackNTF.h"
 #include"stdArrayUtility.h"
 
 typedef uint32_t StreamingUnitVersion;
@@ -55,7 +56,7 @@ void StreamingUnitFilenameExtensionAppend(char*const filenameNoExtension, const 
 size_t ImageSizeBytesCalculate(uint16_t textureWidth, uint16_t textureHeight, uint8_t textureChannels);
 const char* CookedFileDirectoryGet();
 
-class SerializerWrite
+class SerializerCookerOut
 {
 public:
     template<class T>
@@ -74,17 +75,30 @@ public:
     }
     inline static void Execute(
         FILE*const file, 
-        VectorSafeRef<StreamingUnitByte> dataRead, 
-        const StreamingUnitByte*const dataWrite, 
+        const StreamingUnitByte*const dataCookerOut, 
+        VectorSafeRef<StreamingUnitByte>,
         const size_t bytesNum)
     {
         assert(file);
-        assert(dataWrite);
+        assert(dataCookerOut);
         assert(bytesNum > 0);
-        Fwrite(file, dataWrite, bytesNum, 1);
+        Fwrite(file, dataCookerOut, bytesNum, 1);
+    }
+    template<class ElementType, class ElementNumType>
+    inline static void Execute(
+        FILE*const file,
+        const ElementNumType arrayNum,
+        ArraySafeRef<ElementType> arrayCookerOut,
+        ArraySafeRef<StreamingUnitByte>,
+        StackCpu*const,
+        const VkDeviceSize,
+        size_t*const)
+    {
+        assert(arrayNum > 0);
+        Execute(file, arrayCookerOut, arrayNum);
     }
 };
-class SerializerRead
+class SerializerRuntimeIn
 {
 public:
     template<class T>
@@ -103,13 +117,37 @@ public:
     }
     inline static void Execute(
         FILE*const file,
-        VectorSafeRef<StreamingUnitByte> dataRead,
-        const StreamingUnitByte*const dataWrite,
+        const StreamingUnitByte*const,
+        VectorSafeRef<StreamingUnitByte> dataRuntimeIn,
         const size_t bytesNum)
     {
         assert(file);
         assert(bytesNum > 0);
-        dataRead.MemcpyFromFread(file, bytesNum);
+        dataRuntimeIn.MemcpyFromFread(file, bytesNum);
+    }
+
+    template<class ElementType, class ElementNumType>
+    inline static void Execute(
+        FILE*const file, 
+        const ElementNumType arrayNum,
+        ArraySafeRef<ElementType> arrayCookerOut,
+        ArraySafeRef<StreamingUnitByte> bufferRuntimeIn,
+        StackCpu*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
+        const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn,
+        size_t*const bufferSizeBytesRuntimeIn)
+    {
+        assert(file);
+        assert(arrayNum > 0);
+        assert(stagingBufferMemoryMapCpuToGpuRuntimeIn);
+        assert(stagingBufferGpuAlignmentRuntimeIn > 0);
+        assert((stagingBufferGpuAlignmentRuntimeIn % 2) == 0);
+
+        *bufferSizeBytesRuntimeIn = arrayNum * sizeof(arrayCookerOut[0]);
+        stagingBufferMemoryMapCpuToGpuRuntimeIn->PushAlloc(
+            &bufferRuntimeIn, 
+            CastWithAssert<VkDeviceSize, size_t>(stagingBufferGpuAlignmentRuntimeIn), 
+            *bufferSizeBytesRuntimeIn);
+        Execute(file, bufferRuntimeIn, *bufferSizeBytesRuntimeIn);
     }
 };
 
@@ -119,35 +157,56 @@ inline void TextureSerialize(
     StreamingUnitTextureDimension*const textureWidth,
     StreamingUnitTextureDimension*const textureHeight,
     StreamingUnitTextureChannels*const textureChannels,
-    VectorSafeRef<StreamingUnitByte> pixelsRead,
-    const StreamingUnitByte*const pixelsWrite)
+    const StreamingUnitByte*const pixelsCookerOut,
+    VectorSafeRef<StreamingUnitByte> pixelsRuntimeIn)
 {
     assert(file);
     assert(textureWidth);
     assert(textureHeight);
     assert(textureChannels);
-    //pixelsWrite is allowed to be nullptr when Serializer==SerializerRead
+    //pixelsWrite is allowed to be nullptr when Serializer==SerializerRuntimeIn
 
     Serializer::Execute(file, textureWidth);
     Serializer::Execute(file, textureHeight);
     Serializer::Execute(file, textureChannels);
-    Serializer::Execute(file, pixelsRead, pixelsWrite, ImageSizeBytesCalculate(*textureWidth, *textureHeight, *textureChannels));
+    Serializer::Execute(file, pixelsCookerOut, pixelsRuntimeIn, ImageSizeBytesCalculate(*textureWidth, *textureHeight, *textureChannels));
 }
+
 template<class Serializer>
 inline void ModelSerialize(
     FILE*const file,
-    ArraySafeRef<Vertex> vertices,
+    StackCpu* stagingBufferMemoryMapCpuToGpuRuntimeIn,
+    const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn,
     StreamingUnitVerticesNum*const verticesNum,
-    ArraySafeRef<IndexBufferValue> indices, 
-    StreamingUnitIndicesNum*const indicesNum)
+    ArraySafeRef<Vertex> verticesCookerOut,
+    ArraySafeRef<StreamingUnitByte> vertexBufferRuntimeIn,
+    size_t*const vertexBufferSizeBytesRuntimeIn,
+    StreamingUnitIndicesNum*const indicesNum,
+    ArraySafeRef<IndexBufferValue> indicesCookerOut,
+    ArraySafeRef<StreamingUnitByte> indexBufferRuntimeIn,
+    size_t*const indexBufferSizeBytesRuntimeIn)
 {
     assert(file);
     assert(verticesNum);
     assert(indicesNum);
 
     Serializer::Execute(file, verticesNum);
-    Serializer::Execute(file, vertices, *verticesNum);
+    Serializer::Execute(
+        file, 
+        *verticesNum, 
+        verticesCookerOut, 
+        vertexBufferRuntimeIn,
+        stagingBufferMemoryMapCpuToGpuRuntimeIn,
+        stagingBufferGpuAlignmentRuntimeIn,
+        vertexBufferSizeBytesRuntimeIn);
     
     Serializer::Execute(file, indicesNum);
-    Serializer::Execute(file, indices, *indicesNum);
+    Serializer::Execute(
+        file,  
+        *indicesNum, 
+        indicesCookerOut, 
+        indexBufferRuntimeIn,
+        stagingBufferMemoryMapCpuToGpuRuntimeIn,
+        stagingBufferGpuAlignmentRuntimeIn,
+        indexBufferSizeBytesRuntimeIn);
 }

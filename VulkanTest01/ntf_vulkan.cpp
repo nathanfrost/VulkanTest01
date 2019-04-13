@@ -1,10 +1,6 @@
 ﻿#include"ntf_vulkan.h"
 #include"ntf_vulkan_utility.h"
 
-///<@todo: eliminate this memcpy by reading directly into the suballocation
-ArraySafe<Vertex, 65536> g_verticesScratchHack;
-ArraySafe<IndexBufferValue, 65536*8> g_indicesScratchHack;
-
 #define STB_IMAGE_IMPLEMENTATION
 //BEG_#StbMemoryManagement
 StackCpu* g_stbAllocator;
@@ -465,9 +461,22 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             ++stagingBufferGpuAllocateIndex;
 
             //load vertex and index buffer
+            ArraySafeRef<StreamingUnitByte> stagingBufferCpuToGpuVertices, stagingBufferCpuToGpuIndices;
             StreamingUnitVerticesNum verticesNum;
             StreamingUnitIndicesNum indicesNum;
-            ModelSerialize<SerializerRead>(streamingUnitFile, &g_verticesScratchHack, &verticesNum, &g_indicesScratchHack, &indicesNum);
+            size_t vertexBufferSizeBytes, indexBufferSizeBytes;
+            ModelSerialize<SerializerRuntimeIn>(
+                streamingUnitFile, 
+                &stagingBufferMemoryMapCpuToGpu,
+                stagingBufferGpuAlignmentStandard,
+                &verticesNum,
+                ArraySafeRef<Vertex>(),
+                stagingBufferCpuToGpuVertices,
+                &vertexBufferSizeBytes,
+                &indicesNum,
+                ArraySafeRef<IndexBufferValue>(),
+                stagingBufferCpuToGpuIndices,
+                &indexBufferSizeBytes);
             texturedGeometry.indicesSize = CastWithAssert<size_t, uint32_t>(indicesNum);
 
             CopyBufferToGpuPrepare(
@@ -476,13 +485,11 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 &texturedGeometry.vertexBufferMemory,
                 &stagingBuffersGpu,
                 &stagingBufferGpuAllocateIndex,
-                &stagingBufferMemoryMapCpuToGpu,
                 &stagingBufferGpuStack,
                 stagingBufferGpuMemory,
                 stagingBufferGpuAlignmentStandard,
                 offsetToFirstByteOfStagingBuffer,
-                g_verticesScratchHack.begin(),
-                sizeof(g_verticesScratchHack[0]) * verticesNum,
+                vertexBufferSizeBytes,
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
                 false,
                 commandBufferTransfer,
@@ -494,13 +501,11 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 &texturedGeometry.indexBufferMemory,
                 &stagingBuffersGpu,
                 &stagingBufferGpuAllocateIndex,
-                &stagingBufferMemoryMapCpuToGpu,
                 &stagingBufferGpuStack,
                 stagingBufferGpuMemory,
                 stagingBufferGpuAlignmentStandard,
                 offsetToFirstByteOfStagingBuffer,
-                g_indicesScratchHack.begin(),
-                sizeof(g_indicesScratchHack[0]) * indicesNum,
+                indexBufferSizeBytes,
                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                 false,
                 commandBufferTransfer,
@@ -2086,12 +2091,10 @@ void CopyBufferToGpuPrepare(
     VkDeviceMemory*const gpuBufferMemoryPtr,
     ArraySafeRef<VkBuffer> stagingBuffersGpu,
     size_t*const stagingBuffersGpuIndexPtr,
-    StackCpu*const stagingBufferMemoryMapCpuToGpuPtr,
     StackNTF<VkDeviceSize>*const stagingBufferGpuStackPtr,
     const VkDeviceMemory stagingBufferGpuMemory,
     const VkDeviceSize stagingBufferGpuAlignmentStandard,
     const VkDeviceSize offsetToFirstByteOfStagingBuffer,
-    const void*const cpuBufferSource,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags& memoryPropertyFlags,
     const bool residentForever,
@@ -2102,7 +2105,6 @@ void CopyBufferToGpuPrepare(
     NTF_REF(deviceLocalMemoryPtr, deviceLocalMemory);
     NTF_REF(gpuBufferPtr, gpuBuffer);
     NTF_REF(gpuBufferMemoryPtr, gpuBufferMemory);
-    NTF_REF(stagingBufferMemoryMapCpuToGpuPtr, stagingBufferMemoryMapCpuToGpu);
     NTF_REF(stagingBuffersGpuIndexPtr, stagingBuffersGpuIndex);
     NTF_REF(stagingBufferGpuStackPtr, stagingBufferGpuStack);
 
@@ -2124,17 +2126,10 @@ void CopyBufferToGpuPrepare(
     assert(memRequirements.alignment == stagingBufferGpuAlignmentStandard);
 #endif//#if NTF_DEBUG
 
-    ArraySafeRef<uint8_t> stagingBufferCpuToGpu;
-    stagingBufferMemoryMapCpuToGpu.PushAlloc(
-        &stagingBufferCpuToGpu,
-        Cast_VkDeviceSize_size_t(stagingBufferGpuAlignmentStandard),
-        Cast_VkDeviceSize_size_t(bufferSize));
     CreateAndCopyToGpuBuffer(
         &deviceLocalMemory,
         &gpuBuffer,
         &gpuBufferMemory,
-        stagingBufferCpuToGpu,
-        cpuBufferSource,
         stagingBufferGpu,
         bufferSize,
         memoryPropertyFlags,
@@ -2149,8 +2144,6 @@ void CreateAndCopyToGpuBuffer(
     VulkanPagedStackAllocator*const allocatorPtr,
     VkBuffer*const gpuBufferPtr,
     VkDeviceMemory*const gpuBufferMemoryPtr,
-    ArraySafeRef<uint8_t> stagingBufferMemoryMapCpuToGpu,
-    const void*const cpuBufferSource,
     const VkBuffer& stagingBufferGpu,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags& flags,
@@ -2168,10 +2161,7 @@ void CreateAndCopyToGpuBuffer(
     assert(gpuBufferMemoryPtr);
     auto& gpuBufferMemory = *gpuBufferMemoryPtr;
 
-    assert(cpuBufferSource);
     assert(bufferSize > 0);
-
-    stagingBufferMemoryMapCpuToGpu.MemcpyFromStart(cpuBufferSource, static_cast<size_t>(bufferSize));///<@todo: eliminate this memcpy by reading directly into the suballocation
 
     VkDeviceSize dummy;
     CreateBuffer(
@@ -2344,7 +2334,7 @@ bool ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     NTF_REF(imageSizeBytesPtr, imageSizeBytes);
 
     StreamingUnitTextureChannels textureChannels;
-    TextureSerialize<SerializerRead>(streamingUnitFile, &textureWidth, &textureHeight, &textureChannels, pixelBufferScratch, nullptr);
+    TextureSerialize<SerializerRuntimeIn>(streamingUnitFile, &textureWidth, &textureHeight, &textureChannels, nullptr, pixelBufferScratch);
     imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
 
     CreateAllocateBindImageIfAllocatorHasSpace(
