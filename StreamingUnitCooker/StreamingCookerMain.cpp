@@ -126,7 +126,7 @@ void StreamingUnitCooker::Cook()
         StreamingUnitTextureDimension textureHeightCook = CastWithAssert<int, StreamingUnitTextureDimension>(textureHeight);
         StreamingUnitTextureChannels textureChannelsCook = CastWithAssert<int, StreamingUnitTextureChannels>(textureChannels);
 
-        TextureSerialize<SerializerCookerOut>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook, pixels, VectorSafeRef<StreamingUnitByte>());
+        TextureSerialize0<SerializerCookerOut>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook, pixels);
         g_stbAllocator->Clear();
 
 

@@ -73,17 +73,6 @@ public:
         assert(elementsNum > 0);
         arraySafe.Fwrite(file, elementsNum);
     }
-    inline static void Execute(
-        FILE*const file, 
-        const StreamingUnitByte*const dataCookerOut, 
-        VectorSafeRef<StreamingUnitByte>,
-        const size_t bytesNum)
-    {
-        assert(file);
-        assert(dataCookerOut);
-        assert(bytesNum > 0);
-        Fwrite(file, dataCookerOut, bytesNum, 1);
-    }
     template<class ElementType, class ElementNumType>
     inline static void Execute(
         FILE*const file,
@@ -115,17 +104,6 @@ public:
         assert(elementsNum > 0);
         arraySafe.MemcpyFromFread(file, elementsNum);
     }
-    inline static void Execute(
-        FILE*const file,
-        const StreamingUnitByte*const,
-        VectorSafeRef<StreamingUnitByte> dataRuntimeIn,
-        const size_t bytesNum)
-    {
-        assert(file);
-        assert(bytesNum > 0);
-        dataRuntimeIn.MemcpyFromFread(file, bytesNum);
-    }
-
     template<class ElementType, class ElementNumType>
     inline static void Execute(
         FILE*const file, 
@@ -141,35 +119,54 @@ public:
         assert(stagingBufferMemoryMapCpuToGpuRuntimeIn);
         assert(stagingBufferGpuAlignmentRuntimeIn > 0);
         assert((stagingBufferGpuAlignmentRuntimeIn % 2) == 0);
-
-        *bufferSizeBytesRuntimeIn = arrayNum * sizeof(arrayCookerOut[0]);
-        stagingBufferMemoryMapCpuToGpuRuntimeIn->PushAlloc(
+        
+        const size_t bufferSizeBytes = arrayNum * sizeof(arrayCookerOut[0]);
+        const bool pushAllocResult = stagingBufferMemoryMapCpuToGpuRuntimeIn->PushAlloc(
             &bufferRuntimeIn, 
             CastWithAssert<VkDeviceSize, size_t>(stagingBufferGpuAlignmentRuntimeIn), 
-            *bufferSizeBytesRuntimeIn);
-        Execute(file, bufferRuntimeIn, *bufferSizeBytesRuntimeIn);
+            bufferSizeBytes);
+        assert(pushAllocResult);
+        Execute(file, bufferRuntimeIn, bufferSizeBytes);
+
+        if (bufferSizeBytesRuntimeIn)
+        {
+            *bufferSizeBytesRuntimeIn = bufferSizeBytes;
+        }
     }
 };
 
 template<class Serializer>
-inline void TextureSerialize(
+inline void TextureSerialize0(
     FILE*const file,
     StreamingUnitTextureDimension*const textureWidth,
     StreamingUnitTextureDimension*const textureHeight,
     StreamingUnitTextureChannels*const textureChannels,
-    const StreamingUnitByte*const pixelsCookerOut,
-    VectorSafeRef<StreamingUnitByte> pixelsRuntimeIn)
+    StreamingUnitByte*const)
 {
     assert(file);
     assert(textureWidth);
     assert(textureHeight);
     assert(textureChannels);
-    //pixelsWrite is allowed to be nullptr when Serializer==SerializerRuntimeIn
 
     Serializer::Execute(file, textureWidth);
     Serializer::Execute(file, textureHeight);
     Serializer::Execute(file, textureChannels);
-    Serializer::Execute(file, pixelsCookerOut, pixelsRuntimeIn, ImageSizeBytesCalculate(*textureWidth, *textureHeight, *textureChannels));
+}
+inline void TextureSerialize1_SerializerRuntimeIn(   
+    FILE*const file,
+    StackCpu* stagingBufferMemoryMapCpuToGpuRuntimeIn,
+    const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn,
+    const size_t bufferSizeBytes)
+{
+    ArraySafeRef<StreamingUnitByte> pixelBufferRuntimeIn;
+    SerializerRuntimeIn::Execute(
+        file,
+        bufferSizeBytes,
+        ArraySafeRef<StreamingUnitByte>(),
+        pixelBufferRuntimeIn,
+        stagingBufferMemoryMapCpuToGpuRuntimeIn,
+        stagingBufferGpuAlignmentRuntimeIn,
+        nullptr);
 }
 
 template<class Serializer>

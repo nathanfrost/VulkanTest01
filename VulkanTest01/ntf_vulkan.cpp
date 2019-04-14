@@ -257,7 +257,6 @@ void StreamingUnitRuntime::Free(const VkDevice device)
 }
 
 #define NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE (128 * 1024 * 1024)
-static VectorSafe<uint8_t, 8192 * 8192 * 4> pixelBufferScratch;
 DWORD WINAPI AssetLoadingThread(void* arg)
 {
     auto& threadArguments = *reinterpret_cast<AssetLoadingArguments*>(arg);
@@ -411,26 +410,22 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             size_t imageSizeBytes;
             VkDeviceSize alignment;
             const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
-            {
-                const bool copyPixelsIfStagingBufferHasSpaceResult = ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
-                    &texturedGeometry.textureImage,
-                    &deviceLocalMemory,
-                    &alignment,
-                    &textureWidth,
-                    &textureHeight,
-                    &stagingBufferMemoryMapCpuToGpu,
-                    &imageSizeBytes,
-                    streamingUnitFile,
-                    &pixelBufferScratch,
-                    imageFormat,
-                    VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
-                    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
-                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                    false,
-                    device,
-                    physicalDevice);
-                assert(copyPixelsIfStagingBufferHasSpaceResult);
-            }
+            ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
+                &texturedGeometry.textureImage,
+                &deviceLocalMemory,
+                &alignment,
+                &textureWidth,
+                &textureHeight,
+                &stagingBufferMemoryMapCpuToGpu,
+                &imageSizeBytes,
+                streamingUnitFile,
+                imageFormat,
+                VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                false,
+                device,
+                physicalDevice);
 
             const bool pushAllocSuccess = stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, alignment, imageSizeBytes);
             assert(pushAllocSuccess);
@@ -2301,7 +2296,7 @@ void STBIImageFree(void*const retval_from_stbi_load, StackCpu*const stbAllocator
     stbAllocator.Clear();
 }
 
-bool ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
+void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VkImage*const imagePtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const alignmentPtr,
@@ -2310,7 +2305,6 @@ bool ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     StackCpu*const stagingBufferMemoryMapCpuToGpuStackPtr,
     size_t*const imageSizeBytesPtr,
     FILE*const streamingUnitFile,
-    VectorSafeRef<uint8_t> pixelBufferScratch,
     const VkFormat& format,
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
@@ -2334,7 +2328,12 @@ bool ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     NTF_REF(imageSizeBytesPtr, imageSizeBytes);
 
     StreamingUnitTextureChannels textureChannels;
-    TextureSerialize<SerializerRuntimeIn>(streamingUnitFile, &textureWidth, &textureHeight, &textureChannels, nullptr, pixelBufferScratch);
+    TextureSerialize0<SerializerRuntimeIn>(
+        streamingUnitFile, 
+        &textureWidth, 
+        &textureHeight, 
+        &textureChannels, 
+        nullptr);
     imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
 
     CreateAllocateBindImageIfAllocatorHasSpace(
@@ -2351,14 +2350,8 @@ bool ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
         device,
         physicalDevice);
 
-    ArraySafeRef<uint8_t> stagingBufferSuballocatedFromStack;///<@todo NTF: eliminate pixelBufferScratch and write directly to suballocated stagingBufferMemoryMapCpuToGpuStack
-    const bool stagingBufferHasSpace = 
-        stagingBufferMemoryMapCpuToGpuStack.MemcpyIfPushAllocSucceeds(
-            &stagingBufferSuballocatedFromStack, 
-            pixelBufferScratch.begin(), 
-            Cast_VkDeviceSize_size_t(alignment), 
-            pixelBufferScratch.SizeCurrentInBytes());
-    return stagingBufferHasSpace;
+    TextureSerialize1_SerializerRuntimeIn(streamingUnitFile, &stagingBufferMemoryMapCpuToGpuStack, alignment, imageSizeBytes);
+    return;
 }
 void CreateTextureImage(
     VkImage*const textureImagePtr,

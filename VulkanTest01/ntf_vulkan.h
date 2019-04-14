@@ -513,7 +513,7 @@ bool HasStencilComponent(VkFormat format);
             the transitions and copy in the CreateTextureImage function. Try to experiment with this by creating a
             setupCommandBuffer that the helper functions record commands into, and add a flushSetupCommands to
             execute the commands that have been recorded so far.*/
-bool ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
+void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VkImage*const imagePtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const alignmentPtr,
@@ -522,7 +522,6 @@ bool ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     StackCpu*const stagingBufferMemoryMapCpuToGpuStackPtr,
     size_t*const imageSizeBytesPtr,
     FILE*const streamingUnitFile,
-    VectorSafeRef<uint8_t> pixelBufferScratch,
     const VkFormat& format,
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
