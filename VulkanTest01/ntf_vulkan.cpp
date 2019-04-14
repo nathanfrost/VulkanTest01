@@ -1122,8 +1122,7 @@ void ReadFile(char**const fileData, StackCpu*const allocatorPtr, size_t*const fi
 
     fileSizeBytes = fileInfo.st_size;
     allocator.PushAlloc(reinterpret_cast<void**>(fileData), 0, fileSizeBytes);
-    const size_t freadResult = fread(*fileData, 1, fileSizeBytes, f);
-    assert(freadResult == fileInfo.st_size);
+    Fread(f, *fileData, 1, fileSizeBytes);
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
