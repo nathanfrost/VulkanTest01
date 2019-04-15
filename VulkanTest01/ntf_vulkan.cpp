@@ -1,46 +1,10 @@
 ﻿#include"ntf_vulkan.h"
 #include"ntf_vulkan_utility.h"
 
-#define STB_IMAGE_IMPLEMENTATION
-//BEG_#StbMemoryManagement
-StackCpu* g_stbAllocator;
-void* __cdecl stb_malloc(size_t _Size)
-{ 
-    assert(g_stbAllocator);
-    
-    void* memory;
-    g_stbAllocator->PushAlloc(&memory, 0, _Size);
-    assert(memory);
-    return memory;
-}
-void* __cdecl stb_assertRealloc(void*  _Block, size_t _Size) { assert(false); return nullptr; }
-void __cdecl stb_nullFree(void* const block) {}
-#include"stb_image.h"
-//END_#StbMemoryManagement
-
 #if NTF_WIN_TIMER
 FILE* s_winTimer;
 #endif//NTF_WIN_TIMER
 
-//BEG_#StbMemoryManagement ///@todo: eliminate from Vulkan runtime; should exist only in cooker
-void STBAllocatorCreate(StackCpu**const stbAllocatorPtrPtr)
-{
-    NTF_REF(stbAllocatorPtrPtr, stbAllocatorPtr);
-
-    stbAllocatorPtr = new StackCpu();
-    const size_t sizeBytes = 128 * 1024 * 1024;
-    stbAllocatorPtr->Initialize(reinterpret_cast<uint8_t*>(malloc(sizeBytes)), sizeBytes);
-}
-void STBAllocatorDestroy(StackCpu**const stbAllocatorPtrPtr)
-{
-    NTF_REF(stbAllocatorPtrPtr, stbAllocatorPtr);
-
-    free(stbAllocatorPtr->GetMemory());
-    stbAllocatorPtr->Destroy();
-    delete stbAllocatorPtr;
-    stbAllocatorPtr = nullptr;
-    //END_#StbMemoryManagement
-}
 //BEG_#AllocationCallbacks
 static VkAllocationCallbacks s_allocationCallbacks;
 VkAllocationCallbacks* GetVulkanAllocationCallbacks() { return nullptr;/* &s_allocationCallbacks;*/ }
@@ -278,7 +242,10 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_REF(threadArguments.m_renderPass, renderPass);
     NTF_REF(threadArguments.m_swapChainExtent, swapChainExtent);
 
-    STBAllocatorCreate(&g_stbAllocator);
+    StackCpu stackAllocatorHack;
+    const size_t stackAllocatorHackMemorySizeBytes = 64 * 1024 * 1024;
+    static StreamingUnitByte stackAllocatorHackMemory[stackAllocatorHackMemorySizeBytes];
+    stackAllocatorHack.Initialize(&stackAllocatorHackMemory[0], stackAllocatorHackMemorySizeBytes);
 
     StackNTF<VkDeviceSize> stagingBufferGpuStack;
     stagingBufferGpuStack.Allocate(NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
@@ -371,7 +338,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         CreateGraphicsPipeline(
             &streamingUnit.m_pipelineLayout,
             &graphicsPipeline,
-            g_stbAllocator,
+            &stackAllocatorHack,
             renderPass,
             streamingUnit.m_descriptorSetLayout,
             swapChainExtent,
@@ -559,7 +526,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     }
 
     //cleanup
-    STBAllocatorDestroy(&g_stbAllocator);
+    stackAllocatorHack.Destroy();
 
     vkDestroyFence(device, transferQueueFinishedFence, GetVulkanAllocationCallbacks());
 
@@ -2282,17 +2249,6 @@ VkFormat FindSupportedFormat(
 bool HasStencilComponent(VkFormat format)
 {
     return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
-}
-
-/** use when you're done with the data returned from stbi_load(); never call stbi_image_free() directly; only use this function to clear all stack 
-    allocations stbi made using the (global) stbAllocatorPtr */
-void STBIImageFree(void*const retval_from_stbi_load, StackCpu*const stbAllocatorPtr)
-{
-    assert(stbAllocatorPtr);
-    auto& stbAllocator = *stbAllocatorPtr;
-
-    stbi_image_free(retval_from_stbi_load);
-    stbAllocator.Clear();
 }
 
 void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(

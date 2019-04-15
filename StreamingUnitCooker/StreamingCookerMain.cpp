@@ -44,6 +44,18 @@ void STBAllocatorDestroy(StackCpu**const stbAllocatorPtrPtr)
     delete stbAllocatorPtr;
     stbAllocatorPtr = nullptr;
 }
+
+///@todo: invoke this function rather than manually calling Clear() on the stbAllocator
+/** use when you're done with the data returned from stbi_load(); never call stbi_image_free() directly; only use this function to clear all stack
+allocations stbi made using the (global) stbAllocatorPtr */
+void STBIImageFree(void*const retval_from_stbi_load, StackCpu*const stbAllocatorPtr)
+{
+    assert(stbAllocatorPtr);
+    auto& stbAllocator = *stbAllocatorPtr;
+
+    stbi_image_free(retval_from_stbi_load);
+    stbAllocator.Clear();
+}
 //END_#StbMemoryManagement
 //END_STB_IMAGE
 
@@ -226,7 +238,6 @@ int main()
     //const char*const m_modelPath[TODO_REFACTOR_NUM] = { /*"models/Orange.obj"*/, /*"models/Container_OBJ.obj",*/ /*"models/apple textured obj.obj"*//*"models/cat.obj"*//*,"models/chalet.obj"*/ };//#StreamingMemory
     //const float m_uniformScale[TODO_REFACTOR_NUM] = { /*0.5f,*//*,.0025f*//*.01f,*/ /*1.f*/ };//#StreamingMemory
 
-    //streamingUnitCooker.TexturedGeometryAdd();///<@todo: once they're all working, use the convenience API
     streamingUnitCooker.FileNameOutputSet("unitTest0");
 
     streamingUnitCooker.TexturedGeometryAdd("textures/skull.jpg", "models/skull.obj", .05f);

@@ -67,6 +67,6 @@ private:
 #if NTF_DEBUG
     bool m_initialized;
 #endif//#if NTF_DEBUG
-    uint8_t* m_memory;
+    uint8_t* m_memory;///<*this is not responsible for freeing the memory pointer; *this merely uses the buffer of memory it is passed
     StackNTF<size_t> m_stack;//tracks stack allocations within memory allocation
 };

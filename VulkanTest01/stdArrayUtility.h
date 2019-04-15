@@ -872,7 +872,7 @@ public:
     }
 
     ///@todo: unit test
-    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)///@todo: rename to make obvious that the semantics of this is to CLEAR the Array and replace with the contents of input
+    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
     {
         assert(input);
         assert(inputBytesNum > 0);
@@ -1057,7 +1057,7 @@ public:
         MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
     }
 
-    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)///@todo: rename to make obvious that the semantics of this is to CLEAR the Array and replace with the contents of input
+    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
     {
         assert(input);
         assert(inputBytesNum > 0);

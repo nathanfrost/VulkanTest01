@@ -57,7 +57,6 @@ const bool s_enableValidationLayers = false;
 
 #define NTF_DEVICE_EXTENSIONS_NUM 1
 
-extern StackCpu* g_stbAllocator;
 class VulkanPagedStackAllocator;
 
 static const uint32_t s_kWidth = 1600;
@@ -713,6 +712,3 @@ private:
     VkPhysicalDevice m_physicalDevice;
     HANDLE m_mutex;
 };
-
-void STBAllocatorCreate(StackCpu**const stbAllocatorPtrPtr);
-void STBAllocatorDestroy(StackCpu**const stbAllocatorPtrPtr);
