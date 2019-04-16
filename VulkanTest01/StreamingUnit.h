@@ -140,8 +140,7 @@ inline void TextureSerialize0(
     FILE*const file,
     StreamingUnitTextureDimension*const textureWidth,
     StreamingUnitTextureDimension*const textureHeight,
-    StreamingUnitTextureChannels*const textureChannels,
-    StreamingUnitByte*const)
+    StreamingUnitTextureChannels*const textureChannels)
 {
     assert(file);
     assert(textureWidth);
@@ -152,17 +151,19 @@ inline void TextureSerialize0(
     Serializer::Execute(file, textureHeight);
     Serializer::Execute(file, textureChannels);
 }
-inline void TextureSerialize1_SerializerRuntimeIn(   
+template<class Serializer>
+inline void TextureSerialize1(   
     FILE*const file,
+    ArraySafeRef<StreamingUnitByte> pixelsCookOut,
     StackCpu* stagingBufferMemoryMapCpuToGpuRuntimeIn,
     const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn,
     const size_t bufferSizeBytes)
 {
     ArraySafeRef<StreamingUnitByte> pixelBufferRuntimeIn;
-    SerializerRuntimeIn::Execute(
+    Serializer::Execute(
         file,
         bufferSizeBytes,
-        ArraySafeRef<StreamingUnitByte>(),
+        pixelsCookOut,
         pixelBufferRuntimeIn,
         stagingBufferMemoryMapCpuToGpuRuntimeIn,
         stagingBufferGpuAlignmentRuntimeIn,

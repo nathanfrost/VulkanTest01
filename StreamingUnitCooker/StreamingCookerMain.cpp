@@ -130,7 +130,7 @@ void StreamingUnitCooker::Cook()
         
         assert(g_stbAllocator->GetFirstByteFree() == 0);//ensure we can Clear() the whole stack correctly in STBIImageFree() (eg there's nothing already allocated in the stack)
         NTF_STATIC_ASSERT(sizeof(stbi_uc) == sizeof(StreamingUnitByte));
-        StreamingUnitByte* pixels = stbi_load(texturePath.c_str(), &textureWidth, &textureHeight, &textureChannels, STBI_rgb_alpha);
+        StreamingUnitByte* pixels = stbi_load(texturePath.c_str(), &textureWidth, &textureHeight, &textureChannels, STBI_rgb_alpha);///<@todo: output ASTC (Android and PC), BC (PC), etc (see VK_FORMAT_* in vulkan_core.h).  In theory I could probably upload and image transition everything to VK_IMAGE_TILING_OPTIMAL and then write that buffer to disk for the fastest possible texture load, but in practice I don't think this can be done in 2019 with Vulkan (or DX12 or Metal)
         assert(pixels);
         textureChannels = 4;///<this is true because we passed STBI_rgb_alpha; stbi_load() reports the number of textures actually present even as it respects this flag
 
@@ -138,7 +138,9 @@ void StreamingUnitCooker::Cook()
         StreamingUnitTextureDimension textureHeightCook = CastWithAssert<int, StreamingUnitTextureDimension>(textureHeight);
         StreamingUnitTextureChannels textureChannelsCook = CastWithAssert<int, StreamingUnitTextureChannels>(textureChannels);
 
-        TextureSerialize0<SerializerCookerOut>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook, pixels);
+        TextureSerialize0<SerializerCookerOut>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook);
+        const size_t imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
+        TextureSerialize1<SerializerCookerOut>(f, ArraySafeRef<StreamingUnitByte>(pixels, imageSizeBytes), nullptr, 0, imageSizeBytes);
         g_stbAllocator->Clear();
 
 

@@ -2283,12 +2283,7 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     NTF_REF(imageSizeBytesPtr, imageSizeBytes);
 
     StreamingUnitTextureChannels textureChannels;
-    TextureSerialize0<SerializerRuntimeIn>(
-        streamingUnitFile, 
-        &textureWidth, 
-        &textureHeight, 
-        &textureChannels, 
-        nullptr);
+    TextureSerialize0<SerializerRuntimeIn>(streamingUnitFile, &textureWidth, &textureHeight, &textureChannels);
     imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
 
     CreateAllocateBindImageIfAllocatorHasSpace(
@@ -2305,7 +2300,12 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
         device,
         physicalDevice);
 
-    TextureSerialize1_SerializerRuntimeIn(streamingUnitFile, &stagingBufferMemoryMapCpuToGpuStack, alignment, imageSizeBytes);
+    TextureSerialize1<SerializerRuntimeIn>(
+        streamingUnitFile,
+        ArraySafeRef<StreamingUnitByte>(), 
+        &stagingBufferMemoryMapCpuToGpuStack, 
+        alignment, 
+        imageSizeBytes);
     return;
 }
 void CreateTextureImage(
