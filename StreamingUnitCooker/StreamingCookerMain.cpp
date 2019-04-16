@@ -45,7 +45,6 @@ void STBAllocatorDestroy(StackCpu**const stbAllocatorPtrPtr)
     stbAllocatorPtr = nullptr;
 }
 
-///@todo: invoke this function rather than manually calling Clear() on the stbAllocator
 /** use when you're done with the data returned from stbi_load(); never call stbi_image_free() directly; only use this function to clear all stack
 allocations stbi made using the (global) stbAllocatorPtr */
 void STBIImageFree(void*const retval_from_stbi_load, StackCpu*const stbAllocatorPtr)
@@ -141,8 +140,7 @@ void StreamingUnitCooker::Cook()
         TextureSerialize0<SerializerCookerOut>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook);
         const size_t imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
         TextureSerialize1<SerializerCookerOut>(f, ArraySafeRef<StreamingUnitByte>(pixels, imageSizeBytes), nullptr, 0, imageSizeBytes);
-        g_stbAllocator->Clear();
-
+        STBIImageFree(pixels, g_stbAllocator);
 
         //cook and write vertex and index buffers
         std::vector<Vertex> vertices;
