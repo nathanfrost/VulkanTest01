@@ -9,7 +9,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_REF(threadArguments.m_commandBufferTransitionImage, commandBufferTransitionImage);
     NTF_REF(threadArguments.m_device, device);
     NTF_REF(threadArguments.m_deviceLocalMemory, deviceLocalMemory);
-    NTF_REF(threadArguments.m_graphicsPipeline, graphicsPipeline);
     NTF_REF(threadArguments.m_graphicsQueue, graphicsQueue);
     NTF_REF(threadArguments.m_physicalDevice, physicalDevice);
     NTF_REF(threadArguments.m_queueFamilyIndices, queueFamilyIndices);
@@ -117,7 +116,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         CreateDescriptorSetLayout(&streamingUnit.m_descriptorSetLayout, descriptorType, device, TODO_REFACTOR_NUM);
         CreateGraphicsPipeline(
             &streamingUnit.m_pipelineLayout,
-            &graphicsPipeline,
+            &streamingUnit.m_graphicsPipeline,
             &stackAllocatorHack,
             renderPass,
             streamingUnit.m_descriptorSetLayout,

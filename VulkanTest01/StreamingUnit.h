@@ -66,7 +66,7 @@ public:
     */
 
     VkDescriptorSetLayout m_descriptorSetLayout;
-    VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed   
+    VkDescriptorSet m_descriptorSet;///<automatically freed when the VkDescriptorPool is destroyed or reset
 
     VkBuffer m_uniformBuffer;
     VkDeviceMemory m_uniformBufferGpuMemory;
@@ -77,6 +77,7 @@ public:
     size_t m_uniformBufferSizeUnaligned;///<@todo: only exists to generate the same value but aligned
 
     VkPipelineLayout m_pipelineLayout;
+    VkPipeline m_graphicsPipeline;
 
     void Free(const VkDevice device);
 };

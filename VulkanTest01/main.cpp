@@ -206,7 +206,6 @@ private:
             m_swapChainFramebuffers,
             m_commandPoolPrimary,
             m_commandPoolsSecondary,
-            m_graphicsPipeline,
             m_renderPass,
             m_swapChainImageViews,
             m_swapChain);
@@ -350,7 +349,6 @@ private:
         m_assetLoadingArguments.m_device = &m_device;
         m_assetLoadingArguments.m_deviceLocalMemory = &m_deviceLocalMemory;
         m_assetLoadingArguments.m_graphicsQueue = &m_graphicsQueue;
-        m_assetLoadingArguments.m_graphicsPipeline = &m_graphicsPipeline;
         m_assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
         m_assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
         m_assetLoadingArguments.m_streamingUnit = &m_streamingUnit;
@@ -440,7 +438,7 @@ private:
                 m_renderPass,
                 m_swapChainExtent,
                 m_streamingUnit.m_pipelineLayout,
-                m_graphicsPipeline,
+                m_streamingUnit.m_graphicsPipeline,
                 m_device);
 
             DrawFrame(
@@ -513,7 +511,6 @@ private:
     VectorSafe<VkImageView, kSwapChainImagesNumMax> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
     VectorSafe<VkFramebuffer, kSwapChainImagesNumMax> m_swapChainFramebuffers;
     VkRenderPass m_renderPass;
-    VkPipeline m_graphicsPipeline;
     VkCommandPool m_commandPoolPrimary, m_commandPoolTransfer;
     VectorSafe<ArraySafe<VkCommandPool, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandPoolsSecondary;
     VkImage m_depthImage;

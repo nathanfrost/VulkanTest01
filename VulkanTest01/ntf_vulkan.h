@@ -171,22 +171,22 @@ struct ThreadHandles
     HANDLE doneEventHandle;
 };
 
-struct CommandBufferThreadArgumentsTest
-{
-    VkCommandBuffer* commandBuffer;
-    VkDescriptorSet* descriptorSet;
-    VkRenderPass* renderPass;
-    VkExtent2D* swapChainExtent;
-    VkPipelineLayout* pipelineLayout;
-    VkBuffer* vertexBuffer;
-    VkBuffer* indexBuffer;
-    VkFramebuffer* swapChainFramebuffer;
-    VkPipeline* graphicsPipeline;
-    uint32_t* objectIndex;
-    uint32_t* indicesNum;
-    HANDLE* commandBufferThreadDone;
-    HANDLE* commandBufferThreadWake;
-};
+//struct CommandBufferThreadArgumentsTest
+//{
+//    VkCommandBuffer* commandBuffer;
+//    VkDescriptorSet* descriptorSet;
+//    VkRenderPass* renderPass;
+//    VkExtent2D* swapChainExtent;
+//    VkPipelineLayout* pipelineLayout;
+//    VkBuffer* vertexBuffer;
+//    VkBuffer* indexBuffer;
+//    VkFramebuffer* swapChainFramebuffer;
+//    VkPipeline* graphicsPipeline;
+//    uint32_t* objectIndex;
+//    uint32_t* indicesNum;
+//    HANDLE* commandBufferThreadDone;
+//    HANDLE* commandBufferThreadWake;
+//};
 
 DWORD WINAPI CommandBufferThreadTest(void* arg);
 DWORD WINAPI AssetLoadingThread(void* arg);
@@ -248,7 +248,6 @@ void CleanupSwapChain(
     ConstVectorSafeRef<VkFramebuffer> swapChainFramebuffers,
     const VkCommandPool& commandPool,
     ConstVectorSafeRef<ArraySafe<VkCommandPool, 2>> commandPoolsSecondary,///<@todo NTF: refactor out magic number 2 (meant to be NTF_OBJECTS_NUM) and either support VectorSafeRef<ArraySafeRef<T>> or repeatedly call FreeCommandBuffers on each VectorSafe outside of this function
-    const VkPipeline& graphicsPipeline,
     const VkRenderPass& renderPass,
     ConstVectorSafeRef<VkImageView> swapChainImageViews,
     const VkSwapchainKHR& swapChain);
@@ -315,22 +314,22 @@ void AcquireNextImage(
     const VkSemaphore& imageAvailableSemaphore,
     const VkDevice& device);
 
-void FillSecondaryCommandBuffersTest(
-    ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
-    ArraySafeRef<ThreadHandles> commandBuffersSecondaryThreads,
-    ArraySafeRef<HANDLE> commandBufferThreadDoneEvents,
-    ArraySafeRef<CommandBufferThreadArgumentsTest> commandBufferThreadArgumentsArray,
-    VkDescriptorSet*const descriptorSet,
-    VkFramebuffer*const swapChainFramebuffer,
-    VkRenderPass*const renderPass,
-    VkExtent2D*const swapChainExtent,
-    VkPipelineLayout*const pipelineLayout,
-    VkPipeline*const graphicsPipeline,
-    VkBuffer*const vertexBuffer,
-    VkBuffer*const indexBuffer,
-    uint32_t*const indicesSize,
-    ArraySafeRef<uint32_t> objectIndex,
-    const size_t objectsNum);
+//void FillSecondaryCommandBuffersTest(
+//    ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
+//    ArraySafeRef<ThreadHandles> commandBuffersSecondaryThreads,
+//    ArraySafeRef<HANDLE> commandBufferThreadDoneEvents,
+//    ArraySafeRef<CommandBufferThreadArgumentsTest> commandBufferThreadArgumentsArray,
+//    VkDescriptorSet*const descriptorSet,
+//    VkFramebuffer*const swapChainFramebuffer,
+//    VkRenderPass*const renderPass,
+//    VkExtent2D*const swapChainExtent,
+//    VkPipelineLayout*const pipelineLayout,
+//    VkPipeline*const graphicsPipeline,
+//    VkBuffer*const vertexBuffer,
+//    VkBuffer*const indexBuffer,
+//    uint32_t*const indicesSize,
+//    ArraySafeRef<uint32_t> objectIndex,
+//    const size_t objectsNum);
 
 void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
@@ -508,11 +507,11 @@ void DrawFrame(
     const VkSemaphore& renderFinishedSemaphore,
     const VkDevice& device);
 
-void CommandBufferSecondaryThreadsCreateTest(
-    ArraySafeRef<ThreadHandles> threadData,
-    ArraySafeRef<HANDLE> threadDoneEvents,
-    ArraySafeRef<CommandBufferThreadArgumentsTest> threadArguments,
-    const size_t threadsNum);
+//void CommandBufferSecondaryThreadsCreateTest(
+//    ArraySafeRef<ThreadHandles> threadData,
+//    ArraySafeRef<HANDLE> threadDoneEvents,
+//    ArraySafeRef<CommandBufferThreadArgumentsTest> threadArguments,
+//    const size_t threadsNum);
 
 class VulkanMemoryHeapPage
 {

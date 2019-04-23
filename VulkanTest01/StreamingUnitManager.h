@@ -8,7 +8,6 @@ class AssetLoadingArguments
 {
 public:
     VulkanPagedStackAllocator* m_deviceLocalMemory;
-    VkPipeline* m_graphicsPipeline;
     StreamingUnitRuntime* m_streamingUnit;
     enum ThreadCommand {
         kFirstValidArgument, kLoadStreamingUnit = kFirstValidArgument,
@@ -31,7 +30,6 @@ public:
     inline void AssertValid()
     {
         assert(m_deviceLocalMemory);
-        assert(m_graphicsPipeline);
         assert(m_streamingUnit);
         assert(m_threadCommand && *m_threadCommand >= kFirstValidArgument && *m_threadCommand <= kLastValidArgument);
 
