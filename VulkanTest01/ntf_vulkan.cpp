@@ -2151,7 +2151,6 @@ void AcquireNextImage(
 }
 
 WIN_TIMER_DEF(s_frameTimer);
-
 void DrawFrame(
     //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
     const VkSwapchainKHR& swapChain,
@@ -2159,7 +2158,7 @@ void DrawFrame(
     const uint32_t acquiredImageIndex,
     const VkQueue& graphicsQueue,
     const VkQueue& presentQueue,
-    const VkFence& fence,
+    const VkFence& drawFrameFinishedFence,
     const VkSemaphore& imageAvailableSemaphore,
     const VkSemaphore& renderFinishedSemaphore,
     const VkDevice& device)
@@ -2177,13 +2176,13 @@ void DrawFrame(
     //auto& hackToRecreateSwapChainIfNecessary = *hackToRecreateSwapChainIfNecessaryPtr;
 
     WIN_TIMER_DEF_START(waitForFences);
-    FenceWaitUntilSignalled(fence, device);
+    FenceWaitUntilSignalled(drawFrameFinishedFence, device);
     WIN_TIMER_STOP(waitForFences);
     //const int maxLen = 256;
     //char buf[maxLen];
     //snprintf(&buf[0], maxLen, "waitForFences:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(waitForFences));
     //fwrite(&buf[0], sizeof(buf[0]), strlen(&buf[0]), s_winTimer);
-    FenceReset(fence, device);//queue has completed on the GPU and is ready to be prepared on the CPU
+    FenceReset(drawFrameFinishedFence, device);//queue has completed on the GPU and is ready to be prepared on the CPU
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;//only value allowed
@@ -2204,7 +2203,7 @@ void DrawFrame(
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    const VkResult queueSubmitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo, fence);
+    const VkResult queueSubmitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo, drawFrameFinishedFence);
     NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
 
     VkPresentInfoKHR presentInfo = {};

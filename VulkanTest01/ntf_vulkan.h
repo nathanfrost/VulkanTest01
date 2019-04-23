@@ -502,7 +502,7 @@ void DrawFrame(
     const uint32_t acquiredImageIndex,
     const VkQueue& graphicsQueue,
     const VkQueue& presentQueue,
-    const VkFence& fence,
+    const VkFence& drawFrameFinishedFence,
     const VkSemaphore& imageAvailableSemaphore,
     const VkSemaphore& renderFinishedSemaphore,
     const VkDevice& device);
