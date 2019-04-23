@@ -1,5 +1,6 @@
 #include"ntf_vulkan.h"
 #include"ntf_vulkan_utility.h"
+#include"StreamingUnitManager.h"
 
 VectorSafe<uint8_t, 8192 * 8192 * 4> s_pixelBufferScratch;
 

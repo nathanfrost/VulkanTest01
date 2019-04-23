@@ -16,6 +16,7 @@ typedef uint16_t StreamingUnitTextureDimension;
 typedef uint8_t StreamingUnitTextureChannels;
 
 typedef uint32_t IndexBufferValue;
+
 struct Vertex
 {
     glm::vec3 pos;
@@ -49,6 +50,35 @@ struct TexturedGeometry
     {
         return indicesSize > 0;
     }
+};
+
+class StreamingUnitRuntime
+{
+public:
+    VkSampler m_textureSampler;
+#define TODO_REFACTOR_NUM 2//is NTF_OBJECTS_NUM -- todo: generalize #StreamingMemory
+    ArraySafe<TexturedGeometry, TODO_REFACTOR_NUM> m_texturedGeometries;
+    ArraySafe<VkImageView, TODO_REFACTOR_NUM> m_textureImageViews;
+
+    /*@todo NTF:
+    1. Make StreamingUnitRuntime be entirely allocated from a StackNTF by methods like AddTexturePaths(const char*const* texturePaths, const size_t texturePathsNum) so that it can contain a variable amount of everything up to the stack limit.  Use ArraySafe<>'s to index each container subset within the bytestream
+    2. Pull texture and model loading code into cooking module that accepts StreamingUnitOld ("StreamingUnitTemplate") and spits out StreamingUnitNew, which is still allocated from a StackNTF and uses ArraySafe<>'s but contains the ready-to-pass-to-Vulkan model and texture data as well as the other variables
+    */
+
+    VkDescriptorSetLayout m_descriptorSetLayout;
+    VkDescriptorSet m_descriptorSet;//automatically freed when the VkDescriptorPool is destroyed   
+
+    VkBuffer m_uniformBuffer;
+    VkDeviceMemory m_uniformBufferGpuMemory;
+    VkDeviceSize m_uniformBufferOffsetToGpuMemory;
+    ArraySafeRef<uint8_t> m_uniformBufferCpuMemory;
+
+    VkDeviceSize m_uniformBufferSizeAligned;//single uniform buffer that contains all uniform information for this streaming unit
+    size_t m_uniformBufferSizeUnaligned;///<@todo: only exists to generate the same value but aligned
+
+    VkPipelineLayout m_pipelineLayout;
+
+    void Free(const VkDevice device);
 };
 
 const char* StreamingUnitFilenameExtensionGet();
@@ -208,3 +238,4 @@ inline void ModelSerialize(
         stagingBufferGpuAlignmentRuntimeIn,
         indexBufferSizeBytesRuntimeIn);
 }
+
