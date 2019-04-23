@@ -242,7 +242,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_REF(threadArguments.m_renderPass, renderPass);
     NTF_REF(threadArguments.m_swapChainExtent, swapChainExtent);
 
-    StackCpu stackAllocatorHack;
+    StackCpu stackAllocatorHack;///<@todo: Streaming Memory
     const size_t stackAllocatorHackMemorySizeBytes = 64 * 1024 * 1024;
     static StreamingUnitByte stackAllocatorHackMemory[stackAllocatorHackMemorySizeBytes];
     stackAllocatorHack.Initialize(&stackAllocatorHackMemory[0], stackAllocatorHackMemorySizeBytes);
