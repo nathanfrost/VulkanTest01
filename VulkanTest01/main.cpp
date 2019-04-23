@@ -60,9 +60,6 @@ public:
         WindowInitialize(&m_window);
         VulkanInitialize();
 
-        //#SecondaryCommandBufferMultithreadingTest: see m_commandBufferSecondaryThreadsTest definition for more comments
-        //CommandBufferSecondaryThreadsCreateTest(&m_commandBufferSecondaryThreadsTest, &m_commandBufferThreadDoneEventsTest, &m_commandBufferThreadArgumentsTest, NTF_OBJECTS_NUM);
-
         ///@todo: #StreamingMemory: generalize
         WaitForSignalWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
         MainLoop(m_window);
@@ -401,33 +398,6 @@ private:
             uint32_t acquiredImageIndex;
             AcquireNextImage(&acquiredImageIndex, m_swapChain, imageAvailableSemaphore, m_device);
 
-            //BEG_#SecondaryCommandBufferMultithreadingTest: see m_commandBufferSecondaryThreadsTest definition for more comments
-            //FillSecondaryCommandBuffersTest(
-            //    &m_commandBuffersSecondaryTest[acquiredImageIndex],
-            //    &m_commandBufferSecondaryThreadsTest,
-            //    &m_commandBufferThreadDoneEventsTest,
-            //    &m_commandBufferThreadArgumentsTest,
-            //    &m_texturedGeometries[0].descriptorSet,
-            //    &m_swapChainFramebuffers[acquiredImageIndex],
-            //    &m_renderPass,
-            //    &m_swapChainExtent,
-            //    &m_pipelineLayout,
-            //    &m_graphicsPipeline,
-            //    &m_texturedGeometries[0].vertexBuffer,
-            //    &m_texturedGeometries[0].indexBuffer,
-            //    &m_texturedGeometries[0].indicesSize,
-            //    &m_objectIndicesSecondaryCommandBuffersTest,
-            //    NTF_OBJECTS_NUM);
-
-            //FillCommandBufferPrimary(
-            //    m_commandBuffersPrimary[acquiredImageIndex],
-            //    &m_commandBuffersSecondaryTest[acquiredImageIndex],
-            //    NTF_OBJECTS_NUM,
-            //    m_swapChainFramebuffers[acquiredImageIndex],
-            //    m_renderPass,
-            //    m_swapChainExtent);
-            //END_#SecondaryCommandBufferMultithreadingTest
-
             FillCommandBufferPrimary(
                 m_commandBuffersPrimary[acquiredImageIndex],
                 &m_streamingUnit.m_texturedGeometries,
@@ -521,21 +491,9 @@ private:
     const char* m_streamingUnitTestNameNoExtension = "unitTest0";
     StreamingUnitRuntime m_streamingUnit;
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
-    
-    //#SecondaryCommandBufferMultithreadingTest: see m_commandBufferSecondaryThreadsTest definition for more comments
-    //VectorSafe<ArraySafe<VkCommandBuffer, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandBuffersSecondaryTest;//automatically freed when VkCommandPool is destroyed ///@todo: "cannot convert argument 2 from 'ArraySafe<VectorSafe<VkCommandBuffer,8>,2>' to 'ArraySafeRef<VectorSafeRef<VkCommandBuffer>>" -- even when provided with ArraySafeRef(VectorSafe<T, kElementsMax>& vectorSafe) and VectorSafeRef(VectorSafe<T, kElementsMax>& vectorSafe) -- not sure why
-    
+        
     VkCommandBuffer m_commandBufferTransfer;//automatically freed when VkCommandPool is destroyed
     VkCommandBuffer m_commandBufferTransitionImage;//automatically freed when VkCommandPool is destroyed
-
-    //BEG_#SecondaryCommandBufferMultithreadingTest
-    //this prototype worked as expected; but of course one secondary buffer per draw call is ridiculous, so this is removed, but commented out for reference in case command buffer construction becomes a bottleneck.  See October 7, 12:40:28, 2018 for last commit that had this code working
-    //ArraySafe<ThreadHandles, NTF_OBJECTS_NUM> m_commandBufferSecondaryThreadsTest;
-    //ArraySafe<HANDLE, NTF_OBJECTS_NUM> m_commandBufferThreadDoneEventsTest;
-
-    //ArraySafe<uint32_t, NTF_OBJECTS_NUM> m_objectIndicesSecondaryCommandBuffersTest;
-    //ArraySafe<CommandBufferThreadArgumentsTest, NTF_OBJECTS_NUM> m_commandBufferThreadArgumentsTest;
-    //END_#SecondaryCommandBufferMultithreadingTest
 
     /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 
         used to synchronize operations within or across command queues */
