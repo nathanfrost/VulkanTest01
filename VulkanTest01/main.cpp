@@ -428,41 +428,6 @@ private:
         //wait for the logical device to finish operations before exiting MainLoop and destroying the window
         vkDeviceWaitIdle(m_device);
     }
-    ///@todo: consider removing
-    //void CopyBufferToGpuPrepareOnTransferQueue(
-    //    VkBuffer*const gpuBufferPtr,
-    //    VkDeviceMemory*const gpuBufferMemoryPtr,
-    //    StackNTF<VkDeviceSize>*const stagingBufferGpuStackPtr,
-    //    const VkDeviceSize offsetToFirstByteOfStagingBuffer,
-    //    const void*const cpuBufferSource,
-    //    const VkDeviceSize bufferSize,
-    //    const VkMemoryPropertyFlags& memoryPropertyFlags,
-    //    const bool residentForever = false)
-    //{
-    //    NTF_REF(gpuBufferPtr, gpuBuffer);
-    //    NTF_REF(gpuBufferMemoryPtr, gpuBufferMemory);
-    //    NTF_REF(stagingBufferGpuStackPtr, stagingBufferGpuStack);
-
-    //    CopyBufferToGpuPrepare(
-    //        &m_deviceLocalMemory,
-    //        &gpuBuffer,
-    //        &gpuBufferMemory,
-    //        &m_stagingBuffersGpu,
-    //        &stagingBufferGpuAllocateIndex,
-    //        &stagingBufferMemoryMapCpuToGpu,
-    //        &stagingBufferGpuStack,
-    //        stagingBufferGpuMemory,
-    //        stagingBufferGpuAlignmentStandard,
-    //        offsetToFirstByteOfStagingBuffer,
-    //        cpuBufferSource,
-    //        bufferSize,
-    //        memoryPropertyFlags,
-    //        residentForever,
-    //        m_commandBufferTransfer,
-    //        m_device,
-    //        m_physicalDevice);
-    //}
-
 
     GLFWwindow* m_window;
     VkInstance m_instance;
