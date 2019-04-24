@@ -841,7 +841,7 @@ void CreateLogicalDevice(
     VkQueue*const transferQueuePtr,
     ConstVectorSafeRef<const char*> deviceExtensions,
     ConstVectorSafeRef<const char*> validationLayers,
-    const VkSurfaceKHR& surface,
+    const QueueFamilyIndices& indices,
     const VkPhysicalDevice& physicalDevice)
 {
     assert(graphicsQueuePtr);
@@ -855,8 +855,6 @@ void CreateLogicalDevice(
 
     assert(devicePtr);
     auto& device = *devicePtr;
-
-    QueueFamilyIndices indices = FindQueueFamilies(physicalDevice, surface);
 
     const uint32_t queueFamiliesNum = 3;
     VectorSafe<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos(0);

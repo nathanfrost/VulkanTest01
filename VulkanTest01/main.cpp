@@ -250,7 +250,6 @@ private:
         s_validationLayers.Push("VK_LAYER_LUNARG_api_dump");///<this produces "file not found" after outputting to (I believe) stdout for a short while; seems like it overruns Windows 7's file descriptor or something.  Weirdly, running from Visual Studio 2015 does not seem to have this problem, but then I'm limited to 9999 lines of the command prompt VS2015 uses for output.  Not ideal
 #endif//NTF_API_DUMP_VALIDATION_LAYER_ON
 
-        
         m_deviceExtensions = VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
 
         m_instance = CreateInstance(s_validationLayers);
@@ -265,7 +264,7 @@ private:
             &m_transferQueue, 
             m_deviceExtensions, 
             s_validationLayers, 
-            m_surface, 
+            m_queueFamilyIndices, 
             m_physicalDevice);
         CreateSwapChain(
             m_window, 
@@ -280,11 +279,10 @@ private:
         CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
         CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
         
-        const QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
-        CreateCommandPool(&m_commandPoolPrimary, queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
-        if (queueFamilyIndices.graphicsFamily != queueFamilyIndices.transferFamily)
+        CreateCommandPool(&m_commandPoolPrimary, m_queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
+        if (m_queueFamilyIndices.graphicsFamily != m_queueFamilyIndices.transferFamily)
         {
-            CreateCommandPool(&m_commandPoolTransfer, queueFamilyIndices.transferFamily, m_device, m_physicalDevice);
+            CreateCommandPool(&m_commandPoolTransfer, m_queueFamilyIndices.transferFamily, m_device, m_physicalDevice);
         }
         else
         {
@@ -341,7 +339,7 @@ private:
         {
             for (auto& commandPoolSecondary : commandPoolSecondaryArray)
             {
-                CreateCommandPool(&commandPoolSecondary, queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
+                CreateCommandPool(&commandPoolSecondary, m_queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
             }
         }
 
@@ -395,6 +393,7 @@ private:
         while (!glfwWindowShouldClose(window)) 
         {
             glfwPollEvents();
+
 
            //#StreamingMemory: update uniforms per streaming unit
             UpdateUniformBuffer(

@@ -278,7 +278,7 @@ void CreateLogicalDevice(
     VkQueue*const transferQueuePtr,
     ConstVectorSafeRef<const char*> deviceExtensions,
     ConstVectorSafeRef<const char*> validationLayers,
-    const VkSurfaceKHR& surface,
+    const QueueFamilyIndices& indices,
     const VkPhysicalDevice& physicalDevice);
 
 void CreateDescriptorSetLayout(
