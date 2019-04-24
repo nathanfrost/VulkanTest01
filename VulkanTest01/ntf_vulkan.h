@@ -123,7 +123,7 @@ VkResult SubmitCommandBuffer(
     ArraySafeRef<VkPipelineStageFlags> waitStages,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
-    const VkFence& fence);
+    const VkFence& fenceToSignalWhenCommandBufferDone);
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
 uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
 void CreateBuffer(

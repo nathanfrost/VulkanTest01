@@ -86,7 +86,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             FenceWaitUntilSignalled(transferQueueFinishedFence, device);
             SignalSemaphoreWindows(threadDone);///<@todo NTF: generalize for #StreamingMemory by signalling a unique semaphore for each streaming unit loaded
 
-                                               //clean up staging memory
+            //clean up staging memory
             stagingBufferMemoryMapCpuToGpu.Clear();
 
             for (size_t stagingBufferGpuAllocateIndexFree = 0;

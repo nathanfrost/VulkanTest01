@@ -284,7 +284,7 @@ VkResult SubmitCommandBuffer(
     ArraySafeRef<VkPipelineStageFlags> waitStages,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
-    const VkFence& fence)
+    const VkFence& fenceToSignalWhenCommandBufferDone)
 {
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -298,7 +298,7 @@ VkResult SubmitCommandBuffer(
     submitInfo.pWaitSemaphores = waitSemaphores.GetAddressOfUnderlyingArray();
     submitInfo.pWaitDstStageMask = waitStages.GetAddressOfUnderlyingArray();
 
-    const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, fence);
+    const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, fenceToSignalWhenCommandBufferDone);
     NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
     return queueSubmitResult;
 }
