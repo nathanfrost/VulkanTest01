@@ -37,8 +37,13 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     VkDeviceSize offsetToFirstByteOfStagingBuffer;
     VkDescriptorPool descriptorPool;
 
-    VkFence transferQueueFinishedFence;
-    FenceCreate(&transferQueueFinishedFence, static_cast<VkFenceCreateFlagBits>(0), device);
+    VkFence transferQueueFinishedFence, graphicsQueueFinishedFence;
+    const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
+    FenceCreate(&transferQueueFinishedFence, fenceCreateFlagBits, device);
+    FenceCreate(&graphicsQueueFinishedFence, fenceCreateFlagBits, device);
+
+    const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
+    assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.transferFamily == queueFamilyIndices.graphicsFamily));
 
     CreateBuffer(
         &stagingBufferGpu,
@@ -84,6 +89,10 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         while (stagingBufferGpuAllocateIndex > 0)
         {
             FenceWaitUntilSignalled(transferQueueFinishedFence, device);
+            if (!unifiedGraphicsAndTransferQueue)
+            {
+                FenceWaitUntilSignalled(graphicsQueueFinishedFence, device);
+            }
             SignalSemaphoreWindows(threadDone);///<@todo NTF: generalize for #StreamingMemory by signalling a unique semaphore for each streaming unit loaded
 
             //clean up staging memory
@@ -109,8 +118,10 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         }
         assert(*threadCommand == AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit);
 
-        FenceReset(transferQueueFinishedFence, device);//commencing loading
-                                                       ///@todo: generalize #StreamingMemory
+        //commencing loading    ///@todo: generalize #StreamingMemory
+        FenceReset(transferQueueFinishedFence, device);
+        FenceReset(graphicsQueueFinishedFence, device);
+                                                       
         const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         CreateDescriptorPool(&descriptorPool, descriptorType, device, TODO_REFACTOR_NUM);
         CreateDescriptorSetLayout(&streamingUnit.m_descriptorSetLayout, descriptorType, device, TODO_REFACTOR_NUM);
@@ -124,8 +135,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             device);
 
         streamingUnit.m_uniformBufferSizeAligned = UniformBufferCpuAlignmentCalculate(streamingUnit.m_uniformBufferSizeUnaligned, physicalDevice);
-        const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
-        assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.transferFamily == queueFamilyIndices.graphicsFamily));
         BeginCommands(commandBufferTransfer, device);
         if (!unifiedGraphicsAndTransferQueue)
         {
@@ -276,7 +285,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 ArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),///<@todo: ArraySafeRefConst
                 commandBufferTransitionImage,
                 graphicsQueue,
-                VK_NULL_HANDLE);
+                graphicsQueueFinishedFence);
         }
 
         const VkDeviceSize uniformBufferSize = streamingUnit.m_uniformBufferSizeAligned;
