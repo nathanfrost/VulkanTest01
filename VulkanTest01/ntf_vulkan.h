@@ -120,7 +120,7 @@ void CopyBufferToImage(
 VkResult SubmitCommandBuffer(
     ConstVectorSafeRef<VkSemaphore> signalSemaphores,
     ConstVectorSafeRef<VkSemaphore> waitSemaphores,
-    ArraySafeRef<VkPipelineStageFlags> waitStages,///<@todo: ConstArraySafeRef
+    ArraySafeRef<VkPipelineStageFlags> stagesWhereEachSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
     const VkFence& fenceToSignalWhenCommandBufferDone);
@@ -406,7 +406,8 @@ void CreateAndCopyToGpuBuffer(
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 
-void EndSingleTimeCommandsHackDeleteSoon(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device);
+void EndCommandBuffer(const VkCommandBuffer& commandBuffer);
+void EndSingleTimeCommandsStall(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device);
 void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queueFamilyIndex, const VkDevice& device, const VkPhysicalDevice& physicalDevice);
 void CreateDepthResources(
     VkImage*const depthImagePtr,
@@ -414,7 +415,6 @@ void CreateDepthResources(
     VulkanPagedStackAllocator*const allocatorPtr,
     const VkExtent2D& swapChainExtent,
     const VkCommandBuffer& commandBuffer,
-    const VkQueue& graphicsQueue,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 

@@ -267,7 +267,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         {
             transferFinishedSemaphores.Push(transferFinishedSemaphore);
         }
-        vkEndCommandBuffer(commandBufferTransfer);
+        EndCommandBuffer(commandBufferTransfer);
         SubmitCommandBuffer(
             transferFinishedSemaphores,
             ConstVectorSafeRef<VkSemaphore>(),
@@ -278,7 +278,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
 
         if (!unifiedGraphicsAndTransferQueue)
         {
-            vkEndCommandBuffer(commandBufferTransitionImage);
+            EndCommandBuffer(commandBufferTransitionImage);
             SubmitCommandBuffer(
                 ConstVectorSafeRef<VkSemaphore>(),
                 transferFinishedSemaphores,

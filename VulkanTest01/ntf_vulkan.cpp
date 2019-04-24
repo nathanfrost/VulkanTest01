@@ -281,7 +281,7 @@ void ImageMemoryBarrier(
 VkResult SubmitCommandBuffer(
     ConstVectorSafeRef<VkSemaphore> signalSemaphores,
     ConstVectorSafeRef<VkSemaphore> waitSemaphores,
-    ArraySafeRef<VkPipelineStageFlags> waitStages,///<@todo: ConstArraySafeRef
+    ArraySafeRef<VkPipelineStageFlags> stagesWhereEachSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
     const VkFence& fenceToSignalWhenCommandBufferDone)
@@ -296,7 +296,7 @@ VkResult SubmitCommandBuffer(
 
     submitInfo.waitSemaphoreCount = Cast_size_t_uint32_t(waitSemaphores.size());
     submitInfo.pWaitSemaphores = waitSemaphores.GetAddressOfUnderlyingArray();
-    submitInfo.pWaitDstStageMask = waitStages.GetAddressOfUnderlyingArray();
+    submitInfo.pWaitDstStageMask = stagesWhereEachSemaphoreWaits.GetAddressOfUnderlyingArray();
 
     const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, fenceToSignalWhenCommandBufferDone);
     NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
@@ -1336,6 +1336,12 @@ void AllocateCommandBuffers(
 //    WaitForMultipleObjects(Cast_size_t_DWORD(threadNum), commandBufferThreadDoneEvents.begin(), TRUE, INFINITE);
 //}
 
+void EndCommandBuffer(const VkCommandBuffer& commandBuffer)
+{
+    const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBuffer);
+    NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
+}
+
 void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
     const ArraySafeRef<TexturedGeometry> texturedGeometries,
@@ -1409,8 +1415,7 @@ void FillCommandBufferPrimary(
     
     vkCmdEndRenderPass(commandBufferPrimary);
 
-    const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBufferPrimary);
-    NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
+    EndCommandBuffer(commandBufferPrimary);
 }
 VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferElementSize, const VkPhysicalDevice& physicalDevice)
 {
@@ -1728,9 +1733,9 @@ void CreateAndCopyToGpuBuffer(
     CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandBuffer);
 }
 
-void EndSingleTimeCommandsHackDeleteSoon(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device)
+void EndSingleTimeCommandsStall(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device)
 {
-    vkEndCommandBuffer(commandBuffer);
+    EndCommandBuffer(commandBuffer);
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1761,7 +1766,6 @@ void CreateDepthResources(
     VulkanPagedStackAllocator*const allocatorPtr,
     const VkExtent2D& swapChainExtent,
     const VkCommandBuffer& commandBuffer,
-    const VkQueue& graphicsQueue,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -1806,7 +1810,6 @@ void CreateDepthResources(
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
         commandBuffer);
-    EndSingleTimeCommandsHackDeleteSoon(commandBuffer, graphicsQueue, device);
 }
 
 VkFormat FindSupportedFormat(

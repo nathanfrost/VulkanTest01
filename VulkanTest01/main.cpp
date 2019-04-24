@@ -307,6 +307,25 @@ private:
             1,
             m_device);
 
+        VkFence initializationDone;
+        FenceCreate(&initializationDone, static_cast<VkFenceCreateFlagBits>(0), m_device);
+        CreateDepthResources(
+            &m_depthImage,
+            &m_depthImageView,
+            &m_deviceLocalMemory,
+            m_swapChainExtent,
+            m_commandBufferTransitionImage,
+            m_device,
+            m_physicalDevice);
+        EndCommandBuffer(m_commandBufferTransitionImage);
+        SubmitCommandBuffer(
+            ConstVectorSafeRef<VkSemaphore>(), 
+            ConstVectorSafeRef<VkSemaphore>(), 
+            ArraySafeRef<VkPipelineStageFlags>(), 
+            m_commandBufferTransitionImage, 
+            m_graphicsQueue, 
+            initializationDone);
+
         CreateFrameSyncPrimitives(
             &m_imageAvailableSemaphore,
             &m_renderFinishedSemaphore,
@@ -314,15 +333,6 @@ private:
             NTF_FRAMES_IN_FLIGHT_NUM,
             m_device);
 
-        CreateDepthResources(
-            &m_depthImage, 
-            &m_depthImageView, 
-            &m_deviceLocalMemory,
-            m_swapChainExtent, 
-            m_commandBufferTransitionImage,
-            m_graphicsQueue, 
-            m_device,
-            m_physicalDevice);
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         
         const uint32_t swapChainFramebuffersSize = Cast_size_t_uint32_t(m_swapChainFramebuffers.size());
@@ -373,6 +383,9 @@ private:
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             swapChainFramebuffersSize,
             m_device);
+
+        FenceWaitUntilSignalled(initializationDone, m_device);
+        vkDestroyFence(m_device, initializationDone, GetVulkanAllocationCallbacks());
     }
 
     void MainLoop(GLFWwindow* window) 
