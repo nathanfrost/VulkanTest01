@@ -317,6 +317,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     stackAllocatorHack.Destroy();
 
     vkDestroyFence(device, transferQueueFinishedFence, GetVulkanAllocationCallbacks());
+    vkDestroyFence(device, graphicsQueueFinishedFence, GetVulkanAllocationCallbacks());
 
     vkUnmapMemory(device, stagingBufferGpuMemory);
     vkDestroyBuffer(device, stagingBufferGpu, GetVulkanAllocationCallbacks());
