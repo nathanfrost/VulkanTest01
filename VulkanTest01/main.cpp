@@ -371,6 +371,9 @@ private:
         ///@todo: THREAD_MODE_BACKGROUND_BEGIN or THREAD_PRIORITY_BELOW_NORMAL and SetThreadPriority
         m_assetLoadingThreadData.m_handles.threadHandle = CreateThreadWindows(AssetLoadingThread, &m_assetLoadingArguments);
 
+        //finish initialization before launching asset loading thread
+        FenceWaitUntilSignalled(initializationDone, m_device);
+        vkDestroyFence(m_device, initializationDone, GetVulkanAllocationCallbacks());
         SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
         //#CommandPoolDuplication
@@ -381,9 +384,6 @@ private:
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             swapChainFramebuffersSize,
             m_device);
-
-        FenceWaitUntilSignalled(initializationDone, m_device);
-        vkDestroyFence(m_device, initializationDone, GetVulkanAllocationCallbacks());
     }
 
     void MainLoop(GLFWwindow* window) 
