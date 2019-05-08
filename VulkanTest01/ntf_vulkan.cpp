@@ -1,5 +1,6 @@
 ﻿#include"ntf_vulkan.h"
 #include"ntf_vulkan_utility.h"
+#include"StreamingCookAndRuntime.h"
 
 #if NTF_WIN_TIMER
 FILE* s_winTimer;
@@ -156,38 +157,16 @@ BOOL HandleCloseWindows(HANDLE*const h)
     return closeHandleResult;
 }
 
-void SignalSemaphoreWindows(const HANDLE wakeEventHandle)
+void SignalSemaphoreWindows(const HANDLE semaphoreHandle)
 {
-    const BOOL setEventResult = SetEvent(wakeEventHandle);
+    const BOOL setEventResult = SetEvent(semaphoreHandle);
     assert(setEventResult);
 }
 //use for both semaphores and mutexes
-void WaitForSignalWindows(const HANDLE doneEventHandle)
+void WaitForSignalWindows(const HANDLE semaphoreOrMutexHandle)
 {
-    const DWORD result = WaitForSingleObject(doneEventHandle, INFINITE);
+    const DWORD result = WaitForSingleObject(semaphoreOrMutexHandle, INFINITE);
     assert(result == WAIT_OBJECT_0);
-}
-
-void StreamingUnitRuntime::Free(const VkDevice device)
-{
-    vkDestroySampler(device, m_textureSampler, GetVulkanAllocationCallbacks());
-
-    for (auto& texturedGeometry : m_texturedGeometries)
-    {
-        vkDestroyImage(device, texturedGeometry.textureImage, GetVulkanAllocationCallbacks());
-        vkDestroyBuffer(device, texturedGeometry.indexBuffer, GetVulkanAllocationCallbacks());
-        vkDestroyBuffer(device, texturedGeometry.vertexBuffer, GetVulkanAllocationCallbacks());
-    }
-
-    DestroyUniformBuffer(m_uniformBufferCpuMemory, m_uniformBufferGpuMemory, m_uniformBuffer, device);
-    for (auto& imageView : m_textureImageViews)
-    {
-        vkDestroyImageView(device, imageView, GetVulkanAllocationCallbacks());
-    }
-
-    vkDestroyDescriptorSetLayout(device, m_descriptorSetLayout, GetVulkanAllocationCallbacks());
-    vkDestroyPipelineLayout(device, m_pipelineLayout, GetVulkanAllocationCallbacks());
-    vkDestroyPipeline(device, m_graphicsPipeline, GetVulkanAllocationCallbacks());
 }
 
 HANDLE CreateThreadWindows(LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter)
@@ -504,7 +483,7 @@ void CreateBuffer(VkBuffer*const vkBufferPtr, const VkDeviceSize& vkBufferSizeBy
     VkBufferCreateInfo bufferInfo = {};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = vkBufferSizeBytes;
-    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | usage;
+    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | usage;///<@todo: remove VK_BUFFER_USAGE_TRANSFER_SRC_BIT here; that should be the responsibility of above functions
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     const VkResult createBufferResult = vkCreateBuffer(device, &bufferInfo, GetVulkanAllocationCallbacks(), &vkBuffer);
@@ -564,7 +543,7 @@ void CreateBuffer(
     const bool allocateMemoryResult = allocator.PushAlloc(
         &offsetToAllocatedBlock,
         &bufferMemory,
-        memRequirements,
+        memRequirements,///<@todo: also check for VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, and if so incorporate VKDeviceLimits::nonCoherentAtomSize into alignment requirement
         properties,
         residentForever,
         true,
@@ -972,7 +951,7 @@ void CreateGraphicsPipeline(
     char* fragShaderCode;
     size_t vertShaderCodeSizeBytes, fragShaderCodeSizeBytes;
     assert(allocator.GetFirstByteFree() == 0);//ensure we can Clear() the whole stack correctly (eg there's nothing already allocated in the stack)
-    ReadFile(&vertShaderCode, &allocator, &vertShaderCodeSizeBytes, "shaders/vert.spv");
+    ReadFile(&vertShaderCode, &allocator, &vertShaderCodeSizeBytes, "shaders/vert.spv");///<@todo: precompile SPIR-V -- or even precompile native bytecode on the user's machine at startup
     ReadFile(&fragShaderCode, &allocator, &fragShaderCodeSizeBytes, "shaders/frag.spv");
 
     //create wrappers around SPIR-V bytecodes
@@ -1421,7 +1400,7 @@ VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferElement
 
     VkPhysicalDeviceProperties physicalDeviceProperties;
     vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
-    const VkDeviceSize minUniformBufferOffsetAlignment = physicalDeviceProperties.limits.minUniformBufferOffsetAlignment;
+    const VkDeviceSize minUniformBufferOffsetAlignment = physicalDeviceProperties.limits.minUniformBufferOffsetAlignment;///<@todo: NtfMax(minUniformBufferOffsetAlignment, physicalDeviceProperties.limits.nonCoherentAtomSize)
 
     VkDeviceSize uniformBufferAlignment = bufferElementSize;
     if (minUniformBufferOffsetAlignment > 0)
@@ -1795,7 +1774,7 @@ void CreateDepthResources(
 
     CreateImageView(&depthImageView, device, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-    BeginCommands(commandBuffer, device);
+    BeginCommands(commandBuffer, device);///<@todo: take this out and place before the function
     ImageMemoryBarrier(
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,//  | HasStencilComponent(format)) ? VK_IMAGE_ASPECT_STENCIL_BIT : 0
@@ -1897,62 +1876,6 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
         imageSizeBytes);
     return;
 }
-void CreateTextureImage(
-    VkImage*const textureImagePtr,
-    VulkanPagedStackAllocator*const allocatorPtr,
-    const uint32_t widthPixels,
-    const uint32_t heightPixels,
-    const VkBuffer& stagingBufferGpu,
-    const bool residentForever,
-    const VkQueue& transferQueue,
-    const VkCommandBuffer& commandBufferTransfer,
-    const uint32_t transferQueueFamilyIndex,
-    const VkSemaphore transferFinishedSemaphore,
-    const VkQueue& graphicsQueue,
-    const VkCommandBuffer& commandBufferGraphics,
-    const uint32_t graphicsQueueFamilyIndex,
-    const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice)
-{
-    assert(textureImagePtr);
-    auto& textureImage = *textureImagePtr;
-
-    assert(allocatorPtr);
-    auto& allocator = *allocatorPtr;
-
-    assert(widthPixels > 0);
-    assert(heightPixels > 0);
-
-    VkDeviceSize alignment;
-    const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
-    CreateAllocateBindImageIfAllocatorHasSpace(
-        &textureImage,
-        &allocator,
-        &alignment,
-        widthPixels,
-        heightPixels,
-        imageFormat,
-        VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        residentForever,
-        device,
-        physicalDevice);
-
-    TransferImageFromCpuToGpu(
-        textureImage,
-        widthPixels,
-        heightPixels,
-        imageFormat,
-        stagingBufferGpu,
-        commandBufferTransfer,
-        transferQueue,
-        transferQueueFamilyIndex,
-        commandBufferGraphics,
-        graphicsQueue,
-        graphicsQueueFamilyIndex,
-        device);
-}
 
 void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& device)
 {
@@ -2044,7 +1967,7 @@ void CreateVulkanSemaphore(VkSemaphore*const semaphorePtr, const VkDevice& devic
 void CreateFrameSyncPrimitives(
     VectorSafeRef<VkSemaphore> imageAvailable, 
     VectorSafeRef<VkSemaphore> renderFinished, 
-    VectorSafeRef<VkFence> fence, 
+    ArraySafeRef<DrawFrameFinishedFence> fence,
     const size_t framesNum,
     const VkDevice& device)
 {
@@ -2054,7 +1977,7 @@ void CreateFrameSyncPrimitives(
     {
         CreateVulkanSemaphore(&imageAvailable[frameIndex], device);
         CreateVulkanSemaphore(&renderFinished[frameIndex], device);
-        FenceCreate(&fence[frameIndex], VK_FENCE_CREATE_SIGNALED_BIT, device);
+        FenceCreate(&fence[frameIndex].m_fence, VK_FENCE_CREATE_SIGNALED_BIT, device);
     }
 }
 
@@ -2122,8 +2045,8 @@ void UpdateUniformBuffer(
     mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
     mappedMemoryRange.pNext = nullptr;
     mappedMemoryRange.memory = uniformBufferGpuMemory;
-    mappedMemoryRange.offset = offsetToGpuMemory;
-    mappedMemoryRange.size = uniformBufferSize;
+    mappedMemoryRange.offset = offsetToGpuMemory;///@todo: respect nonCoherentAtomSize
+    mappedMemoryRange.size = uniformBufferSize;///<@todo: respect nonCoherentAtomSize
     vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange);
 }
 
@@ -2154,12 +2077,14 @@ void AcquireNextImage(
 WIN_TIMER_DEF(s_frameTimer);
 void DrawFrame(
     //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
+    DrawFrameFinishedFence*const drawFrameFinishedFencePtr,
+    StreamingUnitRuntime::FrameNumber*const streamingUnitLastFrameSubmittedPtr,
+    const StreamingUnitRuntime::FrameNumber currentFrameNumber,
     const VkSwapchainKHR& swapChain,
     ConstVectorSafeRef<VkCommandBuffer> commandBuffers,
     const uint32_t acquiredImageIndex,
     const VkQueue& graphicsQueue,
     const VkQueue& presentQueue,
-    const VkFence& drawFrameFinishedFence,
     const VkSemaphore& imageAvailableSemaphore,
     const VkSemaphore& renderFinishedSemaphore,
     const VkDevice& device)
@@ -2172,18 +2097,21 @@ void DrawFrame(
     WIN_TIMER_START(s_frameTimer);
 #endif//#if NTF_WIN_TIMER
 
+    NTF_REF(drawFrameFinishedFencePtr, drawFrameFinishedFence);
+    NTF_REF(streamingUnitLastFrameSubmittedPtr, streamingUnitLastFrameSubmitted);
+
     ///#TODO_CALLBACK
     //assert(hackToRecreateSwapChainIfNecessaryPtr);
     //auto& hackToRecreateSwapChainIfNecessary = *hackToRecreateSwapChainIfNecessaryPtr;
 
     WIN_TIMER_DEF_START(waitForFences);
-    FenceWaitUntilSignalled(drawFrameFinishedFence, device);
+    FenceWaitUntilSignalled(drawFrameFinishedFence.m_fence, device);
     WIN_TIMER_STOP(waitForFences);
     //const int maxLen = 256;
     //char buf[maxLen];
     //snprintf(&buf[0], maxLen, "waitForFences:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(waitForFences));
     //fwrite(&buf[0], sizeof(buf[0]), strlen(&buf[0]), s_winTimer);
-    FenceReset(drawFrameFinishedFence, device);//queue has completed on the GPU and is ready to be prepared on the CPU
+    FenceReset(drawFrameFinishedFence.m_fence, device);//queue has completed on the GPU and is ready to be prepared on the CPU
 
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;//only value allowed
@@ -2204,8 +2132,10 @@ void DrawFrame(
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    const VkResult queueSubmitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo, drawFrameFinishedFence);
+    const VkResult queueSubmitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo, drawFrameFinishedFence.m_fence);///<@todo: use SubmitCommandBuffer() to reduce duplication
     NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
+    drawFrameFinishedFence.m_frameNumberCpuSubmitted = streamingUnitLastFrameSubmitted = currentFrameNumber;//so we know when it's safe to unload streaming unit's assets
+    drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted = false;//this frame has not been completed by the Gpu until this fence signals
 
     VkPresentInfoKHR presentInfo = {};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -2662,6 +2592,16 @@ void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
     HandleCloseWindows(&m_mutex);
 }
 
+void VulkanPagedStackAllocator::FreeAllPagesThatAreNotResidentForever(const VkDevice& device)
+{
+    WaitForSignalWindows(m_mutex);
+    for (auto& vulkanMemoryHeap : m_vulkanMemoryHeaps)
+    {
+        vulkanMemoryHeap.FreeAllPagesThatAreNotResidentForever(device);
+    }
+    MutexRelease(m_mutex);
+}
+
 ///@todo: unit test
 bool VulkanPagedStackAllocator::PushAlloc(
     VkDeviceSize* memoryOffsetPtr,
@@ -2690,7 +2630,7 @@ bool VulkanPagedStackAllocator::PushAlloc(
     const bool allocResult = heap.PushAlloc(
         &memoryOffset, 
         &memoryHandle, 
-        memRequirements, 
+        memRequirements, ///<@todo: also check for VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, and if so incorporate VKDeviceLimits::nonCoherentAtomSize into alignment requirement
         properties, 
         residentForever, 
         linearResource, 
@@ -2746,6 +2686,11 @@ static void VulkanMemoryHeapPageFreeAll(
     }
     *pageAllocatedFirstPtrPtr = nullptr;
 }
+void VulkanMemoryHeap::FreeAllPagesThatAreNotResidentForever(const VkDevice device)
+{
+    VulkanMemoryHeapPageFreeAll(&m_pageAllocatedLinearFirst, &m_pageFreeFirst, device);
+    VulkanMemoryHeapPageFreeAll(&m_pageAllocatedNonlinearFirst, &m_pageFreeFirst, device);
+}
 void VulkanMemoryHeap::Destroy(const VkDevice device)
 {
 #if NTF_DEBUG
@@ -2762,8 +2707,7 @@ void VulkanMemoryHeap::Destroy(const VkDevice device)
         m_pageResidentForeverLinear.Free(device);
     }
 
-    VulkanMemoryHeapPageFreeAll(&m_pageAllocatedLinearFirst, &m_pageFreeFirst, device);
-    VulkanMemoryHeapPageFreeAll(&m_pageAllocatedNonlinearFirst, &m_pageFreeFirst, device);
+    FreeAllPagesThatAreNotResidentForever(device);
 }
 
 bool VulkanMemoryHeap::PushAlloc(
@@ -2823,7 +2767,7 @@ bool VulkanMemoryHeap::PushAlloc(
     assert(pageAllocatedCurrent->SufficientMemory(memRequirements));
 
     memoryHandle = pageAllocatedCurrent->GetMemoryHandle();
-    const bool allocResult = pageAllocatedCurrent->PushAlloc(&memoryOffset, memRequirements);
+    const bool allocResult = pageAllocatedCurrent->PushAlloc(&memoryOffset, memRequirements);///<@todo: also check for VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, and if so incorporate VKDeviceLimits::nonCoherentAtomSize into alignment requirement
     assert(allocResult);
     return allocResult;
 }
@@ -2858,7 +2802,10 @@ bool VulkanMemoryHeapPage::PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemo
     assert(memoryOffsetPtr);
     auto& memoryOffset = *memoryOffsetPtr;
 
-    const bool allocateResult = m_stack.PushAlloc(&memoryOffset, memRequirements.alignment, memRequirements.size);
+    const bool allocateResult = m_stack.PushAlloc(
+        &memoryOffset, 
+        memRequirements.alignment,///@todo: ///<@todo: also check for VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, and if so incorporate VKDeviceLimits::nonCoherentAtomSize into alignment requiremets via MaxNtf(memRequirements.alignment, VkPhysicalDeviceLimits::nonCoherentAtomSize),
+        memRequirements.size);
     assert(allocateResult);
     return allocateResult;
 }

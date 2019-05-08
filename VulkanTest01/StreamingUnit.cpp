@@ -1,19 +1,5 @@
 #include"StreamingUnit.h"
-
-size_t std::hash<Vertex>::operator()(Vertex const& vertex) const
-{
-    return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (hash<glm::vec2>()(vertex.texCoord) << 1);
-}
-
-/*static*/VkVertexInputBindingDescription Vertex::GetBindingDescription()
-{
-    VkVertexInputBindingDescription bindingDescription = {};
-    bindingDescription.binding = 0;
-    bindingDescription.stride = sizeof(Vertex);
-    bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;//not using instanced rendering, so index vertex attributes by vertex, not instance
-
-    return bindingDescription;
-}
+#include"ntf_vulkan.h"
 
 /*static*/ void Vertex::GetAttributeDescriptions(VectorSafeRef<VkVertexInputAttributeDescription> attributeDescriptions)
 {
@@ -33,27 +19,114 @@ size_t std::hash<Vertex>::operator()(Vertex const& vertex) const
     attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
 }
 
-bool Vertex::operator==(const Vertex& other) const
+StreamingUnitRuntime::StreamingUnitRuntime()
 {
-    return pos == other.pos && color == other.color && texCoord == other.texCoord;
+}
+void StreamingUnitRuntime::Initialize(const VkDevice& device)
+{
+    m_stateMutexed.Initialize();
+    
+    const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
+    FenceCreate(&m_transferQueueFinishedFence, fenceCreateFlagBits, device);
+    FenceCreate(&m_graphicsQueueFinishedFence, fenceCreateFlagBits, device);
 }
 
-const char* StreamingUnitFilenameExtensionGet()
+StreamingUnitRuntime::StateMutexed::StateMutexed()
 {
-    static const char*const ret = "streamingUnit";
+#if NTF_DEBUG
+    m_initialized = false;
+#endif//#if NTF_DEBUG
+}
+void StreamingUnitRuntime::StateMutexed::Initialize()
+{
+#if NTF_DEBUG
+    assert(!m_initialized);
+#endif//#if NTF_DEBUG
+    m_mutex = MutexCreate();
+
+#if NTF_DEBUG
+    m_initialized = true;
+#endif//#if NTF_DEBUG
+    Set(kNotLoaded);
+}
+
+void StreamingUnitRuntime::StateMutexed::Destroy()
+{
+#if NTF_DEBUG
+    assert(m_initialized);
+    m_initialized = false;
+#endif//#if NTF_DEBUG
+    WaitForSignalWindows(m_mutex);
+    HandleCloseWindows(&m_mutex);//assume no ReleaseMutex() needed before closing; not sure this is actually true
+}
+
+StreamingUnitRuntime::State StreamingUnitRuntime::StateMutexed::Get() const
+{
+#if NTF_DEBUG
+    assert(m_initialized);
+#endif//#if NTF_DEBUG
+    WaitForSignalWindows(m_mutex);
+    const State ret = m_state;
+    ReleaseMutex(m_mutex);
     return ret;
 }
-
-size_t ImageSizeBytesCalculate(uint16_t textureWidth, uint16_t textureHeight, uint8_t textureChannels)
+void StreamingUnitRuntime::StateMutexed::Set(const StreamingUnitRuntime::State state)
 {
-    assert(textureWidth > 0);
-    assert(textureHeight > 0);
-    assert(textureChannels > 0);
-    return textureWidth * textureHeight * textureChannels;
+#if NTF_DEBUG
+    assert(m_initialized);
+#endif//#if NTF_DEBUG
+    WaitForSignalWindows(m_mutex);
+    m_state = state;
+    ReleaseMutex(m_mutex);
 }
 
-const char* CookedFileDirectoryGet() 
-{ 
-    static const char*const cookedFileDirectory = "cooked";
-    return cookedFileDirectory; 
+void StreamingUnitRuntime::StateMutexed::AssertValid() const
+{
+    const State state = Get();
+    assert(state >= kFirstValidValue);
+    assert(state <= kLastValidValue);
+}
+
+StreamingUnitRuntime::State StreamingUnitRuntime::StateMutexed() const
+{
+    return m_stateMutexed.Get();
+}
+void StreamingUnitRuntime::StateMutexed(const StreamingUnitRuntime::State state)
+{
+    m_stateMutexed.Set(state);
+}
+
+void StreamingUnitRuntime::Free(const VkDevice& device)
+{
+    //assert(m_stateMutexed.Get() == State::kUnloading);
+    m_stateMutexed.Set(State::kNotLoaded);
+
+    vkDestroySampler(device, m_textureSampler, GetVulkanAllocationCallbacks());
+
+    for (auto& texturedGeometry : m_texturedGeometries)
+    {
+        vkDestroyImage(device, texturedGeometry.textureImage, GetVulkanAllocationCallbacks());
+        vkDestroyBuffer(device, texturedGeometry.indexBuffer, GetVulkanAllocationCallbacks());
+        vkDestroyBuffer(device, texturedGeometry.vertexBuffer, GetVulkanAllocationCallbacks());
+    }
+
+    DestroyUniformBuffer(m_uniformBufferCpuMemory, m_uniformBufferGpuMemory, m_uniformBuffer, device);
+    for (auto& imageView : m_textureImageViews)
+    {
+        vkDestroyImageView(device, imageView, GetVulkanAllocationCallbacks());
+    }
+
+    vkDestroyDescriptorSetLayout(device, m_descriptorSetLayout, GetVulkanAllocationCallbacks());
+    vkDestroyPipelineLayout(device, m_pipelineLayout, GetVulkanAllocationCallbacks());
+    vkDestroyPipeline(device, m_graphicsPipeline, GetVulkanAllocationCallbacks());
+}
+
+void StreamingUnitRuntime::Destroy()
+{
+    m_stateMutexed.Destroy();
+}
+
+void StreamingUnitRuntime::AssertValid() const
+{
+    m_stateMutexed.AssertValid();
 }

@@ -13,7 +13,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_REF(threadArguments.m_physicalDevice, physicalDevice);
     NTF_REF(threadArguments.m_queueFamilyIndices, queueFamilyIndices);
     NTF_REF(threadArguments.m_streamingUnit, streamingUnit);
-    auto& threadCommand = threadArguments.m_threadCommand;
+    auto& threadCommand = *threadArguments.m_threadCommand;
     NTF_REF(threadArguments.m_threadDone, threadDone);
     NTF_REF(threadArguments.m_threadWake, threadWake);
     NTF_REF(threadArguments.m_transferQueue, transferQueue);
@@ -37,11 +37,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     VkDeviceSize offsetToFirstByteOfStagingBuffer;
     VkDescriptorPool descriptorPool;
 
-    VkFence transferQueueFinishedFence, graphicsQueueFinishedFence;
-    const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
-    FenceCreate(&transferQueueFinishedFence, fenceCreateFlagBits, device);
-    FenceCreate(&graphicsQueueFinishedFence, fenceCreateFlagBits, device);
-
     const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
     assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.transferFamily == queueFamilyIndices.graphicsFamily));
 
@@ -52,7 +47,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         &offsetToFirstByteOfStagingBuffer,
         NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
         true,
         device,
         physicalDevice);
@@ -71,57 +66,38 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
     stagingBufferMemoryMapCpuToGpu.Initialize(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpuPtr), NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
 
-    ArraySafe<VkBuffer, 32> stagingBuffersGpu;
+    ArraySafe<VkBuffer, 32> stagingBuffersGpu;///<@todo: should be VectorSafe
     size_t stagingBufferGpuAllocateIndex = 0;
-
-    assert(stagingBufferGpuAllocateIndex == 0);
-    assert(stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
 
     VkSemaphore transferFinishedSemaphore;
     CreateVulkanSemaphore(&transferFinishedSemaphore, device);
     VkPipelineStageFlags transferFinishedPipelineStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
 
+    VkPhysicalDeviceProperties physicalDeviceProperties;
+    vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
+
     for (;;)
     {
-        //clean up staging buffers if they were in use but have completed their transfers
-        ///@todo NTF: try to do this constantly and immediately after initiating transfers so this work is likely to be completed before the next transfers is requested #StreamingMemory
-        const bool loadingOperationsWereInFlight = stagingBufferGpuAllocateIndex > 0;
-        while (stagingBufferGpuAllocateIndex > 0)
-        {
-            FenceWaitUntilSignalled(transferQueueFinishedFence, device);
-            if (!unifiedGraphicsAndTransferQueue)
-            {
-                FenceWaitUntilSignalled(graphicsQueueFinishedFence, device);
-            }
-            SignalSemaphoreWindows(threadDone);///<@todo NTF: generalize for #StreamingMemory by signalling a unique semaphore for each streaming unit loaded
-
-            //clean up staging memory
-            stagingBufferMemoryMapCpuToGpu.Clear();
-
-            for (size_t stagingBufferGpuAllocateIndexFree = 0;
-            stagingBufferGpuAllocateIndexFree < stagingBufferGpuAllocateIndex;
-                ++stagingBufferGpuAllocateIndexFree)
-            {
-                vkDestroyBuffer(device, stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], GetVulkanAllocationCallbacks());
-            }
-            stagingBufferGpuAllocateIndex = 0;
-        }
-
         //#Wait
         //WaitOnAddress(&signalMemory, &undesiredValue, sizeof(AssetLoadingArguments::SignalMemoryType), INFINITE);//#SynchronizationWindows8+Only
-        DWORD waitForSingleObjectResult = WaitForSingleObject(threadWake, INFINITE);
+        const DWORD waitForSingleObjectResult = WaitForSingleObject(threadWake, INFINITE);
         assert(waitForSingleObjectResult == WAIT_OBJECT_0);
 
-        if (*threadCommand == AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate)
+        if (threadCommand == AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate)
         {
             break;
         }
-        assert(*threadCommand == AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit);
+        assert(threadCommand == AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit);
 
-        //commencing loading    ///@todo: generalize #StreamingMemory
-        FenceReset(transferQueueFinishedFence, device);
-        FenceReset(graphicsQueueFinishedFence, device);
-                                                       
+        assert(stagingBufferGpuAllocateIndex == 0);
+        //assert(stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
+
+        FenceReset(streamingUnit.m_transferQueueFinishedFence, device);
+        FenceReset(streamingUnit.m_graphicsQueueFinishedFence, device);
+        
+        assert(streamingUnit.StateMutexed() == StreamingUnitRuntime::kNotLoaded);
+        streamingUnit.StateMutexed(StreamingUnitRuntime::kLoading);
+
         const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         CreateDescriptorPool(&descriptorPool, descriptorType, device, TODO_REFACTOR_NUM);
         CreateDescriptorSetLayout(&streamingUnit.m_descriptorSetLayout, descriptorType, device, TODO_REFACTOR_NUM);
@@ -263,10 +239,23 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 physicalDevice);
         }
         Fclose(streamingUnitFile);
+
+        ////THIS CHANGES NOTHING -- still works successfully on initial load and blackscreens on everything-zero (index/vertex buffers and textures) on second load
+        VkMappedMemoryRange mappedMemoryRange;
+        mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+        mappedMemoryRange.pNext = nullptr;
+        mappedMemoryRange.memory = stagingBufferGpuMemory;
+        mappedMemoryRange.offset = 0;
+        mappedMemoryRange.size = RoundToNearest(
+            CastWithAssert<size_t,VkDeviceSize>(stagingBufferMemoryMapCpuToGpu.GetFirstByteFree()), 
+            physicalDeviceProperties.limits.nonCoherentAtomSize);
+        vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange);
+
         if (!unifiedGraphicsAndTransferQueue)
         {
             transferFinishedSemaphores.Push(transferFinishedSemaphore);
         }
+
         EndCommandBuffer(commandBufferTransfer);
         SubmitCommandBuffer(
             transferFinishedSemaphores,
@@ -274,7 +263,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             ArraySafeRef<VkPipelineStageFlags>(),
             commandBufferTransfer,
             transferQueue,
-            transferQueueFinishedFence);
+            streamingUnit.m_transferQueueFinishedFence);
 
         if (!unifiedGraphicsAndTransferQueue)
         {
@@ -285,7 +274,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 ArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),///<@todo: ArraySafeRefConst
                 commandBufferTransitionImage,
                 graphicsQueue,
-                graphicsQueueFinishedFence);
+                streamingUnit.m_graphicsQueueFinishedFence);
         }
 
         const VkDeviceSize uniformBufferSize = streamingUnit.m_uniformBufferSizeAligned;
@@ -311,13 +300,41 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             TODO_REFACTOR_NUM,
             streamingUnit.m_textureSampler,
             device);
+
+        //clean up staging buffers if they were in use but have completed their transfers
+        {
+            FenceWaitUntilSignalled(streamingUnit.m_transferQueueFinishedFence, device);
+            if (!unifiedGraphicsAndTransferQueue)
+            {
+                FenceWaitUntilSignalled(streamingUnit.m_graphicsQueueFinishedFence, device);
+            }
+
+            streamingUnit.StateMutexed(StreamingUnitRuntime::kReady);//streaming unit is ready to render on the main thread
+
+            //clean up staging memory
+            stagingBufferMemoryMapCpuToGpu.Clear();
+
+            //BEG_HAC
+            //FILE* f;
+            //static int count;
+            //Fopen(&f, (std::string("stagingBufferMemoryMapCpuToGpu") + std::string(1, 'A' + count)).c_str(), "w");
+            //Fwrite(f, stagingBufferMemoryMapCpuToGpu.GetMemory(), sizeof(stagingBufferMemoryMapCpuToGpu.GetMemory()), 7296256);
+            //Fclose(f);
+            //++count;
+            //END_HAC
+
+            for (   size_t stagingBufferGpuAllocateIndexFree = 0;
+                    stagingBufferGpuAllocateIndexFree < stagingBufferGpuAllocateIndex;
+                    ++stagingBufferGpuAllocateIndexFree)
+            {
+                vkDestroyBuffer(device, stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], GetVulkanAllocationCallbacks());
+            }
+            stagingBufferGpuAllocateIndex = 0;
+        }
     }
 
     //cleanup
     stackAllocatorHack.Destroy();
-
-    vkDestroyFence(device, transferQueueFinishedFence, GetVulkanAllocationCallbacks());
-    vkDestroyFence(device, graphicsQueueFinishedFence, GetVulkanAllocationCallbacks());
 
     vkUnmapMemory(device, stagingBufferGpuMemory);
     vkDestroyBuffer(device, stagingBufferGpu, GetVulkanAllocationCallbacks());

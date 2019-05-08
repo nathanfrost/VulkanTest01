@@ -330,6 +330,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ntf_vulkan.cpp" />
     <ClCompile Include="StackNTF.cpp" />
+    <ClCompile Include="StreamingCookAndRuntime.cpp" />
     <ClCompile Include="StreamingUnit.cpp" />
     <ClCompile Include="StreamingUnitManager.cpp" />
   </ItemGroup>
@@ -340,6 +341,7 @@
     <ClInclude Include="ntf_vulkan_utility.h" />
     <ClInclude Include="StackNTF.h" />
     <ClInclude Include="stdArrayUtility.h" />
+    <ClInclude Include="StreamingCookAndRuntime.h" />
     <ClInclude Include="StreamingUnit.h" />
     <ClInclude Include="StreamingUnitManager.h" />
   </ItemGroup>

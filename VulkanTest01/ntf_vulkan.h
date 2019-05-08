@@ -11,6 +11,7 @@
 #include<chrono>
 #include<fstream>
 #include<functional>
+#include"glmNTF.h"
 #include<iostream>
 #include<stdexcept>
 #include<thread>
@@ -19,11 +20,6 @@
 
 #include"StackNTF.h"
 #include"StreamingUnit.h"
-
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
 
 #include"stdArrayUtility.h"
 
@@ -64,6 +60,17 @@ static const uint32_t s_kHeight = 1200;
 
 typedef uint32_t PushConstantBindIndexType;
 
+struct DrawFrameFinishedFence
+{
+    DrawFrameFinishedFence()
+    {
+        m_frameNumberCpuRecordedCompleted = true;//don't record garbage frame numbers -- wait until they're filled out on submission to Gpu
+    }
+
+    VkFence m_fence;
+    StreamingUnitRuntime::FrameNumber m_frameNumberCpuSubmitted;///<to track when the Gpu is finished with a frame
+    bool m_frameNumberCpuRecordedCompleted;
+};
 
 VkAllocationCallbacks* GetVulkanAllocationCallbacks();
 #if NTF_DEBUG
@@ -73,8 +80,8 @@ HANDLE MutexCreate();
 void MutexRelease(const HANDLE mutex);
 HANDLE ThreadSignalingEventCreate();
 BOOL HandleCloseWindows(HANDLE*const h);
-void SignalSemaphoreWindows(const HANDLE wakeEventHandle);
-void WaitForSignalWindows(const HANDLE doneEventHandle);
+void SignalSemaphoreWindows(const HANDLE semaphoreHandle);
+void WaitForSignalWindows(const HANDLE semaphoreOrMutexHandle);
 void TransferImageFromCpuToGpu(
     const VkImage& image,
     const uint32_t width,
@@ -314,23 +321,6 @@ void AcquireNextImage(
     const VkSemaphore& imageAvailableSemaphore,
     const VkDevice& device);
 
-//void FillSecondaryCommandBuffersTest(
-//    ArraySafeRef<VkCommandBuffer> commandBuffersSecondary,
-//    ArraySafeRef<ThreadHandles> commandBuffersSecondaryThreads,
-//    ArraySafeRef<HANDLE> commandBufferThreadDoneEvents,
-//    ArraySafeRef<CommandBufferThreadArgumentsTest> commandBufferThreadArgumentsArray,
-//    VkDescriptorSet*const descriptorSet,
-//    VkFramebuffer*const swapChainFramebuffer,
-//    VkRenderPass*const renderPass,
-//    VkExtent2D*const swapChainExtent,
-//    VkPipelineLayout*const pipelineLayout,
-//    VkPipeline*const graphicsPipeline,
-//    VkBuffer*const vertexBuffer,
-//    VkBuffer*const indexBuffer,
-//    uint32_t*const indicesSize,
-//    ArraySafeRef<uint32_t> objectIndex,
-//    const size_t objectsNum);
-
 void FillCommandBufferPrimary(
     const VkCommandBuffer& commandBufferPrimary,
     const ArraySafeRef<TexturedGeometry> texturedGeometries,
@@ -447,22 +437,6 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     const bool residentForever,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
-void CreateTextureImage(
-    VkImage*const textureImagePtr,
-    VulkanPagedStackAllocator*const allocatorPtr,
-    const uint32_t widthPixels,
-    const uint32_t heightPixels,
-    const VkBuffer& stagingBufferGpu,
-    const bool residentForever,
-    const VkQueue& transferQueue,
-    const VkCommandBuffer& commandBufferTransfer,
-    const uint32_t transferQueueFamilyIndex,
-    const VkSemaphore transferFinishedSemaphore,
-    const VkQueue& graphicsQueue,
-    const VkCommandBuffer& commandBufferGraphics,
-    const uint32_t graphicsQueueFamilyIndex,
-    const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice);
 void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& device);
 
 void CreateFramebuffers(
@@ -477,7 +451,7 @@ void CreateVulkanSemaphore(VkSemaphore*const semaphorePtr, const VkDevice& devic
 void CreateFrameSyncPrimitives(
     VectorSafeRef<VkSemaphore> imageAvailable,
     VectorSafeRef<VkSemaphore> renderFinished,
-    VectorSafeRef<VkFence> fence,
+    ArraySafeRef<DrawFrameFinishedFence> fence,
     const size_t framesNum,
     const VkDevice& device);
 
@@ -497,21 +471,26 @@ void UpdateUniformBuffer(
 
 void DrawFrame(
     //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
+    DrawFrameFinishedFence*const drawFrameFinishedFencePtr,
+    StreamingUnitRuntime::FrameNumber*const streamingUnitLastFrameSubmittedPtr,
+    const StreamingUnitRuntime::FrameNumber currentFrameNumber,
     const VkSwapchainKHR& swapChain,
     ConstVectorSafeRef<VkCommandBuffer> commandBuffers,
     const uint32_t acquiredImageIndex,
     const VkQueue& graphicsQueue,
     const VkQueue& presentQueue,
-    const VkFence& drawFrameFinishedFence,
     const VkSemaphore& imageAvailableSemaphore,
     const VkSemaphore& renderFinishedSemaphore,
     const VkDevice& device);
 
-//void CommandBufferSecondaryThreadsCreateTest(
-//    ArraySafeRef<ThreadHandles> threadData,
-//    ArraySafeRef<HANDLE> threadDoneEvents,
-//    ArraySafeRef<CommandBufferThreadArgumentsTest> threadArguments,
-//    const size_t threadsNum);
+///@todo: find better translation unit
+template<class T>
+inline T MaxNtf(const T a, const T b)
+{
+    assert(a >= 0);
+    assert(b >= 0);
+    return a > b ? a : b;
+}
 
 class VulkanMemoryHeapPage
 {
@@ -565,6 +544,8 @@ public:
 
     void Destroy(const VkDevice device);
 
+    void FreeAllPagesThatAreNotResidentForever(const VkDevice device);
+
     bool PushAlloc(
         VkDeviceSize* memoryOffsetPtr,
         VkDeviceMemory* memoryHandlePtr,
@@ -609,6 +590,8 @@ public:
 
     void Initialize(const VkDevice& device, const VkPhysicalDevice& physicalDevice);
     void Destroy(const VkDevice& device);
+
+    void FreeAllPagesThatAreNotResidentForever(const VkDevice& device);
 
     bool PushAlloc(
         VkDeviceSize* memoryOffsetPtr,

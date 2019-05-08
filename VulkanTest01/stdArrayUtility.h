@@ -395,7 +395,9 @@ public:
     typedef const T& const_reference;
     typedef size_t size_type;
 
-private:
+    //BEG_HAC
+//private:
+    //END_HAC
     void SetArray(T* p)
     {
         m_array = p;

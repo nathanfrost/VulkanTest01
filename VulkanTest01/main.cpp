@@ -55,13 +55,16 @@ public:
 #define NTF_DRAW_CALLS_TOTAL (NTF_OBJECTS_NUM*NTF_DRAWS_PER_OBJECT_NUM)
 //END_#StreamingMemory
 
+    VulkanRendererNTF()
+    {
+        m_frameNumberCurrentCpu = 0;
+    }
+
     void Run() 
 	{
         WindowInitialize(&m_window);
         VulkanInitialize();
 
-        ///@todo: #StreamingMemory: generalize
-        WaitForSignalWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
         MainLoop(m_window);
         Shutdown();
 
@@ -211,7 +214,7 @@ private:
         {
             vkDestroySemaphore(m_device, m_renderFinishedSemaphore[frameIndex], GetVulkanAllocationCallbacks());
             vkDestroySemaphore(m_device, m_imageAvailableSemaphore[frameIndex], GetVulkanAllocationCallbacks());
-            vkDestroyFence(m_device, m_drawFrameFinishedFences[frameIndex], GetVulkanAllocationCallbacks());
+            vkDestroyFence(m_device, m_drawFrameFinishedFences[frameIndex].m_fence, GetVulkanAllocationCallbacks());
         }
 
         vkDestroyCommandPool(m_device, m_commandPoolPrimary, GetVulkanAllocationCallbacks());
@@ -331,6 +334,8 @@ private:
             NTF_FRAMES_IN_FLIGHT_NUM,
             m_device);
 
+        m_streamingUnit.Initialize(m_device);///#StreamingMemory
+
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         
         const uint32_t swapChainFramebuffersSize = Cast_size_t_uint32_t(m_swapChainFramebuffers.size());
@@ -347,6 +352,7 @@ private:
 
         m_assetLoadingThreadData.m_handles.doneEventHandle = ThreadSignalingEventCreate();
         m_assetLoadingThreadData.m_handles.wakeEventHandle = ThreadSignalingEventCreate();
+        
         m_assetLoadingThreadData.m_threadCommand = AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit;
 
         m_assetLoadingArguments.m_commandBufferTransfer = &m_commandBufferTransfer;
@@ -386,55 +392,187 @@ private:
             m_device);
     }
 
+    static void IfLargerDistanceThenUpdateFrameNumber(
+        StreamingUnitRuntime::FrameNumberSigned*const biggestDistancePtr, 
+        StreamingUnitRuntime::FrameNumber*const distanceFrameNumberCpuSubmittedPtr,
+        const StreamingUnitRuntime::FrameNumber distance,
+        const StreamingUnitRuntime::FrameNumber frameNumberCpuSubmitted)
+    {
+        NTF_REF(biggestDistancePtr, biggestDistance);
+        NTF_REF(distanceFrameNumberCpuSubmittedPtr, distanceFrameNumberCpuSubmitted);
+
+        if (distance > biggestDistance)
+        {
+            biggestDistance = distance;
+            distanceFrameNumberCpuSubmitted = frameNumberCpuSubmitted;
+        }
+    }
     void MainLoop(GLFWwindow* window) 
     {
         assert(window);
-        size_t frameIndex = 0;
+
+        //BEG_#StreamingTest
+        static bool unloadedOnce = false;
+        //END_#StreamingTest
         while (!glfwWindowShouldClose(window)) 
         {
+            //BEG_#StreamingTest
+            const StreamingUnitRuntime::FrameNumber frameToSwapState = 600;
+            if (m_frameNumberCurrentCpu % frameToSwapState == frameToSwapState-1)
+            {
+                const StreamingUnitRuntime::State state = m_streamingUnit.StateMutexed();
+                switch (state)
+                {
+                    case StreamingUnitRuntime::kReady:
+                    {
+                        if (!unloadedOnce)
+                        {
+                            m_streamingUnit.StateMutexed(StreamingUnitRuntime::kUnloading);
+                            unloadedOnce = true;
+                            printf("--------------------UNLOAD--------------------\n");
+                        }
+                        break;
+                    }
+                    case StreamingUnitRuntime::kNotLoaded:
+                    {
+                        ///@todo: fill out m_assetLoadingThreadData when #StreamingMemory
+                        printf("--------------------Load it; kick the background thread--------------------\n");
+                        SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
+                        break;
+                    }
+                    default:
+                    {
+                        ;
+                    }
+                }
+            }
+            //END_#StreamingTest
+
             glfwPollEvents();
 
+            //determine last Cpu frame that the Gpu finished with
+            const StreamingUnitRuntime::FrameNumberSigned biggestPositiveDistanceInitial = 0;
+            const StreamingUnitRuntime::FrameNumberSigned biggestNegativeDistanceInitial = StreamingUnitRuntime::kFrameNumberSignedMinimum;
+            StreamingUnitRuntime::FrameNumberSigned biggestPositiveDistance = biggestPositiveDistanceInitial, biggestNegativeDistance = biggestNegativeDistanceInitial;//negative distance handles the wraparound case
+            StreamingUnitRuntime::FrameNumber positiveDistanceFrameNumberCpuSubmitted=0, negativeDistanceFrameNumberCpuSubmitted=0;
+            for (int i = 0; i < NTF_FRAMES_IN_FLIGHT_NUM; ++i)
+            {
+                auto& drawFrameFinishedFence = m_drawFrameFinishedFences[i];
+                const StreamingUnitRuntime::FrameNumber frameNumberCpuSubmitted = drawFrameFinishedFence.m_frameNumberCpuSubmitted;
 
-           //#StreamingMemory: update uniforms per streaming unit
-            UpdateUniformBuffer(
-                m_streamingUnit.m_uniformBufferCpuMemory,
-                s_cameraTranslation,
-                m_streamingUnit.m_uniformBufferGpuMemory,
-                m_streamingUnit.m_uniformBufferOffsetToGpuMemory,
-                NTF_DRAW_CALLS_TOTAL,
-                m_streamingUnit.m_uniformBufferSizeAligned,
-                m_swapChainExtent,
-                m_device);
+                //BEG_HAC
+                //const VkResult fenceStatus = vkGetFenceStatus(m_device, drawFrameFinishedFence.m_fence);//@todo: put this back in the conditional once this hacky code goes away
+                //if (unloadedOnce)
+                //{
+                //    printf("%i:frameNumberCpuSubmitted=%i;vkGetFenceStatus()=%i; drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted=%i, m_lastCpuFrameCompleted=%i\n",
+                //        i, frameNumberCpuSubmitted, fenceStatus, drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted, m_lastCpuFrameCompleted);
+                //}
+                //END_HAC
 
-            const VkSemaphore imageAvailableSemaphore = m_imageAvailableSemaphore[frameIndex];
-            uint32_t acquiredImageIndex;
-            AcquireNextImage(&acquiredImageIndex, m_swapChain, imageAvailableSemaphore, m_device);
+                if (!drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted &&
+                    vkGetFenceStatus(m_device, drawFrameFinishedFence.m_fence) == VK_SUCCESS)//Gpu has reported a new frame completed since last Cpu checked
+                {
+                    drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted = true;//we are about to process this frame number as completed
 
-            FillCommandBufferPrimary(
-                m_commandBuffersPrimary[acquiredImageIndex],
-                &m_streamingUnit.m_texturedGeometries,
-                m_streamingUnit.m_descriptorSet,
-                NTF_OBJECTS_NUM,
-                NTF_DRAWS_PER_OBJECT_NUM,
-                m_swapChainFramebuffers[acquiredImageIndex],
-                m_renderPass,
-                m_swapChainExtent,
-                m_streamingUnit.m_pipelineLayout,
-                m_streamingUnit.m_graphicsPipeline,
-                m_device);
+                    const StreamingUnitRuntime::FrameNumberSigned distance = frameNumberCpuSubmitted - m_lastCpuFrameCompleted;
+                    if (distance < 0)
+                    {
+                        //wraparound case; the most recent frames are the largest negative distance
+                        IfLargerDistanceThenUpdateFrameNumber(
+                            &biggestNegativeDistance,
+                            &negativeDistanceFrameNumberCpuSubmitted,
+                            distance,
+                            frameNumberCpuSubmitted);
+                    }
+                    else
+                    {
+                        //regular case; the most recent frames are the largest
+                        IfLargerDistanceThenUpdateFrameNumber(
+                            &biggestPositiveDistance, 
+                            &positiveDistanceFrameNumberCpuSubmitted, 
+                            distance, 
+                            frameNumberCpuSubmitted);
+                    }
+                }
+            }
+            //BEG_HAC
+            //if(unloadedOnce)
+            //{
+            //    printf("biggestPositiveDistance=%i, biggestNegativeDistance=%i, m_lastCpuFrameCompleted=%i, negativeDistanceFrameNumberCpuSubmitted=%i, positiveDistanceFrameNumberCpuSubmitted=%i\n\n",
+            //            biggestPositiveDistance, biggestNegativeDistance, m_lastCpuFrameCompleted, negativeDistanceFrameNumberCpuSubmitted, positiveDistanceFrameNumberCpuSubmitted);
+            //}
+            //END_HAC
+            if (biggestPositiveDistance > biggestPositiveDistanceInitial || biggestNegativeDistance > biggestNegativeDistanceInitial)
+            {
+                //Gpu processed a new frame
+                m_lastCpuFrameCompleted =   biggestNegativeDistance > StreamingUnitRuntime::kFrameNumberSignedMinimum ?
+                                            negativeDistanceFrameNumberCpuSubmitted : positiveDistanceFrameNumberCpuSubmitted;
+            }
+            const size_t frameIndex = m_frameNumberCurrentCpu % NTF_FRAMES_IN_FLIGHT_NUM;
 
-            DrawFrame(
-                /*this,///#TODO_CALLBACK*/ 
-                m_swapChain, 
-                m_commandBuffersPrimary, 
-                acquiredImageIndex,
-                m_graphicsQueue, 
-                m_presentQueue, 
-                m_drawFrameFinishedFences[frameIndex],
-                imageAvailableSemaphore,
-                m_renderFinishedSemaphore[frameIndex],
-                m_device);
-            frameIndex = (frameIndex + 1) % NTF_FRAMES_IN_FLIGHT_NUM;
+            switch (m_streamingUnit.StateMutexed())
+            {
+                case StreamingUnitRuntime::kReady:
+                {
+                    //#StreamingMemory: update uniforms per streaming unit
+                    UpdateUniformBuffer(
+                        m_streamingUnit.m_uniformBufferCpuMemory,
+                        s_cameraTranslation,
+                        m_streamingUnit.m_uniformBufferGpuMemory,
+                        m_streamingUnit.m_uniformBufferOffsetToGpuMemory,
+                        NTF_DRAW_CALLS_TOTAL,
+                        m_streamingUnit.m_uniformBufferSizeAligned,
+                        m_swapChainExtent,
+                        m_device);
+                    
+                    const VkSemaphore imageAvailableSemaphore = m_imageAvailableSemaphore[frameIndex];
+                    uint32_t acquiredImageIndex;
+                    AcquireNextImage(&acquiredImageIndex, m_swapChain, imageAvailableSemaphore, m_device);
+
+                    FillCommandBufferPrimary(
+                        m_commandBuffersPrimary[acquiredImageIndex],
+                        &m_streamingUnit.m_texturedGeometries,
+                        m_streamingUnit.m_descriptorSet,
+                        NTF_OBJECTS_NUM,
+                        NTF_DRAWS_PER_OBJECT_NUM,
+                        m_swapChainFramebuffers[acquiredImageIndex],
+                        m_renderPass,
+                        m_swapChainExtent,
+                        m_streamingUnit.m_pipelineLayout,
+                        m_streamingUnit.m_graphicsPipeline,
+                        m_device);
+
+                    DrawFrame(
+                        /*this,///#TODO_CALLBACK*/
+                        &m_drawFrameFinishedFences[frameIndex],
+                        &m_streamingUnit.m_lastSubmittedCpuFrame,///@todo: #StreamingMemory
+                        m_frameNumberCurrentCpu,
+                        m_swapChain,
+                        m_commandBuffersPrimary,
+                        acquiredImageIndex,
+                        m_graphicsQueue,
+                        m_presentQueue,
+                        imageAvailableSemaphore,
+                        m_renderFinishedSemaphore[frameIndex],
+                        m_device);
+                    break;
+                }
+                case StreamingUnitRuntime::kUnloading:
+                {
+                    //#StreamingMemory: generalize
+                    if (m_streamingUnit.m_lastSubmittedCpuFrame <= m_lastCpuFrameCompleted)
+                    {
+                        m_streamingUnit.Free(m_device);
+                        //m_deviceLocalMemory.FreeAllPagesThatAreNotResidentForever(m_device);//#StreamingMemory: only free pages used by this streaming unit; also probably need to mutex
+                    }
+                    break;
+                }
+                default:
+                {
+                    ;
+                }
+            }            
+            ++m_frameNumberCurrentCpu;
         }
 
         //wait for the logical device to finish operations before exiting MainLoop and destroying the window
@@ -477,12 +615,14 @@ private:
     int m_frameIndex=0;
     VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_imageAvailableSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor use ArraySafe
     VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_renderFinishedSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor use ArraySafe
-        
-    VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM> m_drawFrameFinishedFences = VectorSafe<VkFence, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor use ArraySafe
+    ArraySafe<DrawFrameFinishedFence, NTF_FRAMES_IN_FLIGHT_NUM> m_drawFrameFinishedFences;
 
     VulkanPagedStackAllocator m_deviceLocalMemory;
     AssetLoadingThreadData m_assetLoadingThreadData;
     AssetLoadingArguments m_assetLoadingArguments;
+
+    StreamingUnitRuntime::FrameNumber m_frameNumberCurrentCpu;
+    StreamingUnitRuntime::FrameNumber m_lastCpuFrameCompleted = 0;
 };
 
 int main() 

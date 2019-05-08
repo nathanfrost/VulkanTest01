@@ -151,12 +151,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\VulkanTest01\StackNTF.cpp" />
-    <ClCompile Include="..\VulkanTest01\StreamingUnit.cpp" />
+    <ClCompile Include="..\VulkanTest01\StreamingCookAndRuntime.cpp" />
     <ClCompile Include="StreamingCookerMain.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\VulkanTest01\StackNTF.h" />
-    <ClInclude Include="..\VulkanTest01\StreamingUnit.h" />
+    <ClInclude Include="..\VulkanTest01\StreamingCookAndRuntime.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

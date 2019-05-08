@@ -1,11 +1,10 @@
 #pragma once
 #include<assert.h>
-#include <glm/glm.hpp>
-#include <glm/gtx/hash.hpp>
 #include<stdint.h>
 #include <vulkan/vulkan.h>
 #include"StackNTF.h"
 #include"stdArrayUtility.h"
+#include"StreamingCookAndRuntime.h"
 
 typedef uint32_t StreamingUnitVersion;
 typedef uint8_t StreamingUnitByte;
@@ -17,25 +16,6 @@ typedef uint8_t StreamingUnitTextureChannels;
 
 typedef uint32_t IndexBufferValue;
 
-struct Vertex
-{
-    glm::vec3 pos;
-    glm::vec3 color;
-    glm::vec2 texCoord;
-
-    static VkVertexInputBindingDescription GetBindingDescription();
-    static void GetAttributeDescriptions(VectorSafeRef<VkVertexInputAttributeDescription> attributeDescriptions);
-
-    bool operator==(const Vertex& other) const;
-};
-namespace std
-{
-    template<> struct hash<Vertex>
-    {
-        size_t operator()(Vertex const& vertex) const;
-    };
-}
-
 struct TexturedGeometry
 {
     VkBuffer vertexBuffer;
@@ -44,7 +24,6 @@ struct TexturedGeometry
     VkDeviceMemory indexBufferMemory;
     uint32_t indicesSize;
     VkImage textureImage;
-    VkDeviceMemory textureBufferMemory;
 
     bool Valid() const
     {
@@ -55,6 +34,19 @@ struct TexturedGeometry
 class StreamingUnitRuntime
 {
 public:
+    StreamingUnitRuntime();
+    void Initialize(const VkDevice& device);
+    void Free(const VkDevice& device);
+    void Destroy();
+
+    enum State {    kFirstValidValue, kNotLoaded = kFirstValidValue,
+                    kLoading, kReady, 
+                    kLastValidValue, kUnloading = kLastValidValue};
+    State StateMutexed() const;
+    void StateMutexed(const State state);
+    void AssertValid() const;
+
+
     VkSampler m_textureSampler;
 #define TODO_REFACTOR_NUM 2//is NTF_OBJECTS_NUM -- todo: generalize #StreamingMemory
     ArraySafe<TexturedGeometry, TODO_REFACTOR_NUM> m_texturedGeometries;
@@ -79,13 +71,38 @@ public:
     VkPipelineLayout m_pipelineLayout;
     VkPipeline m_graphicsPipeline;
 
-    void Free(const VkDevice device);
-};
+    ///@todo: get these values out of this class; typing the namespace is annoying
+    //BEG_#FrameNumber: if you change one of these constructs, make sure the rest are synchronized
+    typedef uint16_t FrameNumber;
+    typedef int32_t FrameNumberSigned;
+    enum { kFrameNumberSignedMinimum = -2147483647 - 1};//avoid Visual Studio 2015 compiler warning C4146, which incorrectly claims a 32bit signed integer can't store -2^31
+    //END_#FrameNumber
+    FrameNumber m_lastSubmittedCpuFrame;
 
-const char* StreamingUnitFilenameExtensionGet();
-void StreamingUnitFilenameExtensionAppend(char*const filenameNoExtension, const size_t filenameNoExtensionSizeBytes);
-size_t ImageSizeBytesCalculate(uint16_t textureWidth, uint16_t textureHeight, uint8_t textureChannels);
-const char* CookedFileDirectoryGet();
+private:
+    ///@todo: data should only be accessed by the main thread when in the appropriate m_state is (typically kNotLoaded or kReady) -- I could enforce this with methods
+    
+    class StateMutexed
+    {
+    public:
+        StateMutexed();
+        void Initialize();
+        void Destroy();
+        State Get() const;
+        void Set(const State state);
+        void AssertValid() const;
+
+    private:
+#if NTF_DEBUG
+        bool m_initialized;
+#endif//#if NTF_DEBUG
+        HANDLE m_mutex;
+        State m_state;
+    } m_stateMutexed;
+
+    friend DWORD WINAPI AssetLoadingThread(void* arg);
+    VkFence m_transferQueueFinishedFence, m_graphicsQueueFinishedFence;
+};
 
 class SerializerCookerOut
 {
@@ -134,6 +151,21 @@ public:
         assert(file);
         assert(elementsNum > 0);
         arraySafe.MemcpyFromFread(file, elementsNum);
+
+        //BEG_HAC
+        //printf("---------------\n");
+        //for (int i = 0; i < 16; ++i)
+            //printf("arraySafe[%i]=%u\n", i, ((uint32_t*)(arraySafe.m_array))[i]);
+        //END_HAC
+        //
+//#pragma warning(disable : 4996)
+//        static int count;
+//        FILE* f;
+//        Fopen(&f, (std::string("textureHack") + std::string(1, 'A' + count)).c_str(), "w");
+//        Fwrite(f, arraySafe.data(), sizeof(T), elementsNum);
+//        Fclose(f);
+//        ++count;
+        //END_HAC
     }
     template<class ElementType, class ElementNumType>
     inline static void Execute(
