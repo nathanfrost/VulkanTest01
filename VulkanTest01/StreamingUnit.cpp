@@ -22,13 +22,9 @@
 StreamingUnitRuntime::StreamingUnitRuntime()
 {
 }
-void StreamingUnitRuntime::Initialize(const VkDevice& device)
+void StreamingUnitRuntime::Initialize()
 {
     m_stateMutexed.Initialize();
-    
-    const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
-    FenceCreate(&m_transferQueueFinishedFence, fenceCreateFlagBits, device);
-    FenceCreate(&m_graphicsQueueFinishedFence, fenceCreateFlagBits, device);
 }
 
 StreamingUnitRuntime::StateMutexed::StateMutexed()
@@ -66,7 +62,9 @@ StreamingUnitRuntime::State StreamingUnitRuntime::StateMutexed::Get() const
     assert(m_initialized);
 #endif//#if NTF_DEBUG
     WaitForSignalWindows(m_mutex);
+    AssertValid();
     const State ret = m_state;
+    //printf("Get: m_state=%i\n", ret);
     ReleaseMutex(m_mutex);
     return ret;
 }
@@ -77,14 +75,18 @@ void StreamingUnitRuntime::StateMutexed::Set(const StreamingUnitRuntime::State s
 #endif//#if NTF_DEBUG
     WaitForSignalWindows(m_mutex);
     m_state = state;
+    AssertValid();
+    //printf("Set: m_state=%i\n", m_state);
     ReleaseMutex(m_mutex);
 }
 
+///not threadsafe
 void StreamingUnitRuntime::StateMutexed::AssertValid() const
 {
-    const State state = Get();
-    assert(state >= kFirstValidValue);
-    assert(state <= kLastValidValue);
+#if NTF_DEBUG
+    assert(m_state >= kFirstValidValue);
+    assert(m_state <= kLastValidValue);
+#endif//#if NTF_DEBUG
 }
 
 StreamingUnitRuntime::State StreamingUnitRuntime::StateMutexed() const
@@ -98,7 +100,7 @@ void StreamingUnitRuntime::StateMutexed(const StreamingUnitRuntime::State state)
 
 void StreamingUnitRuntime::Free(const VkDevice& device)
 {
-    //assert(m_stateMutexed.Get() == State::kUnloading);
+    //assert(m_stateMutexed.Get() == State::kUnloading);///<@todo: make this uncommentable, even when closing the app
     m_stateMutexed.Set(State::kNotLoaded);
 
     vkDestroySampler(device, m_textureSampler, GetVulkanAllocationCallbacks());
@@ -113,12 +115,16 @@ void StreamingUnitRuntime::Free(const VkDevice& device)
     DestroyUniformBuffer(m_uniformBufferCpuMemory, m_uniformBufferGpuMemory, m_uniformBuffer, device);
     for (auto& imageView : m_textureImageViews)
     {
-        vkDestroyImageView(device, imageView, GetVulkanAllocationCallbacks());
+        vkDestroyImageView(device, imageView, GetVulkanAllocationCallbacks()); 
     }
 
     vkDestroyDescriptorSetLayout(device, m_descriptorSetLayout, GetVulkanAllocationCallbacks());
+    vkDestroyDescriptorPool(device, m_descriptorPool, GetVulkanAllocationCallbacks());
     vkDestroyPipelineLayout(device, m_pipelineLayout, GetVulkanAllocationCallbacks());
     vkDestroyPipeline(device, m_graphicsPipeline, GetVulkanAllocationCallbacks());
+
+    vkDestroyFence(device, m_transferQueueFinishedFence, GetVulkanAllocationCallbacks());
+    vkDestroyFence(device, m_graphicsQueueFinishedFence, GetVulkanAllocationCallbacks());
 }
 
 void StreamingUnitRuntime::Destroy()

@@ -18,6 +18,8 @@ public:
     inline void ClearSuballocations() { assert(m_allocated); m_firstByteFree = 0; }
     inline void Free()
     {
+        ClearSuballocations();
+
         assert(m_allocated);
         m_allocated = false;
     }

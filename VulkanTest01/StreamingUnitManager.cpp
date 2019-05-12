@@ -1,5 +1,7 @@
 #include"StreamingUnitManager.h"
 
+//extern LARGE_INTEGER g_queryPerformanceFrequency;
+
 #define NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE (128 * 1024 * 1024)
 DWORD WINAPI AssetLoadingThread(void* arg)
 {
@@ -21,12 +23,20 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_REF(threadArguments.m_renderPass, renderPass);
     NTF_REF(threadArguments.m_swapChainExtent, swapChainExtent);
 
-    StackCpu stackAllocatorHack;///<@todo: Streaming Memory
+    StackCpu stackAllocatorHack;///<@todo: Streaming Memory -- this isn't a hack, you need space for the shaders to load
     const size_t stackAllocatorHackMemorySizeBytes = 64 * 1024 * 1024;
     static StreamingUnitByte stackAllocatorHackMemory[stackAllocatorHackMemorySizeBytes];
     stackAllocatorHack.Initialize(&stackAllocatorHackMemory[0], stackAllocatorHackMemorySizeBytes);
 
-    StackNTF<VkDeviceSize> stagingBufferGpuStack;
+    StackNTF<VkDeviceSize> stagingBufferGpuStack;///<@todo: eliminate this; instead, use the one and only stagingBufferMemoryMapCpuToGpu to get the aligned starting point of the buffer without having a confusing parallel structure that needs to be maintained (and cleaned up). Verify that these addresses are produced:
+    /*
+    0
+    4194304
+    5560320
+    6520832
+    7160832
+    7239424
+    */
     stagingBufferGpuStack.Allocate(NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
 
     StackCpu stagingBufferMemoryMapCpuToGpu;
@@ -35,17 +45,17 @@ DWORD WINAPI AssetLoadingThread(void* arg)
 
     VkDeviceSize stagingBufferGpuOffsetToAllocatedBlock;
     VkDeviceSize offsetToFirstByteOfStagingBuffer;
-    VkDescriptorPool descriptorPool;
 
     const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
     assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.transferFamily == queueFamilyIndices.graphicsFamily));
 
+    ///@todo: pass in extra alignment requirement since VK_MEMORY_PROPERTY_HOST_COHERENT_BIT wasn't used -- must align both offsetToAllocatedBlockPtr and size arguments
     CreateBuffer(
         &stagingBufferGpu,
         &stagingBufferGpuMemory,
         &deviceLocalMemory,
-        &offsetToFirstByteOfStagingBuffer,
-        NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE,
+        &offsetToFirstByteOfStagingBuffer,///<@todo: need to make sure this takes into account nonCoherentAtomSize when doing offset for if VK_MEMORY_PROPERTY_HOST_COHERENT_BIT is absent
+        NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE,///<@todo: need to make sure this takes into account nonCoherentAtomSize when doing offset for if VK_MEMORY_PROPERTY_HOST_COHERENT_BIT is absent
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
         true,
@@ -90,16 +100,21 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         assert(threadCommand == AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit);
 
         assert(stagingBufferGpuAllocateIndex == 0);
-        //assert(stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
+        assert(stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
+        {
+            //LARGE_INTEGER perfCount;
+            //QueryPerformanceCounter(&perfCount);
+            //printf("ASSET THREAD: AssetLoadingThread loading streaming unit; time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+        }
 
-        FenceReset(streamingUnit.m_transferQueueFinishedFence, device);
-        FenceReset(streamingUnit.m_graphicsQueueFinishedFence, device);
+        const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
+        FenceCreate(&streamingUnit.m_transferQueueFinishedFence, fenceCreateFlagBits, device);
+        FenceCreate(&streamingUnit.m_graphicsQueueFinishedFence, fenceCreateFlagBits, device);
         
-        assert(streamingUnit.StateMutexed() == StreamingUnitRuntime::kNotLoaded);
-        streamingUnit.StateMutexed(StreamingUnitRuntime::kLoading);
+        assert(streamingUnit.StateMutexed() == StreamingUnitRuntime::kLoading);
 
         const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        CreateDescriptorPool(&descriptorPool, descriptorType, device, TODO_REFACTOR_NUM);
+        CreateDescriptorPool(&streamingUnit.m_descriptorPool, descriptorType, device, TODO_REFACTOR_NUM);
         CreateDescriptorSetLayout(&streamingUnit.m_descriptorSetLayout, descriptorType, device, TODO_REFACTOR_NUM);
         CreateGraphicsPipeline(
             &streamingUnit.m_pipelineLayout,
@@ -185,6 +200,11 @@ DWORD WINAPI AssetLoadingThread(void* arg)
 
             CreateTextureImageView(&streamingUnit.m_textureImageViews[texturedGeometryIndex], texturedGeometry.textureImage, device);
             ++stagingBufferGpuAllocateIndex;
+            {
+                //LARGE_INTEGER perfCount;
+                //QueryPerformanceCounter(&perfCount);
+                //printf("ASSET THREAD: CreateBuffer()=%llu at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndex - 1], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+            }
 
             //load vertex and index buffer
             ArraySafeRef<StreamingUnitByte> stagingBufferCpuToGpuVertices, stagingBufferCpuToGpuIndices;
@@ -221,6 +241,11 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 commandBufferTransfer,
                 device,
                 physicalDevice);
+            {
+                //LARGE_INTEGER perfCount;
+                //QueryPerformanceCounter(&perfCount);
+                //printf("ASSET THREAD: CreateBuffer()=%llu at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndex-1], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+            }
             CopyBufferToGpuPrepare(
                 &deviceLocalMemory,
                 &texturedGeometry.indexBuffer,
@@ -237,20 +262,13 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 commandBufferTransfer,
                 device,
                 physicalDevice);
+            {
+                //LARGE_INTEGER perfCount;
+                //QueryPerformanceCounter(&perfCount);
+                //printf("ASSET THREAD: CreateBuffer()=%llu at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndex-1], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+            }
         }
         Fclose(streamingUnitFile);
-
-        ////THIS CHANGES NOTHING -- still works successfully on initial load and blackscreens on everything-zero (index/vertex buffers and textures) on second load
-        VkMappedMemoryRange mappedMemoryRange;
-        mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-        mappedMemoryRange.pNext = nullptr;
-        mappedMemoryRange.memory = stagingBufferGpuMemory;
-        mappedMemoryRange.offset = 0;
-        mappedMemoryRange.size = RoundToNearest(
-            CastWithAssert<size_t,VkDeviceSize>(stagingBufferMemoryMapCpuToGpu.GetFirstByteFree()), 
-            physicalDeviceProperties.limits.nonCoherentAtomSize);
-        vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange);
-
         if (!unifiedGraphicsAndTransferQueue)
         {
             transferFinishedSemaphores.Push(transferFinishedSemaphore);
@@ -293,7 +311,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             &streamingUnit.m_descriptorSet,
             descriptorType,
             streamingUnit.m_descriptorSetLayout,
-            descriptorPool,
+            streamingUnit.m_descriptorPool,
             streamingUnit.m_uniformBuffer,
             uniformBufferSize,
             &streamingUnit.m_textureImageViews,///<@todo NTF: @todo: ConstArraySafeRef that does not need ambersand here
@@ -313,23 +331,25 @@ DWORD WINAPI AssetLoadingThread(void* arg)
 
             //clean up staging memory
             stagingBufferMemoryMapCpuToGpu.Clear();
-
-            //BEG_HAC
-            //FILE* f;
-            //static int count;
-            //Fopen(&f, (std::string("stagingBufferMemoryMapCpuToGpu") + std::string(1, 'A' + count)).c_str(), "w");
-            //Fwrite(f, stagingBufferMemoryMapCpuToGpu.GetMemory(), sizeof(stagingBufferMemoryMapCpuToGpu.GetMemory()), 7296256);
-            //Fclose(f);
-            //++count;
-            //END_HAC
+            stagingBufferGpuStack.ClearSuballocations();
 
             for (   size_t stagingBufferGpuAllocateIndexFree = 0;
                     stagingBufferGpuAllocateIndexFree < stagingBufferGpuAllocateIndex;
                     ++stagingBufferGpuAllocateIndexFree)
             {
                 vkDestroyBuffer(device, stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], GetVulkanAllocationCallbacks());
+
+                //LARGE_INTEGER perfCount;
+                //QueryPerformanceCounter(&perfCount);
+                //printf("ASSET THREAD: vkDestroyBuffer(%llu) at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
             }
             stagingBufferGpuAllocateIndex = 0;
+
+            {
+                //LARGE_INTEGER perfCount;
+                //QueryPerformanceCounter(&perfCount);
+                //printf("ASSET THREAD: AssetLoadingThread finished destroying staging buffers; time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+            }
         }
     }
 
@@ -341,8 +361,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
 
     stagingBufferMemoryMapCpuToGpu.Destroy();
     vkDestroySemaphore(device, transferFinishedSemaphore, GetVulkanAllocationCallbacks());
-
-    vkDestroyDescriptorPool(device, descriptorPool, GetVulkanAllocationCallbacks());
 
     SignalSemaphoreWindows(threadDone);
     return 0;

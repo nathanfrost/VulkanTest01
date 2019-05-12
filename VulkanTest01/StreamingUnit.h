@@ -35,7 +35,7 @@ class StreamingUnitRuntime
 {
 public:
     StreamingUnitRuntime();
-    void Initialize(const VkDevice& device);
+    void Initialize();
     void Free(const VkDevice& device);
     void Destroy();
 
@@ -58,6 +58,7 @@ public:
     */
 
     VkDescriptorSetLayout m_descriptorSetLayout;
+    VkDescriptorPool m_descriptorPool;
     VkDescriptorSet m_descriptorSet;///<automatically freed when the VkDescriptorPool is destroyed or reset
 
     VkBuffer m_uniformBuffer;
@@ -151,21 +152,6 @@ public:
         assert(file);
         assert(elementsNum > 0);
         arraySafe.MemcpyFromFread(file, elementsNum);
-
-        //BEG_HAC
-        //printf("---------------\n");
-        //for (int i = 0; i < 16; ++i)
-            //printf("arraySafe[%i]=%u\n", i, ((uint32_t*)(arraySafe.m_array))[i]);
-        //END_HAC
-        //
-//#pragma warning(disable : 4996)
-//        static int count;
-//        FILE* f;
-//        Fopen(&f, (std::string("textureHack") + std::string(1, 'A' + count)).c_str(), "w");
-//        Fwrite(f, arraySafe.data(), sizeof(T), elementsNum);
-//        Fclose(f);
-//        ++count;
-        //END_HAC
     }
     template<class ElementType, class ElementNumType>
     inline static void Execute(

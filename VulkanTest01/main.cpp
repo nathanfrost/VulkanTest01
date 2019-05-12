@@ -2,6 +2,8 @@
 #include"ntf_vulkan_utility.h"
 #include"StreamingUnitManager.h"
 
+//LARGE_INTEGER g_queryPerformanceFrequency;
+
 VectorSafe<uint8_t, 8192 * 8192 * 4> s_pixelBufferScratch;
 
 glm::vec3 s_cameraTranslation = glm::vec3(2.6f,3.4f,.9f);
@@ -194,6 +196,7 @@ private:
     void Shutdown()
     {
         m_streamingUnit.Free(m_device);///<@todo NTF: generalize #StreamingMemory
+        m_streamingUnit.Destroy();
         m_assetLoadingThreadData.m_threadCommand = AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate;
         SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
         WaitForSignalWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
@@ -247,6 +250,8 @@ private:
 
     void VulkanInitialize()
     {
+        //QueryPerformanceFrequency(&g_queryPerformanceFrequency);
+
         s_validationLayers.size(0);
         s_validationLayers.Push("VK_LAYER_LUNARG_standard_validation");
 #if NTF_API_DUMP_VALIDATION_LAYER_ON
@@ -334,7 +339,7 @@ private:
             NTF_FRAMES_IN_FLIGHT_NUM,
             m_device);
 
-        m_streamingUnit.Initialize(m_device);///#StreamingMemory
+        m_streamingUnit.Initialize();///#StreamingMemory
 
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         
@@ -380,6 +385,9 @@ private:
         //finish initialization before launching asset loading thread
         FenceWaitUntilSignalled(initializationDone, m_device);
         vkDestroyFence(m_device, initializationDone, GetVulkanAllocationCallbacks());
+        
+        ///@todo NTF: wrap these two lines in a function, since they should always go together #StreamingMemory #LoadStreamingUnit
+        m_streamingUnit.StateMutexed(StreamingUnitRuntime::kLoading);
         SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
         //#CommandPoolDuplication
@@ -407,7 +415,7 @@ private:
             distanceFrameNumberCpuSubmitted = frameNumberCpuSubmitted;
         }
     }
-    void MainLoop(GLFWwindow* window) 
+    void MainLoop(GLFWwindow* window)
     {
         assert(window);
 
@@ -417,8 +425,8 @@ private:
         while (!glfwWindowShouldClose(window)) 
         {
             //BEG_#StreamingTest
-            const StreamingUnitRuntime::FrameNumber frameToSwapState = 600;
-            if (m_frameNumberCurrentCpu % frameToSwapState == frameToSwapState-1)
+            const StreamingUnitRuntime::FrameNumber frameToSwapState = 6000;
+            if (m_frameNumberCurrentCpu % frameToSwapState == frameToSwapState - 1)
             {
                 const StreamingUnitRuntime::State state = m_streamingUnit.StateMutexed();
                 switch (state)
@@ -429,14 +437,22 @@ private:
                         {
                             m_streamingUnit.StateMutexed(StreamingUnitRuntime::kUnloading);
                             unloadedOnce = true;
-                            printf("--------------------UNLOAD--------------------\n");
+                            //LARGE_INTEGER perfCount;
+                            //QueryPerformanceCounter(&perfCount);
+                            //printf("MAIN THREAD: Unload streaming unit as soon as the Gpu is done with its last submission; time=%f\n", static_cast<double>(static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart)));
                         }
                         break;
                     }
                     case StreamingUnitRuntime::kNotLoaded:
                     {
+                        //LARGE_INTEGER perfCount;
+                        //QueryPerformanceCounter(&perfCount);
+
                         ///@todo: fill out m_assetLoadingThreadData when #StreamingMemory
-                        printf("--------------------Load it; kick the background thread--------------------\n");
+                        //printf("MAIN THREAD: Load streaming unit: wake background thread; at time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+
+                        ///@todo NTF: wrap these two lines in a function, since they should always go together #StreamingMemory #LoadStreamingUnit
+                        m_streamingUnit.StateMutexed(StreamingUnitRuntime::kLoading);
                         SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
                         break;
                     }
@@ -454,7 +470,7 @@ private:
             const StreamingUnitRuntime::FrameNumberSigned biggestPositiveDistanceInitial = 0;
             const StreamingUnitRuntime::FrameNumberSigned biggestNegativeDistanceInitial = StreamingUnitRuntime::kFrameNumberSignedMinimum;
             StreamingUnitRuntime::FrameNumberSigned biggestPositiveDistance = biggestPositiveDistanceInitial, biggestNegativeDistance = biggestNegativeDistanceInitial;//negative distance handles the wraparound case
-            StreamingUnitRuntime::FrameNumber positiveDistanceFrameNumberCpuSubmitted=0, negativeDistanceFrameNumberCpuSubmitted=0;
+            StreamingUnitRuntime::FrameNumber positiveDistanceFrameNumberCpuSubmitted = 0, negativeDistanceFrameNumberCpuSubmitted = 0;
             for (int i = 0; i < NTF_FRAMES_IN_FLIGHT_NUM; ++i)
             {
                 auto& drawFrameFinishedFence = m_drawFrameFinishedFences[i];
@@ -488,20 +504,13 @@ private:
                     {
                         //regular case; the most recent frames are the largest
                         IfLargerDistanceThenUpdateFrameNumber(
-                            &biggestPositiveDistance, 
-                            &positiveDistanceFrameNumberCpuSubmitted, 
-                            distance, 
+                            &biggestPositiveDistance,
+                            &positiveDistanceFrameNumberCpuSubmitted,
+                            distance,
                             frameNumberCpuSubmitted);
                     }
                 }
             }
-            //BEG_HAC
-            //if(unloadedOnce)
-            //{
-            //    printf("biggestPositiveDistance=%i, biggestNegativeDistance=%i, m_lastCpuFrameCompleted=%i, negativeDistanceFrameNumberCpuSubmitted=%i, positiveDistanceFrameNumberCpuSubmitted=%i\n\n",
-            //            biggestPositiveDistance, biggestNegativeDistance, m_lastCpuFrameCompleted, negativeDistanceFrameNumberCpuSubmitted, positiveDistanceFrameNumberCpuSubmitted);
-            //}
-            //END_HAC
             if (biggestPositiveDistance > biggestPositiveDistanceInitial || biggestNegativeDistance > biggestNegativeDistanceInitial)
             {
                 //Gpu processed a new frame
@@ -559,11 +568,16 @@ private:
                 }
                 case StreamingUnitRuntime::kUnloading:
                 {
+                    //LARGE_INTEGER perfCount;
+                    //QueryPerformanceCounter(&perfCount);
+                    //printf("MAIN THREAD: m_streamingUnit.m_lastSubmittedCpuFrame=%d m_lastCpuFrameCompleted=%d time=%f\n", m_streamingUnit.m_lastSubmittedCpuFrame, m_lastCpuFrameCompleted, static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+
                     //#StreamingMemory: generalize
                     if (m_streamingUnit.m_lastSubmittedCpuFrame <= m_lastCpuFrameCompleted)
                     {
+                        //printf("MAIN THREAD: m_streamingUnit.Free(); time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
                         m_streamingUnit.Free(m_device);
-                        //m_deviceLocalMemory.FreeAllPagesThatAreNotResidentForever(m_device);//#StreamingMemory: only free pages used by this streaming unit; also probably need to mutex
+                        m_deviceLocalMemory.FreeAllPagesThatAreNotResidentForever(m_device);//#StreamingMemory: only free pages used by this streaming unit; also probably need to mutex
                     }
                     break;
                 }

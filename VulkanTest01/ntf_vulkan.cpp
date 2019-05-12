@@ -2,6 +2,8 @@
 #include"ntf_vulkan_utility.h"
 #include"StreamingCookAndRuntime.h"
 
+//extern LARGE_INTEGER g_queryPerformanceFrequency;
+
 #if NTF_WIN_TIMER
 FILE* s_winTimer;
 #endif//NTF_WIN_TIMER
@@ -446,7 +448,7 @@ void CopyBuffer(const VkBuffer& srcBuffer,const VkBuffer& dstBuffer,const VkDevi
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice)
 {
     VkPhysicalDeviceMemoryProperties memProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);///<@todo: query this once on initialization and place in a global variable so validation layer api dump isn't so cluttered
 
     for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
     {
@@ -543,7 +545,7 @@ void CreateBuffer(
     const bool allocateMemoryResult = allocator.PushAlloc(
         &offsetToAllocatedBlock,
         &bufferMemory,
-        memRequirements,///<@todo: also check for VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, and if so incorporate VKDeviceLimits::nonCoherentAtomSize into alignment requirement
+        memRequirements,
         properties,
         residentForever,
         true,
@@ -551,7 +553,7 @@ void CreateBuffer(
         physicalDevice);
     assert(allocateMemoryResult);
 
-    const VkResult bindBufferResult = vkBindBufferMemory(device, buffer, bufferMemory, offsetToAllocatedBlock);
+    const VkResult bindBufferResult = vkBindBufferMemory(device, buffer, bufferMemory, offsetToAllocatedBlock);///<@todo NTF: wrap in function
     NTF_VK_ASSERT_SUCCESS(bindBufferResult);
 }
 
@@ -1332,6 +1334,9 @@ void FillCommandBufferPrimary(
     const VkPipeline& graphicsPipeline,
     const VkDevice& device)
 {
+    //printf("texturedGeometries[0].indexBuffer=%llu, texturedGeometries[0].indexBufferMemory=%llu, descriptorSet=%llu, pipelineLayout=%llu, graphicsPipeline=%llu\n", 
+    //    (size_t)texturedGeometries[0].indexBuffer, (size_t)texturedGeometries[0].indexBufferMemory, (size_t)descriptorSet, (size_t)pipelineLayout, (size_t)graphicsPipeline);
+
     assert(objectNum > 0);
 
     VkCommandBufferBeginInfo beginInfo = {};
@@ -1798,7 +1803,7 @@ VkFormat FindSupportedFormat(
     for (const VkFormat& format : candidates)
     {
         VkFormatProperties props;
-        vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
+        vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);///<@todo: query this once on initialization and place in a global variable so validation layer api dump isn't so cluttered
 
         if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features)
         {
@@ -2630,7 +2635,7 @@ bool VulkanPagedStackAllocator::PushAlloc(
     const bool allocResult = heap.PushAlloc(
         &memoryOffset, 
         &memoryHandle, 
-        memRequirements, ///<@todo: also check for VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, and if so incorporate VKDeviceLimits::nonCoherentAtomSize into alignment requirement
+        memRequirements,
         properties, 
         residentForever, 
         linearResource, 
@@ -2767,7 +2772,7 @@ bool VulkanMemoryHeap::PushAlloc(
     assert(pageAllocatedCurrent->SufficientMemory(memRequirements));
 
     memoryHandle = pageAllocatedCurrent->GetMemoryHandle();
-    const bool allocResult = pageAllocatedCurrent->PushAlloc(&memoryOffset, memRequirements);///<@todo: also check for VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, and if so incorporate VKDeviceLimits::nonCoherentAtomSize into alignment requirement
+    const bool allocResult = pageAllocatedCurrent->PushAlloc(&memoryOffset, memRequirements);
     assert(allocResult);
     return allocResult;
 }
@@ -2788,10 +2793,10 @@ bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMaxBytes, const uin
     do
     {
         allocateMemoryResult = vkAllocateMemory(device, &allocInfo, GetVulkanAllocationCallbacks(), &m_memoryHandle);
-        LARGE_INTEGER perfCount;
-        QueryPerformanceCounter(&perfCount);
-        printf("vkAllocateMemory(memoryTypeIndex=%u, memoryMaxBytes=%u)=%i; m_memoryHandle=%p at time %llu\n", memoryTypeIndex, 
-            Cast_VkDeviceSize_uint32_t(memoryMaxBytes), allocateMemoryResult, (void*)m_memoryHandle, perfCount.QuadPart);
+        //LARGE_INTEGER perfCount;
+        //QueryPerformanceCounter(&perfCount);
+        //printf("vkAllocateMemory(memoryTypeIndex=%u, memoryMaxBytes=%u)=%i; m_memoryHandle=%p at time %f\n", memoryTypeIndex, 
+        //    Cast_VkDeviceSize_uint32_t(memoryMaxBytes), allocateMemoryResult, (void*)m_memoryHandle, static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
     } while(allocateMemoryResult != VK_SUCCESS);
     NTF_VK_ASSERT_SUCCESS(allocateMemoryResult);
     return NTF_VK_SUCCESS(allocateMemoryResult);
@@ -2804,7 +2809,7 @@ bool VulkanMemoryHeapPage::PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemo
 
     const bool allocateResult = m_stack.PushAlloc(
         &memoryOffset, 
-        memRequirements.alignment,///@todo: ///<@todo: also check for VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, and if so incorporate VKDeviceLimits::nonCoherentAtomSize into alignment requiremets via MaxNtf(memRequirements.alignment, VkPhysicalDeviceLimits::nonCoherentAtomSize),
+        memRequirements.alignment,
         memRequirements.size);
     assert(allocateResult);
     return allocateResult;

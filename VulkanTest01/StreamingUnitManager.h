@@ -17,6 +17,7 @@ public:
     const VkCommandBuffer* m_commandBufferTransfer;
     const VkCommandBuffer* m_commandBufferTransitionImage;
     const VkDevice* m_device;
+
     const VkQueue* m_graphicsQueue;
     const VkPhysicalDevice* m_physicalDevice;
     const QueueFamilyIndices* m_queueFamilyIndices;
