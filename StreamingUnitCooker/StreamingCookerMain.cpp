@@ -206,20 +206,27 @@ void StreamingUnitCooker::Cook()
         assert(indices.size() > 0);
         StreamingUnitVerticesNum verticesNum = CastWithAssert<size_t, StreamingUnitVerticesNum>(vertices.size());
         ArraySafeRef<Vertex> verticesArraySafe(&vertices[0], verticesNum);
+        VertexBufferSerialize<SerializerCookerOut>(
+            f,
+            nullptr,
+            nullptr,
+            &verticesNum,
+            verticesArraySafe,
+            ArraySafeRef<StreamingUnitByte>(),
+            nullptr,
+            0);
+
         StreamingUnitIndicesNum indicesNum = CastWithAssert<size_t, StreamingUnitIndicesNum>(indices.size());
         ArraySafeRef<IndexBufferValue> indicesArraySafe(&indices[0], indices.size());
-        ModelSerialize<SerializerCookerOut>(
+        IndexBufferSerialize<SerializerCookerOut>(
             f, 
             nullptr, 
-            0, 
-            &verticesNum, 
-            verticesArraySafe, 
-            ArraySafeRef<StreamingUnitByte>(), 
-            nullptr,
+            nullptr, 
             &indicesNum, 
             indicesArraySafe, 
             ArraySafeRef<StreamingUnitByte>(),
-            nullptr);
+            nullptr,
+            0);
     }
     Fclose(f);
 }

@@ -184,6 +184,16 @@ public:
     }
 };
 
+inline static void RoundToNearestIfNotNull(VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeInPtr, const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn)
+{
+    if (stagingBufferGpuAlignmentRuntimeIn)
+    {
+        assert(stagingBufferGpuAlignmentRuntimeIn > 0);
+        NTF_REF(stagingBufferGpuOffsetToAllocatedBlockRuntimeInPtr, stagingBufferGpuOffsetToAllocatedBlockRuntimeIn);
+        stagingBufferGpuOffsetToAllocatedBlockRuntimeIn = RoundToNearest(stagingBufferGpuOffsetToAllocatedBlockRuntimeIn, stagingBufferGpuAlignmentRuntimeIn);
+    }
+}
+
 template<class Serializer>
 inline void TextureSerialize0(
     FILE*const file,
@@ -220,32 +230,45 @@ inline void TextureSerialize1(
 }
 
 template<class Serializer>
-inline void ModelSerialize(
+inline void VertexBufferSerialize(
     FILE*const file,
-    StackCpu* stagingBufferMemoryMapCpuToGpuRuntimeIn,
-    const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn,
+    StackCpu*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
+    VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeIn,
     StreamingUnitVerticesNum*const verticesNum,
     ArraySafeRef<Vertex> verticesCookerOut,
     ArraySafeRef<StreamingUnitByte> vertexBufferRuntimeIn,
     size_t*const vertexBufferSizeBytesRuntimeIn,
-    StreamingUnitIndicesNum*const indicesNum,
-    ArraySafeRef<IndexBufferValue> indicesCookerOut,
-    ArraySafeRef<StreamingUnitByte> indexBufferRuntimeIn,
-    size_t*const indexBufferSizeBytesRuntimeIn)
+    const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn)
 {
     assert(file);
     assert(verticesNum);
-    assert(indicesNum);
 
     Serializer::Execute(file, verticesNum);
     Serializer::Execute(
-        file, 
-        *verticesNum, 
-        verticesCookerOut, 
+        file,
+        *verticesNum,
+        verticesCookerOut,
         vertexBufferRuntimeIn,
         stagingBufferMemoryMapCpuToGpuRuntimeIn,
         stagingBufferGpuAlignmentRuntimeIn,
         vertexBufferSizeBytesRuntimeIn);
+    
+    RoundToNearestIfNotNull(stagingBufferGpuOffsetToAllocatedBlockRuntimeIn, stagingBufferGpuAlignmentRuntimeIn);
+}
+
+template<class Serializer>
+inline void IndexBufferSerialize(
+    FILE*const file,
+    StackCpu*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
+    VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeIn,
+    StreamingUnitIndicesNum*const indicesNum,
+    ArraySafeRef<IndexBufferValue> indicesCookerOut,
+    ArraySafeRef<StreamingUnitByte> indexBufferRuntimeIn,
+    size_t*const indexBufferSizeBytesRuntimeIn,
+    const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn)
+{
+    assert(file);
+    assert(indicesNum);
     
     Serializer::Execute(file, indicesNum);
     Serializer::Execute(
@@ -256,5 +279,7 @@ inline void ModelSerialize(
         stagingBufferMemoryMapCpuToGpuRuntimeIn,
         stagingBufferGpuAlignmentRuntimeIn,
         indexBufferSizeBytesRuntimeIn);
+
+    RoundToNearestIfNotNull(stagingBufferGpuOffsetToAllocatedBlockRuntimeIn, stagingBufferGpuAlignmentRuntimeIn);
 }
 

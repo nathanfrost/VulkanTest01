@@ -28,17 +28,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     static StreamingUnitByte stackAllocatorHackMemory[stackAllocatorHackMemorySizeBytes];
     stackAllocatorHack.Initialize(&stackAllocatorHackMemory[0], stackAllocatorHackMemorySizeBytes);
 
-    StackNTF<VkDeviceSize> stagingBufferGpuStack;///<@todo: eliminate this; instead, use the one and only stagingBufferMemoryMapCpuToGpu to get the aligned starting point of the buffer without having a confusing parallel structure that needs to be maintained (and cleaned up). Verify that these addresses are produced:
-    /*
-    0
-    4194304
-    5560320
-    6520832
-    7160832
-    7239424
-    */
-    stagingBufferGpuStack.Allocate(NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
-
     StackCpu stagingBufferMemoryMapCpuToGpu;
     VkDeviceMemory stagingBufferGpuMemory;
     VkBuffer stagingBufferGpu;
@@ -148,22 +137,22 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         Fread(streamingUnitFile, &version, sizeof(version), 1);
         Fread(streamingUnitFile, &texturedGeometryNum, sizeof(texturedGeometryNum), 1);
         //END_GENERALIZE_READER_WRITER
+        stagingBufferGpuOffsetToAllocatedBlock = 0;
         for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometryNum; ++texturedGeometryIndex)
         {
             //load texture
             StreamingUnitTextureDimension textureWidth, textureHeight;
             auto& texturedGeometry = streamingUnit.m_texturedGeometries[texturedGeometryIndex];
             size_t imageSizeBytes;
-            VkDeviceSize alignment;
             const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
             ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
                 &texturedGeometry.textureImage,
                 &deviceLocalMemory,
-                &alignment,
                 &textureWidth,
                 &textureHeight,
                 &stagingBufferMemoryMapCpuToGpu,
                 &imageSizeBytes,
+                &stagingBufferGpuOffsetToAllocatedBlock,
                 streamingUnitFile,
                 imageFormat,
                 VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
@@ -173,12 +162,11 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 device,
                 physicalDevice);
 
-            const bool pushAllocSuccess = stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, alignment, imageSizeBytes);
-            assert(pushAllocSuccess);
             CreateBuffer(
                 &stagingBuffersGpu[stagingBufferGpuAllocateIndex],
+                &stagingBufferGpuOffsetToAllocatedBlock,
                 stagingBufferGpuMemory,
-                offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+                offsetToFirstByteOfStagingBuffer,
                 imageSizeBytes,
                 0,
                 device,
@@ -207,31 +195,25 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             }
 
             //load vertex and index buffer
-            ArraySafeRef<StreamingUnitByte> stagingBufferCpuToGpuVertices, stagingBufferCpuToGpuIndices;
+            ArraySafeRef<StreamingUnitByte> stagingBufferCpuToGpuVertices;
             StreamingUnitVerticesNum verticesNum;
-            StreamingUnitIndicesNum indicesNum;
-            size_t vertexBufferSizeBytes, indexBufferSizeBytes;
-            ModelSerialize<SerializerRuntimeIn>(
+            size_t vertexBufferSizeBytes;
+            VertexBufferSerialize<SerializerRuntimeIn>(
                 streamingUnitFile,
                 &stagingBufferMemoryMapCpuToGpu,
-                stagingBufferGpuAlignmentStandard,
+                &stagingBufferGpuOffsetToAllocatedBlock,
                 &verticesNum,
                 ArraySafeRef<Vertex>(),
                 stagingBufferCpuToGpuVertices,
                 &vertexBufferSizeBytes,
-                &indicesNum,
-                ArraySafeRef<IndexBufferValue>(),
-                stagingBufferCpuToGpuIndices,
-                &indexBufferSizeBytes);
-            texturedGeometry.indicesSize = CastWithAssert<size_t, uint32_t>(indicesNum);
-
+                stagingBufferGpuAlignmentStandard);
             CopyBufferToGpuPrepare(
                 &deviceLocalMemory,
                 &texturedGeometry.vertexBuffer,
                 &texturedGeometry.vertexBufferMemory,
                 &stagingBuffersGpu,
                 &stagingBufferGpuAllocateIndex,
-                &stagingBufferGpuStack,
+                &stagingBufferGpuOffsetToAllocatedBlock,
                 stagingBufferGpuMemory,
                 stagingBufferGpuAlignmentStandard,
                 offsetToFirstByteOfStagingBuffer,
@@ -241,18 +223,27 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 commandBufferTransfer,
                 device,
                 physicalDevice);
-            {
-                //LARGE_INTEGER perfCount;
-                //QueryPerformanceCounter(&perfCount);
-                //printf("ASSET THREAD: CreateBuffer()=%llu at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndex-1], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-            }
+
+            ArraySafeRef<StreamingUnitByte> stagingBufferCpuToGpuIndices;
+            StreamingUnitIndicesNum indicesNum;
+            size_t indexBufferSizeBytes;
+            IndexBufferSerialize<SerializerRuntimeIn>(
+                streamingUnitFile,
+                &stagingBufferMemoryMapCpuToGpu,
+                &stagingBufferGpuOffsetToAllocatedBlock,
+                &indicesNum,
+                ArraySafeRef<IndexBufferValue>(),
+                stagingBufferCpuToGpuIndices,
+                &indexBufferSizeBytes,
+                stagingBufferGpuAlignmentStandard);
+            texturedGeometry.indicesSize = CastWithAssert<size_t, uint32_t>(indicesNum);
             CopyBufferToGpuPrepare(
                 &deviceLocalMemory,
                 &texturedGeometry.indexBuffer,
                 &texturedGeometry.indexBufferMemory,
                 &stagingBuffersGpu,
                 &stagingBufferGpuAllocateIndex,
-                &stagingBufferGpuStack,
+                &stagingBufferGpuOffsetToAllocatedBlock,
                 stagingBufferGpuMemory,
                 stagingBufferGpuAlignmentStandard,
                 offsetToFirstByteOfStagingBuffer,
@@ -331,7 +322,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
 
             //clean up staging memory
             stagingBufferMemoryMapCpuToGpu.Clear();
-            stagingBufferGpuStack.ClearSuballocations();
 
             for (   size_t stagingBufferGpuAllocateIndexFree = 0;
                     stagingBufferGpuAllocateIndexFree < stagingBufferGpuAllocateIndex;

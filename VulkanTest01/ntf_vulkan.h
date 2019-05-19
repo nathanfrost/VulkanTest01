@@ -111,6 +111,7 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     const VkPhysicalDevice& physicalDevice);
 void CreateBuffer(
     VkBuffer*const vkBufferPtr,
+    VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
     const VkDeviceMemory& vkBufferMemory,
     const VkDeviceSize& offsetToAllocatedBlock,
     const VkDeviceSize& vkBufferSizeBytes,
@@ -374,7 +375,7 @@ void CopyBufferToGpuPrepare(
     VkDeviceMemory*const gpuBufferMemoryPtr,
     ArraySafeRef<VkBuffer> stagingBuffersGpu,
     size_t*const stagingBuffersGpuIndexPtr,
-    StackNTF<VkDeviceSize>*const stagingBufferGpuStackPtr,
+    VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
     const VkDeviceMemory stagingBufferGpuMemory,
     const VkDeviceSize stagingBufferGpuAlignmentStandard,
     const VkDeviceSize offsetToFirstByteOfStagingBuffer,
@@ -424,11 +425,11 @@ bool HasStencilComponent(VkFormat format);
 void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VkImage*const imagePtr,
     VulkanPagedStackAllocator*const allocatorPtr,
-    VkDeviceSize*const alignmentPtr,
     StreamingUnitTextureDimension*const textureWidthPtr,
     StreamingUnitTextureDimension*const textureHeightPtr,
     StackCpu*const stagingBufferMemoryMapCpuToGpuStackPtr,
     size_t*const imageSizeBytesPtr,
+    VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
     FILE*const streamingUnitFile,
     const VkFormat& format,
     const VkImageTiling& tiling,

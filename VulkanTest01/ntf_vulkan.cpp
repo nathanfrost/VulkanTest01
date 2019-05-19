@@ -495,6 +495,7 @@ void CreateBuffer(VkBuffer*const vkBufferPtr, const VkDeviceSize& vkBufferSizeBy
 ///user is responsible for ensuring the VkDeviceMemory was allocated from the heap that supports all operations this buffer is intended for
 void CreateBuffer(
     VkBuffer*const vkBufferPtr,
+    VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
     const VkDeviceMemory& vkBufferMemory,
     const VkDeviceSize& offsetToAllocatedBlock,
     const VkDeviceSize& vkBufferSizeBytes,
@@ -503,6 +504,7 @@ void CreateBuffer(
     const VkPhysicalDevice& physicalDevice)
 {
     NTF_REF(vkBufferPtr, vkBuffer);
+    NTF_REF(stagingBufferGpuOffsetToAllocatedBlockPtr, stagingBufferGpuOffsetToAllocatedBlock);
 
     CreateBuffer(&vkBuffer, vkBufferSizeBytes, flags, device);
 
@@ -510,7 +512,9 @@ void CreateBuffer(
     vkGetBufferMemoryRequirements(device, vkBuffer, &memoryRequirements);
     assert(memoryRequirements.size >= vkBufferSizeBytes);
 
-    const VkResult bindBufferResult = vkBindBufferMemory(device, vkBuffer, vkBufferMemory, offsetToAllocatedBlock);
+    const VkResult bindBufferResult = 
+        vkBindBufferMemory(device, vkBuffer, vkBufferMemory, offsetToAllocatedBlock + stagingBufferGpuOffsetToAllocatedBlock);
+    stagingBufferGpuOffsetToAllocatedBlock += vkBufferSizeBytes;
     NTF_VK_ASSERT_SUCCESS(bindBufferResult);
 }
 void CreateBuffer(
@@ -1627,7 +1631,7 @@ void CopyBufferToGpuPrepare(
     VkDeviceMemory*const gpuBufferMemoryPtr,
     ArraySafeRef<VkBuffer> stagingBuffersGpu,
     size_t*const stagingBuffersGpuIndexPtr,
-    StackNTF<VkDeviceSize>*const stagingBufferGpuStackPtr,
+    VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
     const VkDeviceMemory stagingBufferGpuMemory,
     const VkDeviceSize stagingBufferGpuAlignmentStandard,
     const VkDeviceSize offsetToFirstByteOfStagingBuffer,
@@ -1642,15 +1646,14 @@ void CopyBufferToGpuPrepare(
     NTF_REF(gpuBufferPtr, gpuBuffer);
     NTF_REF(gpuBufferMemoryPtr, gpuBufferMemory);
     NTF_REF(stagingBuffersGpuIndexPtr, stagingBuffersGpuIndex);
-    NTF_REF(stagingBufferGpuStackPtr, stagingBufferGpuStack);
+    NTF_REF(stagingBufferGpuOffsetToAllocatedBlockPtr, stagingBufferGpuOffsetToAllocatedBlock);
 
     auto& stagingBufferGpu = stagingBuffersGpu[stagingBuffersGpuIndex];
-    VkDeviceSize stagingBufferGpuOffsetToAllocatedBlock;
-    stagingBufferGpuStack.PushAlloc(&stagingBufferGpuOffsetToAllocatedBlock, stagingBufferGpuAlignmentStandard, bufferSize);
     CreateBuffer(
         &stagingBufferGpu,
+        &stagingBufferGpuOffsetToAllocatedBlock,
         stagingBufferGpuMemory,
-        offsetToFirstByteOfStagingBuffer + stagingBufferGpuOffsetToAllocatedBlock,
+        offsetToFirstByteOfStagingBuffer,
         bufferSize,
         0,
         device,
@@ -1827,11 +1830,11 @@ bool HasStencilComponent(VkFormat format)
 void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VkImage*const imagePtr,
     VulkanPagedStackAllocator*const allocatorPtr,
-    VkDeviceSize*const alignmentPtr,
     StreamingUnitTextureDimension*const textureWidthPtr,
     StreamingUnitTextureDimension*const textureHeightPtr,
     StackCpu*const stagingBufferMemoryMapCpuToGpuStackPtr,
     size_t*const imageSizeBytesPtr,
+    VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
     FILE*const streamingUnitFile,
     const VkFormat& format,
     const VkImageTiling& tiling,
@@ -1843,7 +1846,6 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
 {
     NTF_REF(imagePtr, image);
     NTF_REF(allocatorPtr, allocator);
-    NTF_REF(alignmentPtr, alignment);
 
     assert(textureWidthPtr);
     auto& textureWidth = *textureWidthPtr;
@@ -1854,11 +1856,13 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     assert(streamingUnitFile);
     NTF_REF(stagingBufferMemoryMapCpuToGpuStackPtr, stagingBufferMemoryMapCpuToGpuStack);
     NTF_REF(imageSizeBytesPtr, imageSizeBytes);
+    NTF_REF(stagingBufferGpuOffsetToAllocatedBlockPtr, stagingBufferGpuOffsetToAllocatedBlock);
 
     StreamingUnitTextureChannels textureChannels;
     TextureSerialize0<SerializerRuntimeIn>(streamingUnitFile, &textureWidth, &textureHeight, &textureChannels);
     imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
 
+    VkDeviceSize alignment;
     CreateAllocateBindImageIfAllocatorHasSpace(
         &image,
         &allocator,
@@ -1879,6 +1883,8 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
         &stagingBufferMemoryMapCpuToGpuStack, 
         alignment, 
         imageSizeBytes);
+
+    stagingBufferGpuOffsetToAllocatedBlock = RoundToNearest(stagingBufferGpuOffsetToAllocatedBlock, alignment);
     return;
 }
 
