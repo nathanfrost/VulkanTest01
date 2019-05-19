@@ -438,6 +438,22 @@ void CopyBuffer(const VkBuffer& srcBuffer,const VkBuffer& dstBuffer,const VkDevi
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 }
 
+///use this instead of raw calls to the underlying Vulkan function solely to keep VK_LAYER_LUNARG_api_dump validation layer easier to read
+static void GetPhysicalDeviceMemoryPropertiesCached(VkPhysicalDeviceMemoryProperties**const memPropertiesPtr, const VkPhysicalDevice& physicalDevice)
+{
+    NTF_REF(memPropertiesPtr, memProperties);
+
+    static VkPhysicalDeviceMemoryProperties s_memProperties;
+    static bool s_memPropertiesQueried;
+    if (!s_memPropertiesQueried)
+    {
+        s_memPropertiesQueried = true;
+        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &s_memProperties);
+    }
+    
+    memProperties = &s_memProperties;
+}
+
 /* Heap classification:
 1. vkGetPhysicalDeviceMemoryProperties​() returns memoryHeapCount, memoryTypes (what types of memory are supported by each heap), and the memoryHeaps themselves
 2. vkGetImageMemoryRequirements() or vkGetBufferMemoryRequirements​() return a bitmask for each resource.  If this bitmask shares a bit with the index of a 
@@ -447,12 +463,12 @@ void CopyBuffer(const VkBuffer& srcBuffer,const VkBuffer& dstBuffer,const VkDevi
 ///@ret: index of of VkPhysicalDeviceMemoryProperties::memProperties.memoryTypes that maps to the user's arguments
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice)
 {
-    VkPhysicalDeviceMemoryProperties memProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);///<@todo: query this once on initialization and place in a global variable so validation layer api dump isn't so cluttered
+    VkPhysicalDeviceMemoryProperties* memProperties;
+    GetPhysicalDeviceMemoryPropertiesCached(&memProperties, physicalDevice);
 
-    for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+    for (uint32_t i = 0; i < memProperties->memoryTypeCount; i++)
     {
-        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+        if ((typeFilter & (1 << i)) && (memProperties->memoryTypes[i].propertyFlags & properties) == properties)
         {
             return i;
         }
@@ -463,11 +479,11 @@ uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& 
 }
 uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice)
 {
-    VkPhysicalDeviceMemoryProperties memProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-    for (uint32_t memoryTypeIndex = 0; memoryTypeIndex < memProperties.memoryTypeCount; ++memoryTypeIndex)
+    VkPhysicalDeviceMemoryProperties* memProperties;
+    GetPhysicalDeviceMemoryPropertiesCached(&memProperties, physicalDevice);
+    for (uint32_t memoryTypeIndex = 0; memoryTypeIndex < memProperties->memoryTypeCount; ++memoryTypeIndex)
     {
-        auto& memoryType = memProperties.memoryTypes[memoryTypeIndex];
+        auto& memoryType = memProperties->memoryTypes[memoryTypeIndex];
         if (memoryType.propertyFlags & properties)
         {
             return memoryType.heapIndex;//assume the first heap found that satisfies properties is the only one
