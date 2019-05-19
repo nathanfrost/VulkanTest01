@@ -23,10 +23,10 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_REF(threadArguments.m_renderPass, renderPass);
     NTF_REF(threadArguments.m_swapChainExtent, swapChainExtent);
 
-    StackCpu stackAllocatorHack;///<@todo: Streaming Memory -- this isn't a hack, you need space for the shaders to load
+    StackCpu shaderLoadingScratchSpace;
     const size_t stackAllocatorHackMemorySizeBytes = 64 * 1024 * 1024;
     static StreamingUnitByte stackAllocatorHackMemory[stackAllocatorHackMemorySizeBytes];
-    stackAllocatorHack.Initialize(&stackAllocatorHackMemory[0], stackAllocatorHackMemorySizeBytes);
+    shaderLoadingScratchSpace.Initialize(&stackAllocatorHackMemory[0], stackAllocatorHackMemorySizeBytes);
 
     StackCpu stagingBufferMemoryMapCpuToGpu;
     VkDeviceMemory stagingBufferGpuMemory;
@@ -108,7 +108,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         CreateGraphicsPipeline(
             &streamingUnit.m_pipelineLayout,
             &streamingUnit.m_graphicsPipeline,
-            &stackAllocatorHack,
+            &shaderLoadingScratchSpace,
             renderPass,
             streamingUnit.m_descriptorSetLayout,
             swapChainExtent,
@@ -344,7 +344,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     }
 
     //cleanup
-    stackAllocatorHack.Destroy();
+    shaderLoadingScratchSpace.Destroy();
 
     vkUnmapMemory(device, stagingBufferGpuMemory);
     vkDestroyBuffer(device, stagingBufferGpu, GetVulkanAllocationCallbacks());

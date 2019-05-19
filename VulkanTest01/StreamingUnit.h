@@ -72,7 +72,6 @@ public:
     VkPipelineLayout m_pipelineLayout;
     VkPipeline m_graphicsPipeline;
 
-    ///@todo: get these values out of this class; typing the namespace is annoying
     //BEG_#FrameNumber: if you change one of these constructs, make sure the rest are synchronized
     typedef uint16_t FrameNumber;
     typedef int32_t FrameNumberSigned;
