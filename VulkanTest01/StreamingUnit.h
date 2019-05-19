@@ -105,6 +105,8 @@ private:
     VkFence m_transferQueueFinishedFence, m_graphicsQueueFinishedFence;
 };
 
+void StreamingUnitLoadStart(StreamingUnitRuntime*const streamingUnitPtr, const HANDLE assetLoadingThreadWakeHandle);
+
 class SerializerCookerOut
 {
 public:
@@ -282,4 +284,3 @@ inline void IndexBufferSerialize(
 
     RoundToNearestIfNotNull(stagingBufferGpuOffsetToAllocatedBlockRuntimeIn, stagingBufferGpuAlignmentRuntimeIn);
 }
-

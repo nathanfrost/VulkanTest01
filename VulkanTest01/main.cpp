@@ -386,9 +386,7 @@ private:
         FenceWaitUntilSignalled(initializationDone, m_device);
         vkDestroyFence(m_device, initializationDone, GetVulkanAllocationCallbacks());
         
-        ///@todo NTF: wrap these two lines in a function, since they should always go together #StreamingMemory #LoadStreamingUnit
-        m_streamingUnit.StateMutexed(StreamingUnitRuntime::kLoading);
-        SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
+        StreamingUnitLoadStart(&m_streamingUnit, m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
         //#CommandPoolDuplication
         m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
@@ -451,9 +449,7 @@ private:
                         ///@todo: fill out m_assetLoadingThreadData when #StreamingMemory
                         //printf("MAIN THREAD: Load streaming unit: wake background thread; at time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
 
-                        ///@todo NTF: wrap these two lines in a function, since they should always go together #StreamingMemory #LoadStreamingUnit
-                        m_streamingUnit.StateMutexed(StreamingUnitRuntime::kLoading);
-                        SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
+                        StreamingUnitLoadStart(&m_streamingUnit, m_assetLoadingThreadData.m_handles.wakeEventHandle);
                         break;
                     }
                     default:

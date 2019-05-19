@@ -1,6 +1,15 @@
 #include"StreamingUnit.h"
 #include"ntf_vulkan.h"
 
+void StreamingUnitLoadStart(StreamingUnitRuntime*const streamingUnitPtr, const HANDLE assetLoadingThreadWakeHandle)
+{
+    NTF_REF(streamingUnitPtr, streamingUnit);
+    assert(assetLoadingThreadWakeHandle);
+
+    streamingUnit.StateMutexed(StreamingUnitRuntime::kLoading);
+    SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
+}
+
 /*static*/ void Vertex::GetAttributeDescriptions(VectorSafeRef<VkVertexInputAttributeDescription> attributeDescriptions)
 {
     attributeDescriptions[0].binding = 0;
