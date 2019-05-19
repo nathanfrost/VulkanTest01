@@ -528,11 +528,10 @@ void CreateBuffer(
     vkGetBufferMemoryRequirements(device, vkBuffer, &memoryRequirements);
     assert(memoryRequirements.size >= vkBufferSizeBytes);
 
-    const VkResult bindBufferResult = 
-        vkBindBufferMemory(device, vkBuffer, vkBufferMemory, offsetToAllocatedBlock + stagingBufferGpuOffsetToAllocatedBlock);
+    BindBufferMemory(vkBuffer, vkBufferMemory, offsetToAllocatedBlock + stagingBufferGpuOffsetToAllocatedBlock, device);
     stagingBufferGpuOffsetToAllocatedBlock += vkBufferSizeBytes;
-    NTF_VK_ASSERT_SUCCESS(bindBufferResult);
 }
+
 void CreateBuffer(
     VkBuffer*const bufferPtr,
     VkDeviceMemory*const bufferMemoryPtr,
@@ -573,7 +572,12 @@ void CreateBuffer(
         physicalDevice);
     assert(allocateMemoryResult);
 
-    const VkResult bindBufferResult = vkBindBufferMemory(device, buffer, bufferMemory, offsetToAllocatedBlock);///<@todo NTF: wrap in function
+    BindBufferMemory(buffer, bufferMemory, offsetToAllocatedBlock, device);
+}
+
+void BindBufferMemory(const VkBuffer& buffer, const VkDeviceMemory& bufferMemory, const VkDeviceSize& offsetToAllocatedBlock, const VkDevice& device)
+{
+    const VkResult bindBufferResult = vkBindBufferMemory(device, buffer, bufferMemory, offsetToAllocatedBlock);
     NTF_VK_ASSERT_SUCCESS(bindBufferResult);
 }
 

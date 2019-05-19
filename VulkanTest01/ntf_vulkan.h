@@ -118,6 +118,7 @@ void CreateBuffer(
     const VkMemoryPropertyFlags& flags,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
+void BindBufferMemory(const VkBuffer& buffer, const VkDeviceMemory& bufferMemory, const VkDeviceSize& offsetToAllocatedBlock, const VkDevice& device);
 void CopyBufferToImage(
     const VkBuffer& buffer,
     const VkImage& image,
