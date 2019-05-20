@@ -64,11 +64,13 @@ bool StackNTF<SizeT>::PushAllocInternal(SizeT*const firstByteFreePtr, SizeT*cons
 template bool StackNTF<VkDeviceSize>::PushAllocInternal(VkDeviceSize*const firstByteFreePtr, VkDeviceSize*const firstByteReturnedPtr, const VkDeviceSize alignment, const VkDeviceSize size) const;
 
 ///@todo: allocating memory in Initialize() and not Alloc() is not consistent with VulkanMemoryHeapPage; consider redesign
-void StackCpu::Initialize(uint8_t*const p, const size_t sizeBytes)
+template<class SizeT>
+void StackCpu<SizeT>::Initialize(uint8_t*const p, const SizeT sizeBytes)
 {
     InitializeInternal(p, sizeBytes);
 }
-void StackCpu::InitializeInternal(uint8_t*const p, const size_t sizeBytes)
+template<class SizeT>
+void StackCpu<SizeT>::InitializeInternal(uint8_t*const p, const SizeT sizeBytes)
 {
 #if NTF_DEBUG
     assert(!m_initialized);
@@ -80,21 +82,30 @@ void StackCpu::InitializeInternal(uint8_t*const p, const size_t sizeBytes)
     m_stack.Allocate(sizeBytes);
 }
 
-bool StackCpu::PushAlloc(ArraySafeRef<uint8_t>*const memoryRetPtr, const size_t alignment, const size_t sizeBytes)
+template<class SizeT>
+bool StackCpu<SizeT>::PushAlloc(ArraySafeRef<uint8_t>*const memoryRetPtr, SizeT*const memoryOffsetPtr, const SizeT alignment, const SizeT sizeBytes)
 {
     NTF_REF(memoryRetPtr, memoryRet);
+    NTF_REF(memoryOffsetPtr, memoryOffset);
     assert(sizeBytes > 0);
 
     void* voidPtr;
-    const bool ret = PushAlloc(&voidPtr, alignment, sizeBytes);
-    memoryRet.SetArray(reinterpret_cast<uint8_t*>(voidPtr), sizeBytes);
+    const bool ret = PushAlloc(&voidPtr, &memoryOffset, alignment, sizeBytes);
+    memoryRet.SetArray(reinterpret_cast<uint8_t*>(voidPtr), CastWithAssert<SizeT,size_t>(sizeBytes));
     return ret;
 }
-bool StackCpu::MemcpyIfPushAllocSucceeds(
+template<class SizeT>
+bool StackCpu<SizeT>::PushAlloc(ArraySafeRef<uint8_t>*const memoryRetPtr, const SizeT alignment, const SizeT sizeBytes)
+{
+    SizeT dummy;
+    return PushAlloc(memoryRetPtr, &dummy, alignment, sizeBytes);
+}
+template<class SizeT>
+bool StackCpu<SizeT>::MemcpyIfPushAllocSucceeds(
     ArraySafeRef<uint8_t>*const memoryRetPtr, 
     const void*const dataToMemcpy, 
-    const size_t alignment,
-    const size_t sizeBytes)
+    const SizeT alignment,
+    const SizeT sizeBytes)
 {
     NTF_REF(memoryRetPtr, memoryRet);
     assert(dataToMemcpy);
@@ -103,27 +114,36 @@ bool StackCpu::MemcpyIfPushAllocSucceeds(
     const bool hasSpace = PushAlloc(&memoryRet, alignment, sizeBytes);
     if (hasSpace)
     {
-        memoryRet.MemcpyFromStart(dataToMemcpy, sizeBytes);
+        memoryRet.MemcpyFromStart(dataToMemcpy, CastWithAssert<SizeT, size_t>(sizeBytes));
     }
     return hasSpace;
 }
- 
-bool StackCpu::PushAlloc(void**const memoryRetPtr, const size_t alignment, const size_t sizeBytes)
+
+template<class SizeT>
+bool StackCpu<SizeT>::PushAlloc(void**const memoryRetPtr, SizeT*const memoryOffsetPtr, const SizeT alignment, const SizeT sizeBytes)
 {
     assert(m_initialized);
 
     assert(memoryRetPtr);
     auto& memoryRet = *memoryRetPtr;
 
+    NTF_REF(memoryOffsetPtr, memoryOffset);
+
     assert(sizeBytes > 0);
 
-    size_t memoryOffset;
     const bool allocResult = m_stack.PushAlloc(&memoryOffset, alignment, sizeBytes);
     memoryRet = m_memory + memoryOffset;
     return allocResult;
 }
+template<class SizeT>
+bool StackCpu<SizeT>::PushAlloc(void**const memoryRetPtr, const SizeT alignment, const SizeT sizeBytes)
+{
+    SizeT dummy;
+    return PushAlloc(memoryRetPtr, &dummy, alignment, sizeBytes);
+}
 
-void StackCpu::Destroy()
+template<class SizeT>
+void StackCpu<SizeT>::Destroy()
 {
 #if NTF_DEBUG
     assert(m_initialized);

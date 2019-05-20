@@ -129,9 +129,10 @@ public:
         const ElementNumType arrayNum,
         ArraySafeRef<ElementType> arrayCookerOut,
         ArraySafeRef<StreamingUnitByte>,
-        StackCpu*const,
+        StackCpu<VkDeviceSize>*const,
         const VkDeviceSize,
-        size_t*const)
+        size_t*const,
+        VkDeviceSize*const)
     {
         assert(arrayNum > 0);
         Execute(file, arrayCookerOut, arrayNum);
@@ -160,9 +161,10 @@ public:
         const ElementNumType arrayNum,
         ArraySafeRef<ElementType> arrayCookerOut,
         ArraySafeRef<StreamingUnitByte> bufferRuntimeIn,
-        StackCpu*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
+        StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
         const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn,
-        size_t*const bufferSizeBytesRuntimeIn)
+        size_t*const bufferSizeBytesRuntimeIn,
+        VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeIn)
     {
         assert(file);
         assert(arrayNum > 0);
@@ -173,6 +175,7 @@ public:
         const size_t bufferSizeBytes = arrayNum * sizeof(arrayCookerOut[0]);
         const bool pushAllocResult = stagingBufferMemoryMapCpuToGpuRuntimeIn->PushAlloc(
             &bufferRuntimeIn, 
+            stagingBufferGpuOffsetToAllocatedBlockRuntimeIn,
             CastWithAssert<VkDeviceSize, size_t>(stagingBufferGpuAlignmentRuntimeIn), 
             bufferSizeBytes);
         assert(pushAllocResult);
@@ -184,16 +187,6 @@ public:
         }
     }
 };
-
-inline static void RoundToNearestIfNotNull(VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeInPtr, const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn)
-{
-    if (stagingBufferGpuAlignmentRuntimeIn)
-    {
-        assert(stagingBufferGpuAlignmentRuntimeIn > 0);
-        NTF_REF(stagingBufferGpuOffsetToAllocatedBlockRuntimeInPtr, stagingBufferGpuOffsetToAllocatedBlockRuntimeIn);
-        stagingBufferGpuOffsetToAllocatedBlockRuntimeIn = RoundToNearest(stagingBufferGpuOffsetToAllocatedBlockRuntimeIn, stagingBufferGpuAlignmentRuntimeIn);
-    }
-}
 
 template<class Serializer>
 inline void TextureSerialize0(
@@ -215,9 +208,10 @@ template<class Serializer>
 inline void TextureSerialize1(   
     FILE*const file,
     ArraySafeRef<StreamingUnitByte> pixelsCookOut,
-    StackCpu* stagingBufferMemoryMapCpuToGpuRuntimeIn,
+    StackCpu<VkDeviceSize>* stagingBufferMemoryMapCpuToGpuRuntimeIn,
     const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn,
-    const size_t bufferSizeBytes)
+    const size_t bufferSizeBytes,
+    VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeIn)
 {
     ArraySafeRef<StreamingUnitByte> pixelBufferRuntimeIn;
     Serializer::Execute(
@@ -227,13 +221,14 @@ inline void TextureSerialize1(
         pixelBufferRuntimeIn,
         stagingBufferMemoryMapCpuToGpuRuntimeIn,
         stagingBufferGpuAlignmentRuntimeIn,
-        nullptr);
+        nullptr,
+        stagingBufferGpuOffsetToAllocatedBlockRuntimeIn);
 }
 
 template<class Serializer>
 inline void VertexBufferSerialize(
     FILE*const file,
-    StackCpu*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
+    StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeIn,
     StreamingUnitVerticesNum*const verticesNum,
     ArraySafeRef<Vertex> verticesCookerOut,
@@ -252,15 +247,14 @@ inline void VertexBufferSerialize(
         vertexBufferRuntimeIn,
         stagingBufferMemoryMapCpuToGpuRuntimeIn,
         stagingBufferGpuAlignmentRuntimeIn,
-        vertexBufferSizeBytesRuntimeIn);
-    
-    RoundToNearestIfNotNull(stagingBufferGpuOffsetToAllocatedBlockRuntimeIn, stagingBufferGpuAlignmentRuntimeIn);
+        vertexBufferSizeBytesRuntimeIn,
+        stagingBufferGpuOffsetToAllocatedBlockRuntimeIn);
 }
 
 template<class Serializer>
 inline void IndexBufferSerialize(
     FILE*const file,
-    StackCpu*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
+    StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeIn,
     StreamingUnitIndicesNum*const indicesNum,
     ArraySafeRef<IndexBufferValue> indicesCookerOut,
@@ -279,7 +273,6 @@ inline void IndexBufferSerialize(
         indexBufferRuntimeIn,
         stagingBufferMemoryMapCpuToGpuRuntimeIn,
         stagingBufferGpuAlignmentRuntimeIn,
-        indexBufferSizeBytesRuntimeIn);
-
-    RoundToNearestIfNotNull(stagingBufferGpuOffsetToAllocatedBlockRuntimeIn, stagingBufferGpuAlignmentRuntimeIn);
+        indexBufferSizeBytesRuntimeIn,
+        stagingBufferGpuOffsetToAllocatedBlockRuntimeIn);
 }

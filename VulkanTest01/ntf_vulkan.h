@@ -150,7 +150,7 @@ VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice);
 void CreateShaderModule(VkShaderModule*const shaderModulePtr, char*const code, const size_t codeSizeBytes, const VkDevice& device);
 bool CheckValidationLayerSupport(ConstVectorSafeRef<const char*> validationLayers);
 void CreateImageView(VkImageView*const imageViewPtr, const VkDevice& device, const VkImage& image, const VkFormat& format, const VkImageAspectFlags& aspectFlags);
-void ReadFile(char**const fileData, StackCpu*const allocatorPtr, size_t*const fileSizeBytesPtr, const char*const filename);
+void ReadFile(char**const fileData, StackCpu<VkDeviceSize>*const allocatorPtr, size_t*const fileSizeBytesPtr, const char*const filename);
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
     VkDebugReportFlagsEXT flags,
     VkDebugReportObjectTypeEXT objType,
@@ -298,7 +298,7 @@ void CreateDescriptorSetLayout(
 void CreateGraphicsPipeline(
     VkPipelineLayout*const pipelineLayoutPtr,
     VkPipeline*const graphicsPipelinePtr,
-    StackCpu*const allocatorPtr,
+    StackCpu<size_t>*const allocatorPtr,
     const VkRenderPass& renderPass,
     const VkDescriptorSetLayout& descriptorSetLayout,
     const VkExtent2D& swapChainExtent,
@@ -428,7 +428,7 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VulkanPagedStackAllocator*const allocatorPtr,
     StreamingUnitTextureDimension*const textureWidthPtr,
     StreamingUnitTextureDimension*const textureHeightPtr,
-    StackCpu*const stagingBufferMemoryMapCpuToGpuStackPtr,
+    StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuStackPtr,
     size_t*const imageSizeBytesPtr,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
     FILE*const streamingUnitFile,

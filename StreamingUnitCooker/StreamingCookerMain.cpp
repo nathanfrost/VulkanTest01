@@ -12,7 +12,7 @@
 //BEG_STB_IMAGE
 #define STB_IMAGE_IMPLEMENTATION
 //BEG_#StbMemoryManagement
-StackCpu* g_stbAllocator;
+StackCpu<size_t>* g_stbAllocator;
 void* __cdecl stb_malloc(size_t _Size)
 {
     assert(g_stbAllocator);
@@ -27,15 +27,15 @@ void __cdecl stb_nullFree(void* const block) {}
 #include"stb_image.h"
 
 //BEG_#StbMemoryManagement
-void STBAllocatorCreate(StackCpu**const stbAllocatorPtrPtr)
+void STBAllocatorCreate(StackCpu<size_t>**const stbAllocatorPtrPtr)
 {
     NTF_REF(stbAllocatorPtrPtr, stbAllocatorPtr);
 
-    stbAllocatorPtr = new StackCpu();
+    stbAllocatorPtr = new StackCpu<size_t>();
     const size_t sizeBytes = 128 * 1024 * 1024;
     stbAllocatorPtr->Initialize(reinterpret_cast<uint8_t*>(malloc(sizeBytes)), sizeBytes);
 }
-void STBAllocatorDestroy(StackCpu**const stbAllocatorPtrPtr)
+void STBAllocatorDestroy(StackCpu<size_t>**const stbAllocatorPtrPtr)
 {
     NTF_REF(stbAllocatorPtrPtr, stbAllocatorPtr);
 
@@ -47,7 +47,7 @@ void STBAllocatorDestroy(StackCpu**const stbAllocatorPtrPtr)
 
 /** use when you're done with the data returned from stbi_load(); never call stbi_image_free() directly; only use this function to clear all stack
 allocations stbi made using the (global) stbAllocatorPtr */
-void STBIImageFree(void*const retval_from_stbi_load, StackCpu*const stbAllocatorPtr)
+void STBIImageFree(void*const retval_from_stbi_load, StackCpu<size_t>*const stbAllocatorPtr)
 {
     assert(stbAllocatorPtr);
     auto& stbAllocator = *stbAllocatorPtr;
@@ -139,7 +139,7 @@ void StreamingUnitCooker::Cook()
 
         TextureSerialize0<SerializerCookerOut>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook);
         const size_t imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
-        TextureSerialize1<SerializerCookerOut>(f, ArraySafeRef<StreamingUnitByte>(pixels, imageSizeBytes), nullptr, 0, imageSizeBytes);
+        TextureSerialize1<SerializerCookerOut>(f, ArraySafeRef<StreamingUnitByte>(pixels, imageSizeBytes), nullptr, 0, imageSizeBytes, nullptr);
         STBIImageFree(pixels, g_stbAllocator);
 
         //cook and write vertex and index buffers

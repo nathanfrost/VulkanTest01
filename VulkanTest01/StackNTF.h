@@ -1,5 +1,6 @@
 #pragma once
 
+#include<vulkan/vulkan_core.h>
 #include"ntf_compileTimeDefines.h"
 #include"stdArrayUtility.h"
 
@@ -38,6 +39,7 @@ private:
 };
 
 ///@todo: consider refactoring VulkanMemoryHeap to a generalized linked list of StackNTF's (call it "StackPageList"), and then refactor this class to use StackPageList
+template<class SizeT>
 class StackCpu
 {
 public:
@@ -47,28 +49,33 @@ public:
         m_initialized = false;
 #endif//#if NTF_DEBUG
     };
-    void Initialize(uint8_t*const p, const size_t sizeBytes);
+    void Initialize(uint8_t*const p, const SizeT sizeBytes);
     ///@todo: all explicit default C++ functions
 
     void Destroy();
     inline void Clear() { m_stack.ClearSuballocations(); }
 
-    bool PushAlloc(ArraySafeRef<uint8_t>*const memoryRetPtr, const size_t alignment, const size_t sizeBytes);
+    bool PushAlloc(ArraySafeRef<uint8_t>*const memoryRetPtr, SizeT*const memoryOffsetPtr, const SizeT alignment, const SizeT sizeBytes);
+    bool PushAlloc(ArraySafeRef<uint8_t>*const memoryRetPtr, const SizeT alignment, const SizeT sizeBytes);
     bool MemcpyIfPushAllocSucceeds(
         ArraySafeRef<uint8_t>*const memoryRetPtr,
         const void*const dataToMemcpy,
-        const size_t alignment,
-        const size_t sizeBytes);
-    bool PushAlloc(void**const memoryPtr, const size_t alignment, const size_t sizeBytes);
-    inline size_t GetFirstByteFree(){ assert(m_initialized); return m_stack.GetFirstByteFree(); }
+        const SizeT alignment,
+        const SizeT sizeBytes);
+    bool PushAlloc(void**const memoryRetPtr, SizeT*const memoryOffsetPtr, const SizeT alignment, const SizeT sizeBytes);
+    bool PushAlloc(void**const memoryRetPtr, const SizeT alignment, const SizeT sizeBytes);
+    inline SizeT GetFirstByteFree(){ assert(m_initialized); return m_stack.GetFirstByteFree(); }
     inline uint8_t*const GetMemory() { return m_memory; }
     inline bool IsEmptyAndAllocated() const { return m_stack.IsEmptyAndAllocated(); }
 
 private:
-    void InitializeInternal(uint8_t*const p, const size_t sizeBytes);
+    void InitializeInternal(uint8_t*const p, const SizeT sizeBytes);
 #if NTF_DEBUG
     bool m_initialized;
 #endif//#if NTF_DEBUG
     uint8_t* m_memory;///<*this is not responsible for freeing the memory pointer; *this merely uses the buffer of memory it is passed
-    StackNTF<size_t> m_stack;//tracks stack allocations within memory allocation
+    StackNTF<SizeT> m_stack;//tracks stack allocations within memory allocation
 };
+#pragma warning(disable : 4661) //disable spurious "no suitable definition provided for explicit template instantiation request" error in Visual Studio 2015; all template class methods are defined and link correctly
+template class StackCpu<size_t>;
+template class StackCpu<VkDeviceSize>;

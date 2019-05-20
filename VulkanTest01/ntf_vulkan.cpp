@@ -663,7 +663,7 @@ void CreateImageView(VkImageView*const imageViewPtr, const VkDevice& device, con
     NTF_VK_ASSERT_SUCCESS(createImageViewResult);
 }
 
-void ReadFile(char**const fileData, StackCpu*const allocatorPtr, size_t*const fileSizeBytesPtr, const char*const filename)
+void ReadFile(char**const fileData, StackCpu<size_t>*const allocatorPtr, size_t*const fileSizeBytesPtr, const char*const filename)
 {
     assert(fileData);
 
@@ -958,7 +958,7 @@ void CreateDescriptorSetLayout(
 void CreateGraphicsPipeline(
     VkPipelineLayout*const pipelineLayoutPtr,
     VkPipeline*const graphicsPipelinePtr,
-    StackCpu*const allocatorPtr,
+    StackCpu<size_t>*const allocatorPtr,
     const VkRenderPass& renderPass,
     const VkDescriptorSetLayout& descriptorSetLayout,
     const VkExtent2D& swapChainExtent,
@@ -1852,7 +1852,7 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VulkanPagedStackAllocator*const allocatorPtr,
     StreamingUnitTextureDimension*const textureWidthPtr,
     StreamingUnitTextureDimension*const textureHeightPtr,
-    StackCpu*const stagingBufferMemoryMapCpuToGpuStackPtr,
+    StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuStackPtr,
     size_t*const imageSizeBytesPtr,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
     FILE*const streamingUnitFile,
@@ -1902,9 +1902,8 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
         ArraySafeRef<StreamingUnitByte>(), 
         &stagingBufferMemoryMapCpuToGpuStack, 
         alignment, 
-        imageSizeBytes);
-
-    stagingBufferGpuOffsetToAllocatedBlock = RoundToNearest(stagingBufferGpuOffsetToAllocatedBlock, alignment);
+        imageSizeBytes,
+        &stagingBufferGpuOffsetToAllocatedBlock);
     return;
 }
 

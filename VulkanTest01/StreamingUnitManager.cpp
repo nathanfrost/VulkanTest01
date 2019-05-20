@@ -23,12 +23,12 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_REF(threadArguments.m_renderPass, renderPass);
     NTF_REF(threadArguments.m_swapChainExtent, swapChainExtent);
 
-    StackCpu shaderLoadingScratchSpace;
+    StackCpu<size_t> shaderLoadingScratchSpace;
     const size_t stackAllocatorHackMemorySizeBytes = 64 * 1024 * 1024;
     static StreamingUnitByte stackAllocatorHackMemory[stackAllocatorHackMemorySizeBytes];
     shaderLoadingScratchSpace.Initialize(&stackAllocatorHackMemory[0], stackAllocatorHackMemorySizeBytes);
 
-    StackCpu stagingBufferMemoryMapCpuToGpu;
+    StackCpu<VkDeviceSize> stagingBufferMemoryMapCpuToGpu;
     VkDeviceMemory stagingBufferGpuMemory;
     VkBuffer stagingBufferGpu;
 
