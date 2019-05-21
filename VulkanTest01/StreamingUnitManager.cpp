@@ -38,7 +38,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
     assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.transferFamily == queueFamilyIndices.graphicsFamily));
 
-    ///@todo: pass in extra alignment requirement since VK_MEMORY_PROPERTY_HOST_COHERENT_BIT wasn't used -- must align both offsetToAllocatedBlockPtr and size arguments
     CreateBuffer(
         &stagingBufferGpu,
         &stagingBufferGpuMemory,
@@ -48,6 +47,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
         true,
+        true,///<this buffer will be memory mapped, so respect alignment
         device,
         physicalDevice);
     VkMemoryRequirements memRequirements;
@@ -59,7 +59,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         device,
         stagingBufferGpuMemory,
         offsetToFirstByteOfStagingBuffer,
-        NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE,
+        NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE,///<@todo: respect VkPhysicalDeviceLimits::nonCoherentAtomSize
         0,
         &stagingBufferMemoryMapCpuToGpuPtr);
     NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
@@ -71,9 +71,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     VkSemaphore transferFinishedSemaphore;
     CreateVulkanSemaphore(&transferFinishedSemaphore, device);
     VkPipelineStageFlags transferFinishedPipelineStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
-
-    VkPhysicalDeviceProperties physicalDeviceProperties;
-    vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
 
     for (;;)
     {
@@ -114,7 +111,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             swapChainExtent,
             device);
 
-        streamingUnit.m_uniformBufferSizeAligned = UniformBufferCpuAlignmentCalculate(streamingUnit.m_uniformBufferSizeUnaligned, physicalDevice);
+        streamingUnit.m_uniformBufferSizeAligned = AlignToNonCoherentAtomSize(streamingUnit.m_uniformBufferSizeUnaligned);
         BeginCommands(commandBufferTransfer, device);
         if (!unifiedGraphicsAndTransferQueue)
         {

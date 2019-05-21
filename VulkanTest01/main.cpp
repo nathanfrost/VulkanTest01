@@ -264,6 +264,7 @@ private:
         m_callback = SetupDebugCallback(m_instance);
         CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
         PickPhysicalDevice(&m_physicalDevice, m_surface, m_deviceExtensions, m_instance);
+        NTFVulkanInitialize(m_physicalDevice);
         m_queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
         CreateLogicalDevice(
             &m_device, 

@@ -72,6 +72,10 @@ struct DrawFrameFinishedFence
     bool m_frameNumberCpuRecordedCompleted;
 };
 
+void NTFVulkanInitialize(const VkPhysicalDevice& physicalDevice);
+void GetPhysicalDeviceMemoryPropertiesCached(VkPhysicalDeviceMemoryProperties**const memPropertiesPtr);
+void GetPhysicalDevicePropertiesCached(VkPhysicalDeviceProperties**const physicalDevicePropertiesPtr);
+
 VkAllocationCallbacks* GetVulkanAllocationCallbacks();
 #if NTF_DEBUG
 size_t GetVulkanApiCpuBytesAllocatedMax();
@@ -144,6 +148,7 @@ void CreateBuffer(
     const VkBufferUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
     const bool residentForever,
+    const bool respectNonCoherentAtomSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice);
@@ -336,7 +341,7 @@ void FillCommandBufferPrimary(
     const VkPipeline& graphicsPipeline,
     const VkDevice& device);
 
-VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferSize, const VkPhysicalDevice& physicalDevice);
+VkDeviceSize AlignToNonCoherentAtomSize(VkDeviceSize i);
 void CreateUniformBuffer(
     ArraySafeRef<uint8_t>*const uniformBufferCpuMemoryPtr,
     VkDeviceMemory*const uniformBufferGpuMemoryPtr,
@@ -506,11 +511,11 @@ public:
         vkFreeMemory(device, m_memoryHandle, GetVulkanAllocationCallbacks());
     }
 
-    inline bool SufficientMemory(const VkMemoryRequirements& memRequirements) const
+    inline bool SufficientMemory(const VkMemoryRequirements& memRequirements, const bool respectNonCoherentAtomSize) const
     {
         assert(m_stack.Allocated());
         VkDeviceSize dummy0, dummy1;
-        return PushAlloc(&dummy0, &dummy1, memRequirements);
+        return PushAlloc(&dummy0, &dummy1, memRequirements, respectNonCoherentAtomSize);
     }
     bool PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemoryRequirements& memRequirements);
     inline VkDeviceMemory GetMemoryHandle() const 
@@ -528,7 +533,8 @@ private:
     bool PushAlloc(
         VkDeviceSize*const firstByteFreePtr,
         VkDeviceSize*const firstByteReturnedPtr,
-        const VkMemoryRequirements& memRequirements) const;
+        const VkMemoryRequirements& memRequirements,
+        const bool respectNonCoherentAtomSize) const;
 };
 
 ///@todo: unit test
@@ -555,6 +561,7 @@ public:
         const VkMemoryPropertyFlags& properties,
         const bool residentForever,
         const bool linearResource,
+        const bool respectNonCoherentAtomSize,
         const VkDevice& device,
         const VkPhysicalDevice& physicalDevice);
 
@@ -602,6 +609,7 @@ public:
         const VkMemoryPropertyFlags& properties,
         const bool residentForever,
         const bool linearResource,
+        const bool respectNonCoherentAtomSize,
         const VkDevice& device,
         const VkPhysicalDevice& physicalDevice);
 

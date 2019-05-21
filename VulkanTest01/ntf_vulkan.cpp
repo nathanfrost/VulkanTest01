@@ -417,6 +417,7 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
         properties,
         residentForever, 
         tiling == VK_IMAGE_TILING_LINEAR,
+        false,
         device,
         physicalDevice);
     if (allocateMemoryResult)
@@ -438,20 +439,32 @@ void CopyBuffer(const VkBuffer& srcBuffer,const VkBuffer& dstBuffer,const VkDevi
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 }
 
-///use this instead of raw calls to the underlying Vulkan function solely to keep VK_LAYER_LUNARG_api_dump validation layer easier to read
-static void GetPhysicalDeviceMemoryPropertiesCached(VkPhysicalDeviceMemoryProperties**const memPropertiesPtr, const VkPhysicalDevice& physicalDevice)
+#if NTF_DEBUG
+static bool s_ntfVulkanInitializeCalled;
+#endif//#if NTF_DEBUG
+static VkPhysicalDeviceMemoryProperties s_memProperties;
+static VkPhysicalDeviceProperties s_physicalDeviceProperties;
+void NTFVulkanInitialize(const VkPhysicalDevice& physicalDevice)
 {
-    NTF_REF(memPropertiesPtr, memProperties);
-
-    static VkPhysicalDeviceMemoryProperties s_memProperties;
-    static bool s_memPropertiesQueried;
-    if (!s_memPropertiesQueried)
-    {
-        s_memPropertiesQueried = true;
-        vkGetPhysicalDeviceMemoryProperties(physicalDevice, &s_memProperties);
-    }
-    
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &s_memProperties);
+    vkGetPhysicalDeviceProperties(physicalDevice, &s_physicalDeviceProperties);
+#if NTF_DEBUG
+    s_ntfVulkanInitializeCalled = true;
+#endif//#if NTF_DEBUG
+}
+///use this instead of raw calls to the underlying Vulkan function solely to keep VK_LAYER_LUNARG_api_dump validation layer easier to read
+void GetPhysicalDeviceMemoryPropertiesCached(VkPhysicalDeviceMemoryProperties**const memPropertiesPtr)
+{
+    assert(s_ntfVulkanInitializeCalled);
+    NTF_REF(memPropertiesPtr, memProperties);    
     memProperties = &s_memProperties;
+}
+///use this instead of raw calls to the underlying Vulkan function solely to keep VK_LAYER_LUNARG_api_dump validation layer easier to read
+void GetPhysicalDevicePropertiesCached(VkPhysicalDeviceProperties**const physicalDevicePropertiesPtr)
+{
+    assert(s_ntfVulkanInitializeCalled);
+    NTF_REF(physicalDevicePropertiesPtr, physicalDeviceProperties);
+    physicalDeviceProperties = &s_physicalDeviceProperties;
 }
 
 /* Heap classification:
@@ -464,7 +477,7 @@ static void GetPhysicalDeviceMemoryPropertiesCached(VkPhysicalDeviceMemoryProper
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice)
 {
     VkPhysicalDeviceMemoryProperties* memProperties;
-    GetPhysicalDeviceMemoryPropertiesCached(&memProperties, physicalDevice);
+    GetPhysicalDeviceMemoryPropertiesCached(&memProperties);
 
     for (uint32_t i = 0; i < memProperties->memoryTypeCount; i++)
     {
@@ -480,7 +493,7 @@ uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& 
 uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice)
 {
     VkPhysicalDeviceMemoryProperties* memProperties;
-    GetPhysicalDeviceMemoryPropertiesCached(&memProperties, physicalDevice);
+    GetPhysicalDeviceMemoryPropertiesCached(&memProperties);
     for (uint32_t memoryTypeIndex = 0; memoryTypeIndex < memProperties->memoryTypeCount; ++memoryTypeIndex)
     {
         auto& memoryType = memProperties->memoryTypes[memoryTypeIndex];
@@ -541,6 +554,7 @@ void CreateBuffer(
     const VkBufferUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
     const bool residentForever,
+    const bool respectNonCoherentAtomSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -568,6 +582,7 @@ void CreateBuffer(
         properties,
         residentForever,
         true,
+        respectNonCoherentAtomSize,
         device,
         physicalDevice);
     assert(allocateMemoryResult);
@@ -1423,20 +1438,15 @@ void FillCommandBufferPrimary(
 
     EndCommandBuffer(commandBufferPrimary);
 }
-VkDeviceSize UniformBufferCpuAlignmentCalculate(const VkDeviceSize bufferElementSize, const VkPhysicalDevice& physicalDevice)
+VkDeviceSize AlignToNonCoherentAtomSize(VkDeviceSize i)
 {
-    assert(bufferElementSize > 0);
-
-    VkPhysicalDeviceProperties physicalDeviceProperties;
-    vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
-    const VkDeviceSize minUniformBufferOffsetAlignment = physicalDeviceProperties.limits.minUniformBufferOffsetAlignment;///<@todo: NtfMax(minUniformBufferOffsetAlignment, physicalDeviceProperties.limits.nonCoherentAtomSize)
-
-    VkDeviceSize uniformBufferAlignment = bufferElementSize;
-    if (minUniformBufferOffsetAlignment > 0)
+    VkPhysicalDeviceProperties* physicalDeviceProperties;
+    GetPhysicalDevicePropertiesCached(&physicalDeviceProperties);
+    if (physicalDeviceProperties->limits.nonCoherentAtomSize > 0)
     {
-        uniformBufferAlignment = RoundToNearest(uniformBufferAlignment, minUniformBufferOffsetAlignment);
+        i = RoundToNearest(i, physicalDeviceProperties->limits.nonCoherentAtomSize);
     }
-    return uniformBufferAlignment;
+    return i;
 }
 
 void CreateUniformBuffer(
@@ -1473,6 +1483,7 @@ void CreateUniformBuffer(
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
         residentForever,
+        true,///<uniform buffers are always memory mapped, so make sure memory mapping is aligned correctly
         device,
         physicalDevice);
 
@@ -1732,6 +1743,7 @@ void CreateAndCopyToGpuBuffer(
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | flags,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//most optimal graphics memory
         residentForever,
+        false,
         device,
         physicalDevice);
 
@@ -2071,13 +2083,18 @@ void UpdateUniformBuffer(
         uniformBufferCpuMemory.MemcpyFromIndex(&ubo, Cast_VkDeviceSize_size_t(drawCallIndex)*sizeofUbo, sizeofUbo);
     }
 
+#if NTF_DEBUG
+    assert(AlignToNonCoherentAtomSize(offsetToGpuMemory) == offsetToGpuMemory);
+    assert(AlignToNonCoherentAtomSize(uniformBufferSize) == uniformBufferSize);
+#endif//#if NTF_DEBUG
+
     VkMappedMemoryRange mappedMemoryRange;
     mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
     mappedMemoryRange.pNext = nullptr;
     mappedMemoryRange.memory = uniformBufferGpuMemory;
-    mappedMemoryRange.offset = offsetToGpuMemory;///@todo: respect nonCoherentAtomSize
-    mappedMemoryRange.size = uniformBufferSize;///<@todo: respect nonCoherentAtomSize
-    vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange);
+    mappedMemoryRange.offset = offsetToGpuMemory;
+    mappedMemoryRange.size = uniformBufferSize;
+    vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange);///<@todo: respect: If pMemoryRanges includes sets of nonCoherentAtomSize bytes where no bytes have been written by the host, those bytes must not be flushed
 }
 
 void AcquireNextImage(
@@ -2640,6 +2657,7 @@ bool VulkanPagedStackAllocator::PushAlloc(
     const VkMemoryPropertyFlags& properties,
     const bool residentForever,
     const bool linearResource,
+    const bool respectNonCoherentAtomSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -2664,6 +2682,7 @@ bool VulkanPagedStackAllocator::PushAlloc(
         properties, 
         residentForever, 
         linearResource, 
+        respectNonCoherentAtomSize,
         device, 
         physicalDevice);
     assert(allocResult);
@@ -2747,6 +2766,7 @@ bool VulkanMemoryHeap::PushAlloc(
     const VkMemoryPropertyFlags& properties,
     const bool residentForever,
     const bool linearResource,///<true for buffers and VK_IMAGE_TILING_LINEAR images; false for VK_IMAGE_TILING_OPTIMAL images
+    const bool respectNonCoherentAtomSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -2774,7 +2794,7 @@ bool VulkanMemoryHeap::PushAlloc(
         VulkanMemoryHeapPage* pageAllocatedPrevious = nullptr;
         while (pageAllocatedCurrent)
         {
-            if (pageAllocatedCurrent->SufficientMemory(memRequirements))
+            if (pageAllocatedCurrent->SufficientMemory(memRequirements, respectNonCoherentAtomSize))
             {
                 break;
             }
@@ -2794,7 +2814,7 @@ bool VulkanMemoryHeap::PushAlloc(
         }
     }
     assert(pageAllocatedCurrent);
-    assert(pageAllocatedCurrent->SufficientMemory(memRequirements));
+    assert(pageAllocatedCurrent->SufficientMemory(memRequirements, respectNonCoherentAtomSize));
 
     memoryHandle = pageAllocatedCurrent->GetMemoryHandle();
     const bool allocResult = pageAllocatedCurrent->PushAlloc(&memoryOffset, memRequirements);
@@ -2843,7 +2863,13 @@ bool VulkanMemoryHeapPage::PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemo
 bool VulkanMemoryHeapPage::PushAlloc(
     VkDeviceSize*const firstByteFreePtr,
     VkDeviceSize*const firstByteReturnedPtr,
-    const VkMemoryRequirements& memRequirements) const
+    const VkMemoryRequirements& memRequirements,
+    const bool respectNonCoherentAtomSize) const
 {
-    return m_stack.PushAllocInternal(firstByteFreePtr, firstByteReturnedPtr, memRequirements.alignment, memRequirements.size);
+    VkDeviceSize alignment = memRequirements.alignment;
+    if (respectNonCoherentAtomSize)
+    {
+        alignment = AlignToNonCoherentAtomSize(alignment);
+    }
+    return m_stack.PushAllocInternal(firstByteFreePtr, firstByteReturnedPtr, alignment, memRequirements.size);
 }
