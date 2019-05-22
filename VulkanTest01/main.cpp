@@ -359,6 +359,7 @@ private:
         }
 
         m_streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemory
+        m_streamingUnit.m_filenameNoExtension.Snprintf("unitTest0");
 
         m_assetLoadingThreadData.m_handles.doneEventHandle = ThreadSignalingEventCreate();
         m_assetLoadingThreadData.m_handles.wakeEventHandle = ThreadSignalingEventCreate();
@@ -373,7 +374,7 @@ private:
         m_assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
         m_assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
         m_assetLoadingArguments.m_streamingUnit = &m_streamingUnit;
-        m_assetLoadingArguments.m_streamingUnitFilenameNoExtension = m_streamingUnitTestNameNoExtension;
+        m_assetLoadingArguments.m_streamingUnitFilenameNoExtension = m_streamingUnit.m_filenameNoExtension.data();
         m_assetLoadingArguments.m_threadCommand = &m_assetLoadingThreadData.m_threadCommand;
         m_assetLoadingArguments.m_threadDone = &m_assetLoadingThreadData.m_handles.doneEventHandle;
         m_assetLoadingArguments.m_threadWake = &m_assetLoadingThreadData.m_handles.wakeEventHandle;
@@ -618,7 +619,6 @@ private:
 
     glm::vec3 m_cameraTranslation;
 
-    const char* m_streamingUnitTestNameNoExtension = "unitTest0";
     StreamingUnitRuntime m_streamingUnit;
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
         

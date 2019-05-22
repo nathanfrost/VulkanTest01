@@ -47,6 +47,7 @@ public:
     void AssertValid() const;
 
 
+    ArraySafe<char,256> m_filenameNoExtension;///<@todo NTF: consider creating a string database for this
     VkSampler m_textureSampler;
 #define TODO_REFACTOR_NUM 2//is NTF_OBJECTS_NUM -- todo: generalize #StreamingMemory
     ArraySafe<TexturedGeometry, TODO_REFACTOR_NUM> m_texturedGeometries;
