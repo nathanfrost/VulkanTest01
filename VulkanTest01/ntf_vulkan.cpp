@@ -270,7 +270,7 @@ void ImageMemoryBarrier(
 VkResult SubmitCommandBuffer(
     ConstVectorSafeRef<VkSemaphore> signalSemaphores,
     ConstVectorSafeRef<VkSemaphore> waitSemaphores,
-    ArraySafeRef<VkPipelineStageFlags> stagesWhereEachSemaphoreWaits,///<@todo: ConstArraySafeRef
+    ArraySafeRef<VkPipelineStageFlags> stagesWhereEachWaitSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
     const VkFence& fenceToSignalWhenCommandBufferDone)
@@ -285,7 +285,7 @@ VkResult SubmitCommandBuffer(
 
     submitInfo.waitSemaphoreCount = Cast_size_t_uint32_t(waitSemaphores.size());
     submitInfo.pWaitSemaphores = waitSemaphores.GetAddressOfUnderlyingArray();
-    submitInfo.pWaitDstStageMask = stagesWhereEachSemaphoreWaits.GetAddressOfUnderlyingArray();
+    submitInfo.pWaitDstStageMask = stagesWhereEachWaitSemaphoreWaits.GetAddressOfUnderlyingArray();
 
     const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, fenceToSignalWhenCommandBufferDone);
     NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
@@ -2179,29 +2179,23 @@ void DrawFrame(
 
     //theoretically the implementation can already start executing our vertex shader and such while the image is not
     //available yet. Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores
-    VkSemaphore waitSemaphores[] = { imageAvailableSemaphore };
-    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-    submitInfo.waitSemaphoreCount = 1;
-    submitInfo.pWaitSemaphores = waitSemaphores;
-    submitInfo.pWaitDstStageMask = waitStages;
+    VectorSafe<VkSemaphore, 4> signalSemaphores({ renderFinishedSemaphore });
+    VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    SubmitCommandBuffer(
+        signalSemaphores,
+        ConstVectorSafeRef<VkSemaphore>(&imageAvailableSemaphore, 1),
+        ArraySafeRef<VkPipelineStageFlags>(&waitStages, 1),///<@todo: ArraySafeRefConst
+        commandBuffers[acquiredImageIndex],
+        graphicsQueue,
+        drawFrameFinishedFence.m_fence);
 
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffers[acquiredImageIndex];
-
-    //signal these semaphores once the command buffer(s) have finished execution
-    VkSemaphore signalSemaphores[] = { renderFinishedSemaphore };
-    submitInfo.signalSemaphoreCount = 1;
-    submitInfo.pSignalSemaphores = signalSemaphores;
-
-    const VkResult queueSubmitResult = vkQueueSubmit(graphicsQueue, 1, &submitInfo, drawFrameFinishedFence.m_fence);///<@todo: use SubmitCommandBuffer() to reduce duplication
-    NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
     drawFrameFinishedFence.m_frameNumberCpuSubmitted = streamingUnitLastFrameSubmitted = currentFrameNumber;//so we know when it's safe to unload streaming unit's assets
     drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted = false;//this frame has not been completed by the Gpu until this fence signals
 
     VkPresentInfoKHR presentInfo = {};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores;
+    presentInfo.pWaitSemaphores = signalSemaphores.data();
 
     VkSwapchainKHR swapChains[] = { swapChain };
     presentInfo.swapchainCount = 1;

@@ -133,7 +133,7 @@ void CopyBufferToImage(
 VkResult SubmitCommandBuffer(
     ConstVectorSafeRef<VkSemaphore> signalSemaphores,
     ConstVectorSafeRef<VkSemaphore> waitSemaphores,
-    ArraySafeRef<VkPipelineStageFlags> stagesWhereEachSemaphoreWaits,///<@todo: ConstArraySafeRef
+    ArraySafeRef<VkPipelineStageFlags> stagesWhereEachWaitSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
     const VkFence& fenceToSignalWhenCommandBufferDone);
