@@ -41,8 +41,7 @@ public:
         assert(m_physicalDevice);
         assert(m_queueFamilyIndices);
         assert(m_renderPass);
-        assert(m_streamingUnitFilenameNoExtension);
-        assert(strlen(m_streamingUnitFilenameNoExtension) > 0);
+        assert(m_streamingUnit->m_filenameNoExtension.Strnlen() > 0);
         assert(m_swapChainExtent);
         assert(m_threadDone);
         assert(m_threadWake);

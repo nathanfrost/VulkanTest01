@@ -123,7 +123,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
 
         ArraySafe<char, 512> streamingUnitFilePathRelative;
         streamingUnitFilePathRelative.Snprintf("%s\\%s.%s",
-            CookedFileDirectoryGet(), threadArguments.m_streamingUnitFilenameNoExtension, StreamingUnitFilenameExtensionGet());
+            CookedFileDirectoryGet(), threadArguments.m_streamingUnit->m_filenameNoExtension.data(), StreamingUnitFilenameExtensionGet());
         FILE* streamingUnitFile;
 
         Fopen(&streamingUnitFile, streamingUnitFilePathRelative.begin(), "rb");

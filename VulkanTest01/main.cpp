@@ -374,7 +374,6 @@ private:
         m_assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
         m_assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
         m_assetLoadingArguments.m_streamingUnit = &m_streamingUnit;
-        m_assetLoadingArguments.m_streamingUnitFilenameNoExtension = m_streamingUnit.m_filenameNoExtension.data();
         m_assetLoadingArguments.m_threadCommand = &m_assetLoadingThreadData.m_threadCommand;
         m_assetLoadingArguments.m_threadDone = &m_assetLoadingThreadData.m_handles.doneEventHandle;
         m_assetLoadingArguments.m_threadWake = &m_assetLoadingThreadData.m_handles.wakeEventHandle;

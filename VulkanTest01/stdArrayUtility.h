@@ -870,6 +870,13 @@ public:
         assert(*lastElement == bellAsciiKeyCode);//vsnprintf may have had to truncate its result to stay within the buffer
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
+    ///@todo: unit test
+    size_t Strnlen() const
+    {
+        NTF_STATIC_ASSERT(sizeof(T) == sizeof(char));//this function is intended to be used only when *this holds ASCII characters
+        const size_t strnlenResult = strnlen(&m_array[0], kElementsNum);
+        return strnlenResult == kElementsNum ? 0 : strnlenResult;//non-null-terminated buffer defined to be empty string
+    }
 
     ///@todo: unit test
     void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
