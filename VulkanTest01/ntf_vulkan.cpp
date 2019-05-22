@@ -123,6 +123,14 @@ static void VKAPI_CALL NTF_vkInternalFreeNotification(
 }
 //END_#AllocationCallbacks
 
+static void RespectNonCoherentAtomAlignment(VkDeviceSize*const alignmentPtr, const VkDeviceSize size)
+{
+    NTF_REF(alignmentPtr, alignment);
+
+    alignment = AlignToNonCoherentAtomSize(alignment);
+    assert(size == AlignToNonCoherentAtomSize(size));//we assert here, rather than enforcing this, because a typical usage pattern is to vkCreateBuffer(bufferSize) -- which requires the buffer size -- and use the returned VkBuffer to determine alignment requirements (that are independent of the nonCoherentAtomSize alignment requirements).  Therefore, the already-allocated VkBuffer's size must already respect nonCoherentAtomSize, but the alignment can be fixed up to respect nonCoherentAtomSize prior to binding the VkBuffer to an actual Gpu memory offset
+}
+
 HANDLE MutexCreate()
 {
     const HANDLE mutexHandle = CreateMutex(
@@ -413,7 +421,9 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     const bool allocateMemoryResult = allocator.PushAlloc(
         &memoryOffset,
         &memoryHandle,
-        memRequirements,
+        memRequirements.memoryTypeBits,
+        memRequirements.alignment,
+        memRequirements.size,
         properties,
         residentForever, 
         tiling == VK_IMAGE_TILING_LINEAR,
@@ -550,7 +560,7 @@ void CreateBuffer(
     VkDeviceMemory*const bufferMemoryPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const offsetToAllocatedBlockPtr,
-    const VkDeviceSize& size,
+    VkDeviceSize size,
     const VkBufferUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
     const bool residentForever,
@@ -570,6 +580,10 @@ void CreateBuffer(
     assert(offsetToAllocatedBlockPtr);
     auto& offsetToAllocatedBlock = *offsetToAllocatedBlockPtr;
 
+    if (respectNonCoherentAtomSize)
+    {
+        size = AlignToNonCoherentAtomSize(size);
+    }
     CreateBuffer(&buffer, size, usage, device);
 
     VkMemoryRequirements memRequirements;
@@ -578,7 +592,9 @@ void CreateBuffer(
     const bool allocateMemoryResult = allocator.PushAlloc(
         &offsetToAllocatedBlock,
         &bufferMemory,
-        memRequirements,
+        memRequirements.memoryTypeBits,
+        memRequirements.alignment,
+        size,
         properties,
         residentForever,
         true,
@@ -2653,7 +2669,9 @@ void VulkanPagedStackAllocator::FreeAllPagesThatAreNotResidentForever(const VkDe
 bool VulkanPagedStackAllocator::PushAlloc(
     VkDeviceSize* memoryOffsetPtr,
     VkDeviceMemory* memoryHandlePtr,
-    const VkMemoryRequirements& memRequirements,
+    const uint32_t memRequirementsMemoryTypeBits,
+    const VkDeviceSize alignment,
+    const VkDeviceSize size,
     const VkMemoryPropertyFlags& properties,
     const bool residentForever,
     const bool linearResource,
@@ -2670,15 +2688,16 @@ bool VulkanPagedStackAllocator::PushAlloc(
     assert(memoryHandlePtr);
     auto& memoryHandle = *memoryHandlePtr;
 
-    assert(memRequirements.size > 0);
-    assert(memRequirements.alignment > 0);
-    assert(memRequirements.alignment % 2 == 0);
+    assert(alignment > 0);
+    assert(alignment % 2 == 0);
+    assert(size > 0);
 
-    auto& heap = m_vulkanMemoryHeaps[FindMemoryType(memRequirements.memoryTypeBits, properties, physicalDevice)];
+    auto& heap = m_vulkanMemoryHeaps[FindMemoryType(memRequirementsMemoryTypeBits, properties, physicalDevice)];
     const bool allocResult = heap.PushAlloc(
         &memoryOffset, 
         &memoryHandle, 
-        memRequirements,
+        alignment,
+        size,
         properties, 
         residentForever, 
         linearResource, 
@@ -2762,7 +2781,8 @@ void VulkanMemoryHeap::Destroy(const VkDevice device)
 bool VulkanMemoryHeap::PushAlloc(
     VkDeviceSize* memoryOffsetPtr,
     VkDeviceMemory* memoryHandlePtr,
-    const VkMemoryRequirements& memRequirements,
+    const VkDeviceSize alignment,
+    const VkDeviceSize size,
     const VkMemoryPropertyFlags& properties,
     const bool residentForever,
     const bool linearResource,///<true for buffers and VK_IMAGE_TILING_LINEAR images; false for VK_IMAGE_TILING_OPTIMAL images
@@ -2794,7 +2814,7 @@ bool VulkanMemoryHeap::PushAlloc(
         VulkanMemoryHeapPage* pageAllocatedPrevious = nullptr;
         while (pageAllocatedCurrent)
         {
-            if (pageAllocatedCurrent->SufficientMemory(memRequirements, respectNonCoherentAtomSize))
+            if (pageAllocatedCurrent->SufficientMemory(alignment, size, respectNonCoherentAtomSize))
             {
                 break;
             }
@@ -2814,10 +2834,10 @@ bool VulkanMemoryHeap::PushAlloc(
         }
     }
     assert(pageAllocatedCurrent);
-    assert(pageAllocatedCurrent->SufficientMemory(memRequirements, respectNonCoherentAtomSize));
+    assert(pageAllocatedCurrent->SufficientMemory(alignment, size, respectNonCoherentAtomSize));
 
     memoryHandle = pageAllocatedCurrent->GetMemoryHandle();
-    const bool allocResult = pageAllocatedCurrent->PushAlloc(&memoryOffset, memRequirements);
+    const bool allocResult = pageAllocatedCurrent->PushAlloc(&memoryOffset, alignment, size, respectNonCoherentAtomSize);
     assert(allocResult);
     return allocResult;
 }
@@ -2847,15 +2867,25 @@ bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMaxBytes, const uin
     return NTF_VK_SUCCESS(allocateMemoryResult);
 }
 
-bool VulkanMemoryHeapPage::PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemoryRequirements& memRequirements)
+bool VulkanMemoryHeapPage::PushAlloc(
+    VkDeviceSize* memoryOffsetPtr, 
+    VkDeviceSize alignment,
+    const VkDeviceSize size,
+    const bool respectNonCoherentAtomSize)
 {
     assert(memoryOffsetPtr);
     auto& memoryOffset = *memoryOffsetPtr;
 
-    const bool allocateResult = m_stack.PushAlloc(
-        &memoryOffset, 
-        memRequirements.alignment,
-        memRequirements.size);
+    assert(alignment > 0);
+    assert(alignment % 2 == 0);
+    assert(size > 0);
+
+    if (respectNonCoherentAtomSize)
+    {
+        RespectNonCoherentAtomAlignment(&alignment, size);
+    }
+
+    const bool allocateResult = m_stack.PushAlloc(&memoryOffset, alignment, size);
     assert(allocateResult);
     return allocateResult;
 }
@@ -2863,13 +2893,17 @@ bool VulkanMemoryHeapPage::PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemo
 bool VulkanMemoryHeapPage::PushAlloc(
     VkDeviceSize*const firstByteFreePtr,
     VkDeviceSize*const firstByteReturnedPtr,
-    const VkMemoryRequirements& memRequirements,
+    VkDeviceSize alignment,
+    const VkDeviceSize size,
     const bool respectNonCoherentAtomSize) const
 {
-    VkDeviceSize alignment = memRequirements.alignment;
+    assert(alignment > 0);
+    assert(alignment % 2 == 0);
+    assert(size > 0);
+
     if (respectNonCoherentAtomSize)
     {
-        alignment = AlignToNonCoherentAtomSize(alignment);
+        RespectNonCoherentAtomAlignment(&alignment, size);
     }
-    return m_stack.PushAllocInternal(firstByteFreePtr, firstByteReturnedPtr, alignment, memRequirements.size);
+    return m_stack.PushAllocInternal(firstByteFreePtr, firstByteReturnedPtr, alignment, size);
 }

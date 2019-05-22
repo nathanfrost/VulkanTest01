@@ -144,7 +144,7 @@ void CreateBuffer(
     VkDeviceMemory*const bufferMemoryPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const offsetToAllocatedBlockPtr,
-    const VkDeviceSize& size,
+    VkDeviceSize size,
     const VkBufferUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
     const bool residentForever,
@@ -511,13 +511,13 @@ public:
         vkFreeMemory(device, m_memoryHandle, GetVulkanAllocationCallbacks());
     }
 
-    inline bool SufficientMemory(const VkMemoryRequirements& memRequirements, const bool respectNonCoherentAtomSize) const
+    inline bool SufficientMemory(const VkDeviceSize alignment, const VkDeviceSize size, const bool respectNonCoherentAtomSize) const
     {
         assert(m_stack.Allocated());
         VkDeviceSize dummy0, dummy1;
-        return PushAlloc(&dummy0, &dummy1, memRequirements, respectNonCoherentAtomSize);
+        return PushAlloc(&dummy0, &dummy1, alignment, size, respectNonCoherentAtomSize);
     }
-    bool PushAlloc(VkDeviceSize* memoryOffsetPtr, const VkMemoryRequirements& memRequirements);
+    bool PushAlloc(VkDeviceSize* memoryOffsetPtr, VkDeviceSize alignment, const VkDeviceSize size, const bool respectNonCoherentAtomSize);
     inline VkDeviceMemory GetMemoryHandle() const 
     { 
         assert(m_stack.Allocated()); 
@@ -533,7 +533,8 @@ private:
     bool PushAlloc(
         VkDeviceSize*const firstByteFreePtr,
         VkDeviceSize*const firstByteReturnedPtr,
-        const VkMemoryRequirements& memRequirements,
+        VkDeviceSize alignment,
+        const VkDeviceSize size,
         const bool respectNonCoherentAtomSize) const;
 };
 
@@ -557,7 +558,8 @@ public:
     bool PushAlloc(
         VkDeviceSize* memoryOffsetPtr,
         VkDeviceMemory* memoryHandlePtr,
-        const VkMemoryRequirements& memRequirements,
+        const VkDeviceSize alignment,
+        const VkDeviceSize size,
         const VkMemoryPropertyFlags& properties,
         const bool residentForever,
         const bool linearResource,
@@ -605,7 +607,9 @@ public:
     bool PushAlloc(
         VkDeviceSize* memoryOffsetPtr,
         VkDeviceMemory* memoryHandlePtr,
-        const VkMemoryRequirements& memRequirements,
+        const uint32_t memRequirementsMemoryTypeBits,
+        const VkDeviceSize alignment,
+        const VkDeviceSize size,
         const VkMemoryPropertyFlags& properties,
         const bool residentForever,
         const bool linearResource,
