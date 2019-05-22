@@ -552,7 +552,7 @@ void CreateBuffer(
     assert(memoryRequirements.size >= vkBufferSizeBytes);
 
     BindBufferMemory(vkBuffer, vkBufferMemory, offsetToAllocatedBlock + stagingBufferGpuOffsetToAllocatedBlock, device);
-    stagingBufferGpuOffsetToAllocatedBlock += vkBufferSizeBytes;
+    stagingBufferGpuOffsetToAllocatedBlock += vkBufferSizeBytes;//this is the earliest point at which we can increment this offset, because we just used its old value to bind the beginning of the buffer
 }
 
 void CreateBuffer(
