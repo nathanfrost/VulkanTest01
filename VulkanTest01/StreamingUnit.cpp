@@ -109,7 +109,7 @@ void StreamingUnitRuntime::StateMutexed(const StreamingUnitRuntime::State state)
 
 void StreamingUnitRuntime::Free(const VkDevice& device)
 {
-    //assert(m_stateMutexed.Get() == State::kUnloading);///<@todo: make this uncommentable, even when closing the app
+    assert(m_stateMutexed.Get() == State::kUnloading);
     m_stateMutexed.Set(State::kNotLoaded);
 
     vkDestroySampler(device, m_textureSampler, GetVulkanAllocationCallbacks());

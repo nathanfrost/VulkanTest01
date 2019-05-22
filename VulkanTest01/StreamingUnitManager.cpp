@@ -66,8 +66,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
     stagingBufferMemoryMapCpuToGpu.Initialize(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpuPtr), NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
 
-    ArraySafe<VkBuffer, 32> stagingBuffersGpu;///<@todo: should be VectorSafe
-    size_t stagingBufferGpuAllocateIndex = 0;
+    VectorSafe<VkBuffer, 32> stagingBuffersGpu;
 
     VkSemaphore transferFinishedSemaphore;
     CreateVulkanSemaphore(&transferFinishedSemaphore, device);
@@ -86,7 +85,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         }
         assert(threadCommand == AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit);
 
-        assert(stagingBufferGpuAllocateIndex == 0);
+        assert(stagingBuffersGpu.size() == 0);
         assert(stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
         {
             //LARGE_INTEGER perfCount;
@@ -160,8 +159,9 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 device,
                 physicalDevice);
 
+            stagingBuffersGpu.sizeIncrement();
             CreateBuffer(
-                &stagingBuffersGpu[stagingBufferGpuAllocateIndex],
+                &stagingBuffersGpu.back(),
                 &stagingBufferGpuOffsetToAllocatedBlock,
                 stagingBufferGpuMemory,
                 offsetToFirstByteOfStagingBuffer,
@@ -175,7 +175,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 textureWidth,
                 textureHeight,
                 imageFormat,
-                stagingBuffersGpu[stagingBufferGpuAllocateIndex],
+                stagingBuffersGpu.back(),
                 commandBufferTransfer,
                 transferQueue,
                 queueFamilyIndices.transferFamily,
@@ -185,7 +185,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 device);
 
             CreateTextureImageView(&streamingUnit.m_textureImageViews[texturedGeometryIndex], texturedGeometry.textureImage, device);
-            ++stagingBufferGpuAllocateIndex;
             {
                 //LARGE_INTEGER perfCount;
                 //QueryPerformanceCounter(&perfCount);
@@ -210,7 +209,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 &texturedGeometry.vertexBuffer,
                 &texturedGeometry.vertexBufferMemory,
                 &stagingBuffersGpu,
-                &stagingBufferGpuAllocateIndex,
                 &stagingBufferGpuOffsetToAllocatedBlock,
                 stagingBufferGpuMemory,
                 stagingBufferGpuAlignmentStandard,
@@ -240,7 +238,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 &texturedGeometry.indexBuffer,
                 &texturedGeometry.indexBufferMemory,
                 &stagingBuffersGpu,
-                &stagingBufferGpuAllocateIndex,
                 &stagingBufferGpuOffsetToAllocatedBlock,
                 stagingBufferGpuMemory,
                 stagingBufferGpuAlignmentStandard,
@@ -321,23 +318,15 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             //clean up staging memory
             stagingBufferMemoryMapCpuToGpu.Clear();
 
-            for (   size_t stagingBufferGpuAllocateIndexFree = 0;
-                    stagingBufferGpuAllocateIndexFree < stagingBufferGpuAllocateIndex;
-                    ++stagingBufferGpuAllocateIndexFree)
+            for (auto& stagingBufferGpu:stagingBuffersGpu)
             {
-                vkDestroyBuffer(device, stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], GetVulkanAllocationCallbacks());
+                vkDestroyBuffer(device, stagingBufferGpu, GetVulkanAllocationCallbacks());
 
                 //LARGE_INTEGER perfCount;
                 //QueryPerformanceCounter(&perfCount);
                 //printf("ASSET THREAD: vkDestroyBuffer(%llu) at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
             }
-            stagingBufferGpuAllocateIndex = 0;
-
-            {
-                //LARGE_INTEGER perfCount;
-                //QueryPerformanceCounter(&perfCount);
-                //printf("ASSET THREAD: AssetLoadingThread finished destroying staging buffers; time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-            }
+            stagingBuffersGpu.size(0);
         }
     }
 

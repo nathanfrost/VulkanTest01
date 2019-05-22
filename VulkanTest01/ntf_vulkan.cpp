@@ -1676,8 +1676,7 @@ void CopyBufferToGpuPrepare(
     VulkanPagedStackAllocator*const deviceLocalMemoryPtr,
     VkBuffer*const gpuBufferPtr,
     VkDeviceMemory*const gpuBufferMemoryPtr,
-    ArraySafeRef<VkBuffer> stagingBuffersGpu,
-    size_t*const stagingBuffersGpuIndexPtr,
+    VectorSafeRef<VkBuffer> stagingBuffersGpu,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
     const VkDeviceMemory stagingBufferGpuMemory,
     const VkDeviceSize stagingBufferGpuAlignmentStandard,
@@ -1692,10 +1691,10 @@ void CopyBufferToGpuPrepare(
     NTF_REF(deviceLocalMemoryPtr, deviceLocalMemory);
     NTF_REF(gpuBufferPtr, gpuBuffer);
     NTF_REF(gpuBufferMemoryPtr, gpuBufferMemory);
-    NTF_REF(stagingBuffersGpuIndexPtr, stagingBuffersGpuIndex);
     NTF_REF(stagingBufferGpuOffsetToAllocatedBlockPtr, stagingBufferGpuOffsetToAllocatedBlock);
 
-    auto& stagingBufferGpu = stagingBuffersGpu[stagingBuffersGpuIndex];
+    stagingBuffersGpu.sizeIncrement();
+    auto& stagingBufferGpu = stagingBuffersGpu.back();
     CreateBuffer(
         &stagingBufferGpu,
         &stagingBufferGpuOffsetToAllocatedBlock,
@@ -1723,7 +1722,6 @@ void CopyBufferToGpuPrepare(
         commandBuffer,
         device,
         physicalDevice);
-    ++stagingBuffersGpuIndex;
 }
 
 void CreateAndCopyToGpuBuffer(

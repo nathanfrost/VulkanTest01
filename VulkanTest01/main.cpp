@@ -195,8 +195,12 @@ private:
 
     void Shutdown()
     {
-        m_streamingUnit.Free(m_device);///<@todo NTF: generalize #StreamingMemory
+        ///BEG_<@todo NTF: generalize #StreamingMemory
+        m_streamingUnit.StateMutexed(StreamingUnitRuntime::kUnloading);//we are shutting down, and will not be issuing any more draw calls
+        m_streamingUnit.Free(m_device);
         m_streamingUnit.Destroy();
+        ///END_<@todo NTF: generalize #StreamingMemory
+
         m_assetLoadingThreadData.m_threadCommand = AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate;
         SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
         WaitForSignalWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);
