@@ -38,12 +38,13 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
     assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.transferFamily == queueFamilyIndices.graphicsFamily));
 
+    const VkDeviceSize stagingBufferCpuToGpuSizeAligned = AlignToNonCoherentAtomSize(NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
     CreateBuffer(
         &stagingBufferGpu,
         &stagingBufferGpuMemory,
         &deviceLocalMemory,
-        &offsetToFirstByteOfStagingBuffer,///<@todo: need to make sure this takes into account nonCoherentAtomSize when doing offset for if VK_MEMORY_PROPERTY_HOST_COHERENT_BIT is absent
-        NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE,///<@todo: need to make sure this takes into account nonCoherentAtomSize when doing offset for if VK_MEMORY_PROPERTY_HOST_COHERENT_BIT is absent
+        &offsetToFirstByteOfStagingBuffer,
+        stagingBufferCpuToGpuSizeAligned,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
         true,
@@ -59,7 +60,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         device,
         stagingBufferGpuMemory,
         offsetToFirstByteOfStagingBuffer,
-        NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE,///<@todo: respect VkPhysicalDeviceLimits::nonCoherentAtomSize
+        stagingBufferCpuToGpuSizeAligned,
         0,
         &stagingBufferMemoryMapCpuToGpuPtr);
     NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
@@ -165,7 +166,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 stagingBufferGpuMemory,
                 offsetToFirstByteOfStagingBuffer,
                 imageSizeBytes,
-                0,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 device,
                 physicalDevice);
 

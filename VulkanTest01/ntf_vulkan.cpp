@@ -524,7 +524,7 @@ void CreateBuffer(VkBuffer*const vkBufferPtr, const VkDeviceSize& vkBufferSizeBy
     VkBufferCreateInfo bufferInfo = {};
     bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     bufferInfo.size = vkBufferSizeBytes;
-    bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT | usage;///<@todo: remove VK_BUFFER_USAGE_TRANSFER_SRC_BIT here; that should be the responsibility of above functions
+    bufferInfo.usage = usage;
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     const VkResult createBufferResult = vkCreateBuffer(device, &bufferInfo, GetVulkanAllocationCallbacks(), &vkBuffer);
@@ -1702,7 +1702,7 @@ void CopyBufferToGpuPrepare(
         stagingBufferGpuMemory,
         offsetToFirstByteOfStagingBuffer,
         bufferSize,
-        0,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         device,
         physicalDevice);
 
