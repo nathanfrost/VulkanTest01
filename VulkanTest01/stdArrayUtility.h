@@ -889,6 +889,12 @@ public:
         memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
     }
 
+    ///@todo: unit test
+    void MemsetEntireArray(const int val)
+    {
+        memset(GetAddressOfUnderlyingArray(), val, SizeInBytes());
+    }
+
     size_type size() const noexcept
     {
         return kElementsNum;

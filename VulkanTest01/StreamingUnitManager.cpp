@@ -10,14 +10,15 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     NTF_REF(threadArguments.m_commandBufferTransfer, commandBufferTransfer);
     NTF_REF(threadArguments.m_commandBufferTransitionImage, commandBufferTransitionImage);
     NTF_REF(threadArguments.m_device, device);
-    NTF_REF(threadArguments.m_deviceLocalMemory, deviceLocalMemory);
+    NTF_REF(threadArguments.m_deviceLocalMemoryPersistent, deviceLocalMemoryPersistent);
     NTF_REF(threadArguments.m_graphicsQueue, graphicsQueue);
+    NTF_REF(threadArguments.m_graphicsQueueMutex, graphicsQueueMutex);
     NTF_REF(threadArguments.m_physicalDevice, physicalDevice);
     NTF_REF(threadArguments.m_queueFamilyIndices, queueFamilyIndices);
-    NTF_REF(threadArguments.m_streamingUnit, streamingUnit);
     auto& threadCommand = *threadArguments.m_threadCommand;
     NTF_REF(threadArguments.m_threadDone, threadDone);
     NTF_REF(threadArguments.m_threadWake, threadWake);
+    NTF_REF(threadArguments.m_threadStreamingUnitsDoneLoading, threadStreamingUnitsDoneLoading);
     NTF_REF(threadArguments.m_transferQueue, transferQueue);
 
     NTF_REF(threadArguments.m_renderPass, renderPass);
@@ -37,17 +38,17 @@ DWORD WINAPI AssetLoadingThread(void* arg)
 
     const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
     assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.transferFamily == queueFamilyIndices.graphicsFamily));
+    const HANDLE*const transferQueueMutex = unifiedGraphicsAndTransferQueue ? &graphicsQueueMutex : nullptr;//if we have only one queue rather than a separate graphics and transfer queue, then we must be mutex that queue
 
     const VkDeviceSize stagingBufferCpuToGpuSizeAligned = AlignToNonCoherentAtomSize(NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
     CreateBuffer(
         &stagingBufferGpu,
         &stagingBufferGpuMemory,
-        &deviceLocalMemory,
+        &deviceLocalMemoryPersistent,
         &offsetToFirstByteOfStagingBuffer,
         stagingBufferCpuToGpuSizeAligned,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-        true,
         true,///<this buffer will be memory mapped, so respect alignment
         device,
         physicalDevice);
@@ -56,14 +57,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     const VkDeviceSize stagingBufferGpuAlignmentStandard = memRequirements.alignment;
 
     void* stagingBufferMemoryMapCpuToGpuPtr;
-    const VkResult vkMapMemoryResult = vkMapMemory(
-        device,
-        stagingBufferGpuMemory,
-        offsetToFirstByteOfStagingBuffer,
-        stagingBufferCpuToGpuSizeAligned,
-        0,
-        &stagingBufferMemoryMapCpuToGpuPtr);
-    NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
+    MapMemory(&stagingBufferMemoryMapCpuToGpuPtr, stagingBufferGpuMemory, offsetToFirstByteOfStagingBuffer, stagingBufferCpuToGpuSizeAligned, device);
     stagingBufferMemoryMapCpuToGpu.Initialize(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpuPtr), NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
 
     VectorSafe<VkBuffer, 32> stagingBuffersGpu;
@@ -93,6 +87,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             //printf("ASSET THREAD: AssetLoadingThread loading streaming unit; time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
         }
 
+        NTF_REF(threadArguments.m_streamingUnit, streamingUnit);
         const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
         FenceCreate(&streamingUnit.m_transferQueueFinishedFence, fenceCreateFlagBits, device);
         FenceCreate(&streamingUnit.m_graphicsQueueFinishedFence, fenceCreateFlagBits, device);
@@ -112,10 +107,10 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             device);
 
         streamingUnit.m_uniformBufferSizeAligned = AlignToNonCoherentAtomSize(streamingUnit.m_uniformBufferSizeUnaligned);
-        BeginCommands(commandBufferTransfer, device);
+        BeginCommandBuffer(commandBufferTransfer, device);
         if (!unifiedGraphicsAndTransferQueue)
         {
-            BeginCommands(commandBufferTransitionImage, device);
+            BeginCommandBuffer(commandBufferTransitionImage, device);
         }
         CreateTextureSampler(&streamingUnit.m_textureSampler, device);
 
@@ -135,6 +130,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         Fread(streamingUnitFile, &texturedGeometryNum, sizeof(texturedGeometryNum), 1);
         //END_GENERALIZE_READER_WRITER
         stagingBufferGpuOffsetToAllocatedBlock = 0;
+        NTF_REF(streamingUnit.m_deviceLocalMemory, deviceLocalMemory);
         for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometryNum; ++texturedGeometryIndex)
         {
             //load texture
@@ -155,7 +151,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                false,
                 device,
                 physicalDevice);
 
@@ -215,7 +210,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 offsetToFirstByteOfStagingBuffer,
                 vertexBufferSizeBytes,
                 VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
-                false,
                 commandBufferTransfer,
                 device,
                 physicalDevice);
@@ -244,7 +238,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 offsetToFirstByteOfStagingBuffer,
                 indexBufferSizeBytes,
                 VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                false,
                 commandBufferTransfer,
                 device,
                 physicalDevice);
@@ -267,6 +260,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             ArraySafeRef<VkPipelineStageFlags>(),
             commandBufferTransfer,
             transferQueue,
+            transferQueueMutex,
             streamingUnit.m_transferQueueFinishedFence);
 
         if (!unifiedGraphicsAndTransferQueue)
@@ -278,6 +272,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 ArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),///<@todo: ArraySafeRefConst
                 commandBufferTransitionImage,
                 graphicsQueue,
+                &graphicsQueueMutex,
                 streamingUnit.m_graphicsQueueFinishedFence);
         }
 
@@ -289,7 +284,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             &deviceLocalMemory,
             &streamingUnit.m_uniformBufferOffsetToGpuMemory,
             uniformBufferSize,
-            false,
             device,
             physicalDevice);
 
@@ -327,6 +321,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 //printf("ASSET THREAD: vkDestroyBuffer(%llu) at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
             }
             stagingBuffersGpu.size(0);
+            SignalSemaphoreWindows(threadStreamingUnitsDoneLoading);
         }
     }
 

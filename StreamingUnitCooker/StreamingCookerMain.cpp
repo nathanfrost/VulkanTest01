@@ -241,8 +241,8 @@ int main()
     STBAllocatorCreate(&g_stbAllocator);
 
     StreamingUnitCooker streamingUnitCooker;
-    //,  /*"textures/HumanFighter_01_Diff.tga"*/ /*"textures/container_clean_diffuse01.jpeg"*//*"textures/appleD.jpg"*/,/*"textures/cat_diff.tga"*//*,"textures/chalet.jpg"*/
-    //const char*const m_modelPath[TODO_REFACTOR_NUM] = { /*"models/Orange.obj"*/, /*"models/Container_OBJ.obj",*/ /*"models/apple textured obj.obj"*//*"models/cat.obj"*//*,"models/chalet.obj"*/ };//#StreamingMemory
+    //,  /*"textures/HumanFighter_01_Diff.tga"*/ /*"textures/container_clean_diffuse01.jpeg"*//*"textures/appleD.jpg"*/,
+    //const char*const m_modelPath[TODO_REFACTOR_NUM] = { /*"models/Orange.obj"*/, /*"models/Container_OBJ.obj",*/ /*"models/apple textured obj.obj"*/ };//#StreamingMemory
     //const float m_uniformScale[TODO_REFACTOR_NUM] = { /*0.5f,*//*,.0025f*//*.01f,*/ /*1.f*/ };//#StreamingMemory
 
     streamingUnitCooker.FileNameOutputSet("unitTest0");
@@ -251,6 +251,17 @@ int main()
     streamingUnitCooker.TexturedGeometryAdd("textures/Banana.jpg", "models/Banana.obj", .005f);
 
     streamingUnitCooker.Cook();
+    streamingUnitCooker.Clear();
+
+
+    streamingUnitCooker.FileNameOutputSet("unitTest1");
+
+    streamingUnitCooker.TexturedGeometryAdd("textures/chalet.jpg", "models/chalet.obj", 1.f);
+    streamingUnitCooker.TexturedGeometryAdd("textures/cat_diff.tga", "models/cat.obj", 1.f);
+
+    streamingUnitCooker.Cook();
+    streamingUnitCooker.Clear();
+
 
     STBAllocatorDestroy(&g_stbAllocator);
     return 0;//success

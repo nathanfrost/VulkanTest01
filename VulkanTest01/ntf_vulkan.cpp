@@ -167,6 +167,11 @@ BOOL HandleCloseWindows(HANDLE*const h)
     return closeHandleResult;
 }
 
+void UnsignalSemaphoreWindows(const HANDLE semaphoreHandle)
+{
+    const BOOL resetEventResult = ResetEvent(semaphoreHandle);
+    assert(resetEventResult);
+}
 void SignalSemaphoreWindows(const HANDLE semaphoreHandle)
 {
     const BOOL setEventResult = SetEvent(semaphoreHandle);
@@ -273,6 +278,7 @@ VkResult SubmitCommandBuffer(
     ArraySafeRef<VkPipelineStageFlags> stagesWhereEachWaitSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
+    const HANDLE*const queueMutexPtr,
     const VkFence& fenceToSignalWhenCommandBufferDone)
 {
     VkSubmitInfo submitInfo = {};
@@ -287,8 +293,19 @@ VkResult SubmitCommandBuffer(
     submitInfo.pWaitSemaphores = waitSemaphores.GetAddressOfUnderlyingArray();
     submitInfo.pWaitDstStageMask = stagesWhereEachWaitSemaphoreWaits.GetAddressOfUnderlyingArray();
 
+    if (queueMutexPtr)
+    {
+        WaitForSignalWindows(*queueMutexPtr);
+    }
+    
     const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, fenceToSignalWhenCommandBufferDone);
     NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
+
+    if (queueMutexPtr)
+    {
+        ReleaseMutex(*queueMutexPtr);
+    }
+
     return queueSubmitResult;
 }
 
@@ -382,7 +399,6 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
-    const bool residentForever,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -425,7 +441,6 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
         memRequirements.alignment,
         memRequirements.size,
         properties,
-        residentForever, 
         tiling == VK_IMAGE_TILING_LINEAR,
         false,
         device,
@@ -563,7 +578,6 @@ void CreateBuffer(
     VkDeviceSize size,
     const VkBufferUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
-    const bool residentForever,
     const bool respectNonCoherentAtomSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
@@ -596,7 +610,6 @@ void CreateBuffer(
         memRequirements.alignment,
         size,
         properties,
-        residentForever,
         true,
         respectNonCoherentAtomSize,
         device,
@@ -758,13 +771,15 @@ void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT
     }
 }
 
-void BeginCommands(const VkCommandBuffer& commandBuffer, const VkDevice& device)
+void BeginCommandBuffer(const VkCommandBuffer& commandBuffer, const VkDevice& device)
 {
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;  /* options: * VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded right after executing it once
+                                                                    * VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: This is a secondary command buffer that will be entirely within a single render pass.
+                                                                    * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also already pending execution. */
+    const VkResult beginCommandBufferResult = vkBeginCommandBuffer(commandBuffer, &beginInfo);//implicitly resets the command buffer (you can't append commands to an existing buffer)
+    NTF_VK_ASSERT_SUCCESS(beginCommandBufferResult);
 }
 
 bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstVectorSafeRef<const char*> deviceExtensions)
@@ -1377,49 +1392,18 @@ void EndCommandBuffer(const VkCommandBuffer& commandBuffer)
 }
 
 void FillCommandBufferPrimary(
+    StreamingUnitRuntime::FrameNumber*const streamingUnitLastFrameSubmittedPtr,
+    const StreamingUnitRuntime::FrameNumber currentFrameNumber,
     const VkCommandBuffer& commandBufferPrimary,
     const ArraySafeRef<TexturedGeometry> texturedGeometries,
     const VkDescriptorSet descriptorSet,
     const size_t objectNum,
     const size_t drawCallsPerObjectNum,
-    const VkFramebuffer& swapChainFramebuffer,
-    const VkRenderPass& renderPass,
-    const VkExtent2D& swapChainExtent,
     const VkPipelineLayout& pipelineLayout,
-    const VkPipeline& graphicsPipeline,
-    const VkDevice& device)
+    const VkPipeline& graphicsPipeline)
 {
-    //printf("texturedGeometries[0].indexBuffer=%llu, texturedGeometries[0].indexBufferMemory=%llu, descriptorSet=%llu, pipelineLayout=%llu, graphicsPipeline=%llu\n", 
-    //    (size_t)texturedGeometries[0].indexBuffer, (size_t)texturedGeometries[0].indexBufferMemory, (size_t)descriptorSet, (size_t)pipelineLayout, (size_t)graphicsPipeline);
-
+    NTF_REF(streamingUnitLastFrameSubmittedPtr, streamingUnitLastFrameSubmitted);
     assert(objectNum > 0);
-
-    VkCommandBufferBeginInfo beginInfo = {};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;  /* options: * VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT: The command buffer will be rerecorded right after executing it once
-                                                                                * VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT: This is a secondary command buffer that will be entirely within a single render pass.
-                                                                                * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT : The command buffer can be resubmitted while it is also already pending execution. */
-    beginInfo.pInheritanceInfo = nullptr; //specifies what state a secondary buffer should inherit from the primary buffer
-    vkBeginCommandBuffer(commandBufferPrimary, &beginInfo);  //implicitly resets the command buffer (you can't append commands to an existing buffer)
-
-    VkRenderPassBeginInfo renderPassInfo = {};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    renderPassInfo.renderPass = renderPass;
-    renderPassInfo.framebuffer = swapChainFramebuffer;
-
-    //any pixels outside of the area defined here have undefined values; we don't want that
-    renderPassInfo.renderArea.offset = { 0, 0 };
-    renderPassInfo.renderArea.extent = swapChainExtent;
-
-    const size_t kClearValueNum = 2;
-    VectorSafe<VkClearValue, kClearValueNum> clearValues(kClearValueNum);
-    clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
-    clearValues[1].depthStencil = { 1.0f, 0 };
-
-    renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-    renderPassInfo.pClearValues = clearValues.data();
-
-    vkCmdBeginRenderPass(commandBufferPrimary, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
     vkCmdBindPipeline(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
     //bind a single descriptorset per streaming unit.  Could also bind this descriptor set once at startup time for each primary command buffer, and then leave it bound indefinitely (this behavior was discovered on a UHD graphics 620; haven't tested on other hardware)
@@ -1450,9 +1434,7 @@ void FillCommandBufferPrimary(
         }
     }
     
-    vkCmdEndRenderPass(commandBufferPrimary);
-
-    EndCommandBuffer(commandBufferPrimary);
+    streamingUnitLastFrameSubmitted = currentFrameNumber;//recorded so we know when it's safe to unload streaming unit's assets; draw submission assumed to happen shortly
 }
 VkDeviceSize AlignToNonCoherentAtomSize(VkDeviceSize i)
 {
@@ -1465,6 +1447,18 @@ VkDeviceSize AlignToNonCoherentAtomSize(VkDeviceSize i)
     return i;
 }
 
+void MapMemory(
+    void** uniformBufferCpuMemoryCPtrPtr, 
+    const VkDeviceMemory& uniformBufferGpuMemory, 
+    const VkDeviceSize& offsetToGpuMemory, 
+    const VkDeviceSize bufferSize, 
+    const VkDevice& device)
+{
+    assert(uniformBufferCpuMemoryCPtrPtr);
+    const VkResult vkMapMemoryResult = vkMapMemory(device, uniformBufferGpuMemory, offsetToGpuMemory, bufferSize, 0, uniformBufferCpuMemoryCPtrPtr);
+    NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
+}
+
 void CreateUniformBuffer(
     ArraySafeRef<uint8_t>*const uniformBufferCpuMemoryPtr,
     VkDeviceMemory*const uniformBufferGpuMemoryPtr,
@@ -1472,7 +1466,6 @@ void CreateUniformBuffer(
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const offsetToGpuMemoryPtr,
     const VkDeviceSize bufferSize,
-    const bool residentForever,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -1490,6 +1483,7 @@ void CreateUniformBuffer(
 
     assert(bufferSize > 0);
 
+    //TODO_NEXT: make sure each streaming unit lives on its own separate set of pages, which are recycled not freed/reallocated -- pretty sure we can just keep assign a VulkanPagedStackAllocator to each streaming unit from a pool
     CreateBuffer(
         &uniformBuffer,
         &uniformBufferGpuMemory,
@@ -1498,13 +1492,12 @@ void CreateUniformBuffer(
         bufferSize,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-        residentForever,
         true,///<uniform buffers are always memory mapped, so make sure memory mapping is aligned correctly
         device,
         physicalDevice);
 
     void* uniformBufferCpuMemoryCPtr;
-    vkMapMemory(device, uniformBufferGpuMemory, offsetToGpuMemory, bufferSize, 0, &uniformBufferCpuMemoryCPtr);
+    MapMemory(&uniformBufferCpuMemoryCPtr, uniformBufferGpuMemory, offsetToGpuMemory, bufferSize, device);
     uniformBufferCpuMemory.SetArray(reinterpret_cast<uint8_t*>(uniformBufferCpuMemoryCPtr), Cast_VkDeviceSize_size_t(bufferSize));
 }
 
@@ -1683,7 +1676,6 @@ void CopyBufferToGpuPrepare(
     const VkDeviceSize offsetToFirstByteOfStagingBuffer,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags& memoryPropertyFlags,
-    const bool residentForever,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
@@ -1718,7 +1710,6 @@ void CopyBufferToGpuPrepare(
         stagingBufferGpu,
         bufferSize,
         memoryPropertyFlags,
-        false,
         commandBuffer,
         device,
         physicalDevice);
@@ -1731,7 +1722,6 @@ void CreateAndCopyToGpuBuffer(
     const VkBuffer& stagingBufferGpu,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags& flags,
-    const bool residentForever,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
@@ -1756,7 +1746,6 @@ void CreateAndCopyToGpuBuffer(
         bufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | flags,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//most optimal graphics memory
-        residentForever,
         false,
         device,
         physicalDevice);
@@ -1773,7 +1762,8 @@ void EndSingleTimeCommandsStall(const VkCommandBuffer& commandBuffer, const VkQu
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+    const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);///<@todo: reduce duplication with SubmitCommandBuffer()
+    NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
     vkQueueWaitIdle(queue);//could use a fence, which would allow you to schedule multiple transfers simultaneously and wait for all of them complete, instead of executing one at a time
 }
 
@@ -1822,13 +1812,12 @@ void CreateDepthResources(
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        true,
         device,
         physicalDevice);
 
     CreateImageView(&depthImageView, device, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-    BeginCommands(commandBuffer, device);///<@todo: take this out and place before the function
+    BeginCommandBuffer(commandBuffer, device);///<@todo: take this out and place before the function
     ImageMemoryBarrier(
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,//  | HasStencilComponent(format)) ? VK_IMAGE_ASPECT_STENCIL_BIT : 0
@@ -1886,7 +1875,6 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
-    const bool residentForever,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -1919,7 +1907,6 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
         tiling,
         usage,
         properties,
-        residentForever,
         device,
         physicalDevice);
 
@@ -2133,84 +2120,6 @@ void AcquireNextImage(
         assert(false);//failed to acquire swap chain image
     }
     ///@todo: handle handle VK_ERROR_SURFACE_LOST_KHR return value
-}
-
-WIN_TIMER_DEF(s_frameTimer);
-void DrawFrame(
-    //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
-    DrawFrameFinishedFence*const drawFrameFinishedFencePtr,
-    StreamingUnitRuntime::FrameNumber*const streamingUnitLastFrameSubmittedPtr,
-    const StreamingUnitRuntime::FrameNumber currentFrameNumber,
-    const VkSwapchainKHR& swapChain,
-    ConstVectorSafeRef<VkCommandBuffer> commandBuffers,
-    const uint32_t acquiredImageIndex,
-    const VkQueue& graphicsQueue,
-    const VkQueue& presentQueue,
-    const VkSemaphore& imageAvailableSemaphore,
-    const VkSemaphore& renderFinishedSemaphore,
-    const VkDevice& device)
-{
-#if NTF_WIN_TIMER
-    WIN_TIMER_STOP(s_frameTimer);
-    ArraySafe<char, 256> string;
-    string.Snprintf("s_frameTimer:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(s_frameTimer));
-    string.Fwrite(s_winTimer, strlen(string.begin()));
-    WIN_TIMER_START(s_frameTimer);
-#endif//#if NTF_WIN_TIMER
-
-    NTF_REF(drawFrameFinishedFencePtr, drawFrameFinishedFence);
-    NTF_REF(streamingUnitLastFrameSubmittedPtr, streamingUnitLastFrameSubmitted);
-
-    ///#TODO_CALLBACK
-    //assert(hackToRecreateSwapChainIfNecessaryPtr);
-    //auto& hackToRecreateSwapChainIfNecessary = *hackToRecreateSwapChainIfNecessaryPtr;
-
-    WIN_TIMER_DEF_START(waitForFences);
-    FenceWaitUntilSignalled(drawFrameFinishedFence.m_fence, device);
-    WIN_TIMER_STOP(waitForFences);
-    //const int maxLen = 256;
-    //char buf[maxLen];
-    //snprintf(&buf[0], maxLen, "waitForFences:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(waitForFences));
-    //fwrite(&buf[0], sizeof(buf[0]), strlen(&buf[0]), s_winTimer);
-    FenceReset(drawFrameFinishedFence.m_fence, device);//queue has completed on the GPU and is ready to be prepared on the CPU
-
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;//only value allowed
-
-    //theoretically the implementation can already start executing our vertex shader and such while the image is not
-    //available yet. Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores
-    VectorSafe<VkSemaphore, 4> signalSemaphores({ renderFinishedSemaphore });
-    VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    SubmitCommandBuffer(
-        signalSemaphores,
-        ConstVectorSafeRef<VkSemaphore>(&imageAvailableSemaphore, 1),
-        ArraySafeRef<VkPipelineStageFlags>(&waitStages, 1),///<@todo: ArraySafeRefConst
-        commandBuffers[acquiredImageIndex],
-        graphicsQueue,
-        drawFrameFinishedFence.m_fence);
-
-    drawFrameFinishedFence.m_frameNumberCpuSubmitted = streamingUnitLastFrameSubmitted = currentFrameNumber;//so we know when it's safe to unload streaming unit's assets
-    drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted = false;//this frame has not been completed by the Gpu until this fence signals
-
-    VkPresentInfoKHR presentInfo = {};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-    presentInfo.waitSemaphoreCount = 1;
-    presentInfo.pWaitSemaphores = signalSemaphores.data();
-
-    VkSwapchainKHR swapChains[] = { swapChain };
-    presentInfo.swapchainCount = 1;
-    presentInfo.pSwapchains = swapChains;
-    presentInfo.pResults = nullptr; // allows you to specify an array of VkResult values to check for every individual swap chain if presentation was successful
-    presentInfo.pImageIndices = &acquiredImageIndex;
-
-    const VkResult result = vkQueuePresentKHR(presentQueue, &presentInfo);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR/*swap chain can no longer be used for rendering*/ ||
-        result == VK_SUBOPTIMAL_KHR/*swap chain can still present image, but surface properties don't entirely match; for example, during resizing*/)
-    {
-        ///#TODO_CALLBACK
-        //hackToRecreateSwapChainIfNecessary.SwapChainRecreate();//haven't seen this get hit yet, even when minimizing and resizing the window
-    }
-    NTF_VK_ASSERT_SUCCESS(result);
 }
 
 void GetRequiredExtensions(VectorSafeRef<const char*> requiredExtensions)
@@ -2647,12 +2556,12 @@ void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
     HandleCloseWindows(&m_mutex);
 }
 
-void VulkanPagedStackAllocator::FreeAllPagesThatAreNotResidentForever(const VkDevice& device)
+void VulkanPagedStackAllocator::FreeAllPages(const VkDevice& device)
 {
     WaitForSignalWindows(m_mutex);
     for (auto& vulkanMemoryHeap : m_vulkanMemoryHeaps)
     {
-        vulkanMemoryHeap.FreeAllPagesThatAreNotResidentForever(device);
+        vulkanMemoryHeap.FreeAllPages(device);
     }
     MutexRelease(m_mutex);
 }
@@ -2665,7 +2574,6 @@ bool VulkanPagedStackAllocator::PushAlloc(
     const VkDeviceSize alignment,
     const VkDeviceSize size,
     const VkMemoryPropertyFlags& properties,
-    const bool residentForever,
     const bool linearResource,
     const bool respectNonCoherentAtomSize,
     const VkDevice& device,
@@ -2691,7 +2599,6 @@ bool VulkanPagedStackAllocator::PushAlloc(
         alignment,
         size,
         properties, 
-        residentForever, 
         linearResource, 
         respectNonCoherentAtomSize,
         device, 
@@ -2746,7 +2653,7 @@ static void VulkanMemoryHeapPageFreeAll(
     }
     *pageAllocatedFirstPtrPtr = nullptr;
 }
-void VulkanMemoryHeap::FreeAllPagesThatAreNotResidentForever(const VkDevice device)
+void VulkanMemoryHeap::FreeAllPages(const VkDevice device)
 {
     VulkanMemoryHeapPageFreeAll(&m_pageAllocatedLinearFirst, &m_pageFreeFirst, device);
     VulkanMemoryHeapPageFreeAll(&m_pageAllocatedNonlinearFirst, &m_pageFreeFirst, device);
@@ -2758,16 +2665,7 @@ void VulkanMemoryHeap::Destroy(const VkDevice device)
     m_initialized = false;
 #endif//#if NTF_DEBUG    
 
-    if (m_pageResidentForeverNonlinear.Allocated())
-    {
-        m_pageResidentForeverNonlinear.Free(device);
-    }
-    if (m_pageResidentForeverLinear.Allocated())
-    {
-        m_pageResidentForeverLinear.Free(device);
-    }
-
-    FreeAllPagesThatAreNotResidentForever(device);
+    FreeAllPages(device);
 }
 
 bool VulkanMemoryHeap::PushAlloc(
@@ -2776,7 +2674,6 @@ bool VulkanMemoryHeap::PushAlloc(
     const VkDeviceSize alignment,
     const VkDeviceSize size,
     const VkMemoryPropertyFlags& properties,
-    const bool residentForever,
     const bool linearResource,///<true for buffers and VK_IMAGE_TILING_LINEAR images; false for VK_IMAGE_TILING_OPTIMAL images
     const bool respectNonCoherentAtomSize,
     const VkDevice& device,
@@ -2791,39 +2688,28 @@ bool VulkanMemoryHeap::PushAlloc(
     auto& memoryHandle = *memoryHandlePtr;
 
     VulkanMemoryHeapPage* pageAllocatedCurrent;
-    if (residentForever)
+    VulkanMemoryHeapPage*& pageAllocatedFirst = linearResource ? m_pageAllocatedLinearFirst : m_pageAllocatedNonlinearFirst;
+    pageAllocatedCurrent = pageAllocatedFirst;
+    VulkanMemoryHeapPage* pageAllocatedPrevious = nullptr;
+    while (pageAllocatedCurrent)
     {
-        pageAllocatedCurrent = linearResource ? &m_pageResidentForeverLinear : &m_pageResidentForeverNonlinear;
-        if (!pageAllocatedCurrent->Allocated())
+        if (pageAllocatedCurrent->SufficientMemory(alignment, size, respectNonCoherentAtomSize))
         {
-            pageAllocatedCurrent->Allocate(256*1024*1024, m_memoryTypeIndex, device);
+            break;
+        }
+        else
+        {
+            pageAllocatedPrevious = pageAllocatedCurrent;
+            pageAllocatedCurrent = pageAllocatedCurrent->m_next;
         }
     }
-    else
+    if (!pageAllocatedCurrent)
     {
-        VulkanMemoryHeapPage*& pageAllocatedFirst = linearResource ? m_pageAllocatedLinearFirst : m_pageAllocatedNonlinearFirst;
-        pageAllocatedCurrent = pageAllocatedFirst;
-        VulkanMemoryHeapPage* pageAllocatedPrevious = nullptr;
-        while (pageAllocatedCurrent)
-        {
-            if (pageAllocatedCurrent->SufficientMemory(alignment, size, respectNonCoherentAtomSize))
-            {
-                break;
-            }
-            else
-            {
-                pageAllocatedPrevious = pageAllocatedCurrent;
-                pageAllocatedCurrent = pageAllocatedCurrent->m_next;
-            }
-        }
-        if (!pageAllocatedCurrent)
-        {
-            VulkanMemoryHeapPage& pageNew = *m_pageFreeFirst;
-            m_pageFreeFirst = m_pageFreeFirst->m_next;
+        VulkanMemoryHeapPage& pageNew = *m_pageFreeFirst;
+        m_pageFreeFirst = m_pageFreeFirst->m_next;
 
-            pageNew.Allocate(m_pageSizeBytes, m_memoryTypeIndex, device);
-            (pageAllocatedPrevious ? pageAllocatedPrevious->m_next : pageAllocatedFirst) = pageAllocatedCurrent = &pageNew;
-        }
+        pageNew.Allocate(m_pageSizeBytes, m_memoryTypeIndex, device);
+        (pageAllocatedPrevious ? pageAllocatedPrevious->m_next : pageAllocatedFirst) = pageAllocatedCurrent = &pageNew;
     }
     assert(pageAllocatedCurrent);
     assert(pageAllocatedCurrent->SufficientMemory(alignment, size, respectNonCoherentAtomSize));
@@ -2850,10 +2736,14 @@ bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMaxBytes, const uin
     do
     {
         allocateMemoryResult = vkAllocateMemory(device, &allocInfo, GetVulkanAllocationCallbacks(), &m_memoryHandle);
+        printf("vkAllocateMemory(memoryTypeIndex=%u, memoryMaxBytes=%u)=%i; m_memoryHandle=%p\n", 
+            memoryTypeIndex, Cast_VkDeviceSize_uint32_t(memoryMaxBytes), allocateMemoryResult, (void*)m_memoryHandle);
+
         //LARGE_INTEGER perfCount;
         //QueryPerformanceCounter(&perfCount);
-        //printf("vkAllocateMemory(memoryTypeIndex=%u, memoryMaxBytes=%u)=%i; m_memoryHandle=%p at time %f\n", memoryTypeIndex, 
-        //    Cast_VkDeviceSize_uint32_t(memoryMaxBytes), allocateMemoryResult, (void*)m_memoryHandle, static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+        //printf("vkAllocateMemory(memoryTypeIndex=%u, memoryMaxBytes=%u)=%i; m_memoryHandle=%p at time %f\n", 
+        //    memoryTypeIndex, Cast_VkDeviceSize_uint32_t(memoryMaxBytes), allocateMemoryResult, (void*)m_memoryHandle, static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+
     } while(allocateMemoryResult != VK_SUCCESS);
     NTF_VK_ASSERT_SUCCESS(allocateMemoryResult);
     return NTF_VK_SUCCESS(allocateMemoryResult);

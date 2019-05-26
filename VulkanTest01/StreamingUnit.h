@@ -6,6 +6,8 @@
 #include"stdArrayUtility.h"
 #include"StreamingCookAndRuntime.h"
 
+class VulkanPagedStackAllocator;
+
 typedef uint32_t StreamingUnitVersion;
 typedef uint8_t StreamingUnitByte;
 typedef uint32_t StreamingUnitTexturedGeometryNum;
@@ -36,7 +38,10 @@ class StreamingUnitRuntime
 public:
     StreamingUnitRuntime();
     void Initialize();
-    void Free(const VkDevice& device);
+    void Free(
+        ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated, 
+        ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+        const VkDevice& device);
     void Destroy();
 
     enum State {    kFirstValidValue, kNotLoaded = kFirstValidValue,
@@ -73,6 +78,8 @@ public:
     VkPipelineLayout m_pipelineLayout;
     VkPipeline m_graphicsPipeline;
 
+    VulkanPagedStackAllocator* m_deviceLocalMemory;
+
     //BEG_#FrameNumber: if you change one of these constructs, make sure the rest are synchronized
     typedef uint16_t FrameNumber;
     typedef int32_t FrameNumberSigned;
@@ -105,7 +112,13 @@ private:
     VkFence m_transferQueueFinishedFence, m_graphicsQueueFinishedFence;
 };
 
-void StreamingUnitLoadStart(StreamingUnitRuntime*const streamingUnitPtr, const HANDLE assetLoadingThreadWakeHandle);
+void StreamingUnitLoadStart(
+    StreamingUnitRuntime*const streamingUnitPtr,
+    StreamingUnitRuntime**const assetLoadingThreadStreamingUnitPtrPtr,
+    VectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+    ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
+    const HANDLE assetLoadingThreadWakeHandle,
+    const HANDLE assetLoadingThreadStreamingUnitsDoneLoading);
 
 class SerializerCookerOut
 {

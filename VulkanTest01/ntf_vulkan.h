@@ -84,6 +84,7 @@ HANDLE MutexCreate();
 void MutexRelease(const HANDLE mutex);
 HANDLE ThreadSignalingEventCreate();
 BOOL HandleCloseWindows(HANDLE*const h);
+void UnsignalSemaphoreWindows(const HANDLE semaphoreHandle);
 void SignalSemaphoreWindows(const HANDLE semaphoreHandle);
 void WaitForSignalWindows(const HANDLE semaphoreOrMutexHandle);
 void TransferImageFromCpuToGpu(
@@ -110,7 +111,6 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
-    const bool residentForever,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 void CreateBuffer(
@@ -136,6 +136,7 @@ VkResult SubmitCommandBuffer(
     ArraySafeRef<VkPipelineStageFlags> stagesWhereEachWaitSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
+    const HANDLE*const queueMutexPtr,
     const VkFence& fenceToSignalWhenCommandBufferDone);
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
 uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
@@ -147,7 +148,6 @@ void CreateBuffer(
     VkDeviceSize size,
     const VkBufferUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
-    const bool residentForever,
     const bool respectNonCoherentAtomSize,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
@@ -171,13 +171,14 @@ VkResult CreateDebugReportCallbackEXT(
     const VkAllocationCallbacks* pAllocator,
     VkDebugReportCallbackEXT* pCallback);
 void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator);
-void BeginCommands(const VkCommandBuffer& commandBuffer, const VkDevice& device);
+void BeginCommandBuffer(const VkCommandBuffer& commandBuffer, const VkDevice& device);
 
 struct UniformBufferObject
 {
     glm::mat4 modelToClip;
 };
 
+///standard handles all threads need
 struct ThreadHandles
 {
     HANDLE threadHandle;
@@ -329,19 +330,23 @@ void AcquireNextImage(
     const VkDevice& device);
 
 void FillCommandBufferPrimary(
+    StreamingUnitRuntime::FrameNumber*const streamingUnitLastFrameSubmittedPtr,
+    const StreamingUnitRuntime::FrameNumber currentFrameNumber,
     const VkCommandBuffer& commandBufferPrimary,
     const ArraySafeRef<TexturedGeometry> texturedGeometries,
     const VkDescriptorSet descriptorSet,
     const size_t objectNum,
     const size_t drawCallsPerObjectNum,
-    const VkFramebuffer& swapChainFramebuffer,
-    const VkRenderPass& renderPass,
-    const VkExtent2D& swapChainExtent,
     const VkPipelineLayout& pipelineLayout,
-    const VkPipeline& graphicsPipeline,
-    const VkDevice& device);
+    const VkPipeline& graphicsPipeline);
 
 VkDeviceSize AlignToNonCoherentAtomSize(VkDeviceSize i);
+void MapMemory(
+    void** uniformBufferCpuMemoryCPtrPtr,
+    const VkDeviceMemory& uniformBufferGpuMemory,
+    const VkDeviceSize& offsetToGpuMemory,
+    const VkDeviceSize bufferSize,
+    const VkDevice& device);
 void CreateUniformBuffer(
     ArraySafeRef<uint8_t>*const uniformBufferCpuMemoryPtr,
     VkDeviceMemory*const uniformBufferGpuMemoryPtr,
@@ -349,7 +354,6 @@ void CreateUniformBuffer(
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const offsetToGpuMemoryPtr,
     const VkDeviceSize bufferSize,
-    const bool residentForever,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 void DestroyUniformBuffer(
@@ -386,7 +390,6 @@ void CopyBufferToGpuPrepare(
     const VkDeviceSize offsetToFirstByteOfStagingBuffer,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags& memoryPropertyFlags,
-    const bool residentForever,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
@@ -397,7 +400,6 @@ void CreateAndCopyToGpuBuffer(
     const VkBuffer& stagingBufferGpu,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags& flags,
-    const bool residentForever,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
@@ -440,7 +442,6 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
-    const bool residentForever,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice);
 void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& device);
@@ -473,20 +474,6 @@ void UpdateUniformBuffer(
     const size_t drawCallsNum,
     const VkDeviceSize uniformBufferSize,
     const VkExtent2D& swapChainExtent,
-    const VkDevice& device);
-
-void DrawFrame(
-    //VulkanRendererNTF*const hackToRecreateSwapChainIfNecessaryPtr,///#TODO_CALLBACK: clean this up with a proper callback
-    DrawFrameFinishedFence*const drawFrameFinishedFencePtr,
-    StreamingUnitRuntime::FrameNumber*const streamingUnitLastFrameSubmittedPtr,
-    const StreamingUnitRuntime::FrameNumber currentFrameNumber,
-    const VkSwapchainKHR& swapChain,
-    ConstVectorSafeRef<VkCommandBuffer> commandBuffers,
-    const uint32_t acquiredImageIndex,
-    const VkQueue& graphicsQueue,
-    const VkQueue& presentQueue,
-    const VkSemaphore& imageAvailableSemaphore,
-    const VkSemaphore& renderFinishedSemaphore,
     const VkDevice& device);
 
 ///@todo: find better translation unit
@@ -552,7 +539,7 @@ public:
 
     void Destroy(const VkDevice device);
 
-    void FreeAllPagesThatAreNotResidentForever(const VkDevice device);
+    void FreeAllPages(const VkDevice device);
 
     bool PushAlloc(
         VkDeviceSize* memoryOffsetPtr,
@@ -560,7 +547,6 @@ public:
         const VkDeviceSize alignment,
         const VkDeviceSize size,
         const VkMemoryPropertyFlags& properties,
-        const bool residentForever,
         const bool linearResource,
         const bool respectNonCoherentAtomSize,
         const VkDevice& device,
@@ -581,8 +567,6 @@ private:
     VulkanMemoryHeapPage* m_pageAllocatedNonlinearFirst;
     VulkanMemoryHeapPage* m_pageFreeFirst;
     ArraySafe<VulkanMemoryHeapPage, 32> m_pagePool;
-
-    VulkanMemoryHeapPage m_pageResidentForeverNonlinear, m_pageResidentForeverLinear;
 };
 
 ///@todo: unit test
@@ -601,7 +585,7 @@ public:
     void Initialize(const VkDevice& device, const VkPhysicalDevice& physicalDevice);
     void Destroy(const VkDevice& device);
 
-    void FreeAllPagesThatAreNotResidentForever(const VkDevice& device);
+    void FreeAllPages(const VkDevice& device);
 
     bool PushAlloc(
         VkDeviceSize* memoryOffsetPtr,
@@ -610,7 +594,6 @@ public:
         const VkDeviceSize alignment,
         const VkDeviceSize size,
         const VkMemoryPropertyFlags& properties,
-        const bool residentForever,
         const bool linearResource,
         const bool respectNonCoherentAtomSize,
         const VkDevice& device,

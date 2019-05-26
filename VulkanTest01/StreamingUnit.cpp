@@ -1,12 +1,35 @@
 #include"StreamingUnit.h"
 #include"ntf_vulkan.h"
 
-void StreamingUnitLoadStart(StreamingUnitRuntime*const streamingUnitPtr, const HANDLE assetLoadingThreadWakeHandle)
+void StreamingUnitLoadStart(
+    StreamingUnitRuntime*const streamingUnitPtr, 
+    StreamingUnitRuntime**const assetLoadingThreadStreamingUnitPtrPtr,
+    VectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+    ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
+    const HANDLE assetLoadingThreadWakeHandle, 
+    const HANDLE assetLoadingThreadStreamingUnitsDoneLoading)
 {
+    NTF_REF(assetLoadingThreadStreamingUnitPtrPtr, assetLoadingThreadStreamingUnitPtr);
     NTF_REF(streamingUnitPtr, streamingUnit);
     assert(assetLoadingThreadWakeHandle);
 
+    assetLoadingThreadStreamingUnitPtr = &streamingUnit;
+    const size_t deviceLocalMemoryStreamingUnitsSize = deviceLocalMemoryStreamingUnits.size();
+    size_t deviceLocalMemoryStreamingUnitIndex = 0;
+    for (; deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize; ++deviceLocalMemoryStreamingUnitIndex)
+    {
+        auto& deviceLocalMemoryStreamingUnitAllocated = deviceLocalMemoryStreamingUnitsAllocated[deviceLocalMemoryStreamingUnitIndex];
+        if (!deviceLocalMemoryStreamingUnitAllocated)
+        {
+            deviceLocalMemoryStreamingUnitAllocated = true;
+            streamingUnit.m_deviceLocalMemory = &deviceLocalMemoryStreamingUnits[deviceLocalMemoryStreamingUnitIndex];
+            break;
+        }
+    }
+    assert(deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize);
     streamingUnit.StateMutexed(StreamingUnitRuntime::kLoading);
+
+    UnsignalSemaphoreWindows(assetLoadingThreadStreamingUnitsDoneLoading);///@todo: double-buffered streaming unit queue for 100% robustness: when you do that; get rid of this handle and instead check the double-buffered queue for being empty
     SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
 }
 
@@ -31,6 +54,8 @@ void StreamingUnitLoadStart(StreamingUnitRuntime*const streamingUnitPtr, const H
 StreamingUnitRuntime::StreamingUnitRuntime()
 {
 }
+/** Initialize()/Destroy() concern themselves solely with OS constructs like mutexes (which I don't want to risk fragmenting by creating and
+    destroying), but not Vulkan constructs that we memory-manage */
 void StreamingUnitRuntime::Initialize()
 {
     m_stateMutexed.Initialize();
@@ -107,8 +132,14 @@ void StreamingUnitRuntime::StateMutexed(const StreamingUnitRuntime::State state)
     m_stateMutexed.Set(state);
 }
 
-void StreamingUnitRuntime::Free(const VkDevice& device)
+///concerns itself solely with Vulkan constructs that we memory-manage, not OS constructs like mutexes
+void StreamingUnitRuntime::Free(
+    ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
+    ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+    const VkDevice& device)
 {
+    //printf("StreamingUnitRuntime::Free() enter\n");
+
     assert(m_stateMutexed.Get() == State::kUnloading);
     m_stateMutexed.Set(State::kNotLoaded);
 
@@ -134,8 +165,29 @@ void StreamingUnitRuntime::Free(const VkDevice& device)
 
     vkDestroyFence(device, m_transferQueueFinishedFence, GetVulkanAllocationCallbacks());
     vkDestroyFence(device, m_graphicsQueueFinishedFence, GetVulkanAllocationCallbacks());
+
+    //release allocator back to pool
+    assert(m_deviceLocalMemory);
+    size_t deviceLocalMemoryStreamingUnitsIndex = 0;
+    for (auto& deviceLocalMemoryStreamingUnit : deviceLocalMemoryStreamingUnits)
+    {
+        if (m_deviceLocalMemory == &deviceLocalMemoryStreamingUnit)
+        {
+            auto& deviceLocalMemoryStreamingUnitAllocated = deviceLocalMemoryStreamingUnitsAllocated[deviceLocalMemoryStreamingUnitsIndex];
+            assert(deviceLocalMemoryStreamingUnitAllocated);
+            deviceLocalMemoryStreamingUnitAllocated = false;
+            m_deviceLocalMemory->FreeAllPages(device);///TODO_NEXT: not correct; need to return pages to free pool, not vkFreeMemory() them
+            m_deviceLocalMemory = nullptr;
+        }
+        ++deviceLocalMemoryStreamingUnitsIndex;
+    }
+    assert(!m_deviceLocalMemory);
+
+    //printf("StreamingUnitRuntime::Free() exit\n");
 }
 
+/** Initialize()/Destroy() concern themselves solely with OS constructs like mutexes (which I don't want to risk fragmenting by creating and 
+    destroying), but not Vulkan constructs that we memory-manage */
 void StreamingUnitRuntime::Destroy()
 {
     m_stateMutexed.Destroy();
