@@ -136,6 +136,7 @@ void StreamingUnitRuntime::StateMutexed(const StreamingUnitRuntime::State state)
 void StreamingUnitRuntime::Free(
     ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
     ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+    const bool deallocateBackToGpu,
     const VkDevice& device)
 {
     //printf("StreamingUnitRuntime::Free() enter\n");
@@ -176,7 +177,7 @@ void StreamingUnitRuntime::Free(
             auto& deviceLocalMemoryStreamingUnitAllocated = deviceLocalMemoryStreamingUnitsAllocated[deviceLocalMemoryStreamingUnitsIndex];
             assert(deviceLocalMemoryStreamingUnitAllocated);
             deviceLocalMemoryStreamingUnitAllocated = false;
-            m_deviceLocalMemory->FreeAllPages(device);///TODO_NEXT: not correct; need to return pages to free pool, not vkFreeMemory() them
+            m_deviceLocalMemory->FreeAllPages(deallocateBackToGpu, device);
             m_deviceLocalMemory = nullptr;
         }
         ++deviceLocalMemoryStreamingUnitsIndex;

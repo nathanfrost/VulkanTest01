@@ -24,8 +24,8 @@ void StackNTF<SizeT>::Allocate(const SizeT memoryMaxBytes)
 #if NTF_DEBUG
     assert(memoryMaxBytes > 0);
     assert(!m_allocated);
-    m_allocated = true;
 #endif//#if NTF_DEBUG
+    m_allocated = true;
 
     m_maxOffsetPlusOne = memoryMaxBytes;
     m_firstByteFree = 0;

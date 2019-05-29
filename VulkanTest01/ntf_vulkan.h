@@ -496,6 +496,10 @@ public:
         m_stack.Free();
         vkFreeMemory(device, m_memoryHandle, GetVulkanAllocationCallbacks());
     }
+    inline void ClearSuballocations()
+    {
+        m_stack.ClearSuballocations();
+    }
 
     inline bool SufficientMemory(const VkDeviceSize alignment, const VkDeviceSize size, const bool respectNonCoherentAtomSize) const
     {
@@ -539,7 +543,7 @@ public:
 
     void Destroy(const VkDevice device);
 
-    void FreeAllPages(const VkDevice device);
+    void FreeAllPages(const bool deallocateBackToGpu, const VkDevice device);
 
     bool PushAlloc(
         VkDeviceSize* memoryOffsetPtr,
@@ -585,7 +589,7 @@ public:
     void Initialize(const VkDevice& device, const VkPhysicalDevice& physicalDevice);
     void Destroy(const VkDevice& device);
 
-    void FreeAllPages(const VkDevice& device);
+    void FreeAllPages(const bool deallocateBackToGpu, const VkDevice& device);
 
     bool PushAlloc(
         VkDeviceSize* memoryOffsetPtr,

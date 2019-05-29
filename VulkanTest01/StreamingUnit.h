@@ -41,6 +41,7 @@ public:
     void Free(
         ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated, 
         ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+        const bool deallocateBackToGpu,
         const VkDevice& device);
     void Destroy();
 

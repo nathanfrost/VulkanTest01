@@ -2556,12 +2556,12 @@ void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
     HandleCloseWindows(&m_mutex);
 }
 
-void VulkanPagedStackAllocator::FreeAllPages(const VkDevice& device)
+void VulkanPagedStackAllocator::FreeAllPages(const bool deallocateBackToGpu, const VkDevice& device)
 {
     WaitForSignalWindows(m_mutex);
     for (auto& vulkanMemoryHeap : m_vulkanMemoryHeaps)
     {
-        vulkanMemoryHeap.FreeAllPages(device);
+        vulkanMemoryHeap.FreeAllPages(deallocateBackToGpu, device);
     }
     MutexRelease(m_mutex);
 }
@@ -2634,17 +2634,34 @@ void VulkanMemoryHeap::Initialize(const uint32_t memoryTypeIndex, const VkDevice
 static void VulkanMemoryHeapPageFreeAll(
     VulkanMemoryHeapPage**const pageAllocatedFirstPtrPtr, 
     VulkanMemoryHeapPage**const pageFreeFirstPtrPtr, 
+    const bool deallocateBackToGpu,///<if true, return the memory page back to the Gpu -- otherwise hold onto the memory page in the free list in anticipation of using it immediately without calling Vulkan
     const VkDevice device)
 {
     assert(pageAllocatedFirstPtrPtr);
     assert(pageFreeFirstPtrPtr);
+
+    if (deallocateBackToGpu)
+    {
+        //first deallocate any memory pages that were being stored in the free list in anticipation of being rapidly reused
+        VulkanMemoryHeapPage* pageFreeCurrent = *pageFreeFirstPtrPtr;
+        while (pageFreeCurrent && pageFreeCurrent->Allocated())
+        {
+            pageFreeCurrent->Free(device);
+            pageFreeCurrent = pageFreeCurrent->m_next;
+        }
+    }
 
     //free pages and add them to freelist
     VulkanMemoryHeapPage*& pageFreeFirst = *pageFreeFirstPtrPtr;
     VulkanMemoryHeapPage*& allocatedPage = *pageAllocatedFirstPtrPtr;
     while (allocatedPage)
     {
-        allocatedPage->Free(device);
+        allocatedPage->ClearSuballocations();
+        if (deallocateBackToGpu)
+        {
+            //then deallocate any memory pages that were in use
+            allocatedPage->Free(device);
+        }
 
         VulkanMemoryHeapPage*const nextAllocatedPage = allocatedPage->m_next;
         allocatedPage->m_next = pageFreeFirst;
@@ -2653,10 +2670,10 @@ static void VulkanMemoryHeapPageFreeAll(
     }
     *pageAllocatedFirstPtrPtr = nullptr;
 }
-void VulkanMemoryHeap::FreeAllPages(const VkDevice device)
+void VulkanMemoryHeap::FreeAllPages(const bool deallocateBackToGpu, const VkDevice device)
 {
-    VulkanMemoryHeapPageFreeAll(&m_pageAllocatedLinearFirst, &m_pageFreeFirst, device);
-    VulkanMemoryHeapPageFreeAll(&m_pageAllocatedNonlinearFirst, &m_pageFreeFirst, device);
+    VulkanMemoryHeapPageFreeAll(&m_pageAllocatedLinearFirst, &m_pageFreeFirst, deallocateBackToGpu, device);
+    VulkanMemoryHeapPageFreeAll(&m_pageAllocatedNonlinearFirst, &m_pageFreeFirst, deallocateBackToGpu, device);
 }
 void VulkanMemoryHeap::Destroy(const VkDevice device)
 {
@@ -2665,7 +2682,7 @@ void VulkanMemoryHeap::Destroy(const VkDevice device)
     m_initialized = false;
 #endif//#if NTF_DEBUG    
 
-    FreeAllPages(device);
+    FreeAllPages(true, device);
 }
 
 bool VulkanMemoryHeap::PushAlloc(
@@ -2708,8 +2725,12 @@ bool VulkanMemoryHeap::PushAlloc(
         VulkanMemoryHeapPage& pageNew = *m_pageFreeFirst;
         m_pageFreeFirst = m_pageFreeFirst->m_next;
 
-        pageNew.Allocate(m_pageSizeBytes, m_memoryTypeIndex, device);
+        if (!pageNew.Allocated())
+        {
+            pageNew.Allocate(m_pageSizeBytes, m_memoryTypeIndex, device);
+        }
         (pageAllocatedPrevious ? pageAllocatedPrevious->m_next : pageAllocatedFirst) = pageAllocatedCurrent = &pageNew;
+        pageNew.m_next = nullptr;//newly allocated page is the last allocated page
     }
     assert(pageAllocatedCurrent);
     assert(pageAllocatedCurrent->SufficientMemory(alignment, size, respectNonCoherentAtomSize));

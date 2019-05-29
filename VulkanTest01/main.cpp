@@ -247,7 +247,7 @@ private:
             if (state == StreamingUnitRuntime::kReady || state == StreamingUnitRuntime::kUnloading)
             {
                 streamingUnit.StateMutexed(StreamingUnitRuntime::kUnloading);//we are shutting down, and will not be issuing any more draw calls
-                streamingUnit.Free(&m_deviceLocalMemoryStreamingUnitsAllocated, m_deviceLocalMemoryStreamingUnits, m_device);
+                streamingUnit.Free(&m_deviceLocalMemoryStreamingUnitsAllocated, m_deviceLocalMemoryStreamingUnits, true, m_device);
                 streamingUnit.Destroy();
             }
         }
@@ -606,7 +606,7 @@ private:
                         if (streamingUnit.m_lastSubmittedCpuFrame <= m_lastCpuFrameCompleted)
                         {
                             //printf("MAIN THREAD: m_streamingUnit.Free(); time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-                            streamingUnit.Free(&m_deviceLocalMemoryStreamingUnitsAllocated, m_deviceLocalMemoryStreamingUnits, m_device);
+                            streamingUnit.Free(&m_deviceLocalMemoryStreamingUnitsAllocated, m_deviceLocalMemoryStreamingUnits, false, m_device);
                         }
                         break;
                     }
