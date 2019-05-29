@@ -274,9 +274,9 @@ private:
         vkFreeCommandBuffers(m_device, m_commandPoolTransitionImage, 1, &m_commandBufferTransitionImage);
         vkDestroyCommandPool(m_device, m_commandPoolTransitionImage, GetVulkanAllocationCallbacks());
 
-        vkDestroyCommandPool(m_device, m_commandPoolPrimary, GetVulkanAllocationCallbacks());
         vkFreeCommandBuffers(m_device, m_commandPoolTransfer, 1, &m_commandBufferTransfer);
-        if (m_commandPoolTransfer != m_commandPoolPrimary)
+        vkDestroyCommandPool(m_device, m_commandPoolPrimary, GetVulkanAllocationCallbacks());//primary command pool allocates transfer command buffer as well as primary command buffer on Gpu's that don't have a transfer queue, so 
+        if (m_queueFamilyIndices.graphicsFamily != m_queueFamilyIndices.transferFamily)
         {
             vkDestroyCommandPool(m_device, m_commandPoolTransfer, GetVulkanAllocationCallbacks());
         }
