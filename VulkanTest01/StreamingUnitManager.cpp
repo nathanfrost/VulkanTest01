@@ -172,10 +172,8 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 imageFormat,
                 stagingBuffersGpu.back(),
                 commandBufferTransfer,
-                transferQueue,
                 queueFamilyIndices.transferFamily,
                 commandBufferTransitionImage,
-                graphicsQueue,
                 queueFamilyIndices.graphicsFamily,
                 device);
 

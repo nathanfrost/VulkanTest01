@@ -316,15 +316,12 @@ void TransferImageFromCpuToGpu(
     const VkFormat& format,
     const VkBuffer& stagingBuffer,
     const VkCommandBuffer commandBufferTransfer,
-    const VkQueue& transferQueue,
     const uint32_t transferQueueFamilyIndex,
     const VkCommandBuffer commandBufferGraphics,
-    const VkQueue& graphicsQueue,
     const uint32_t graphicsQueueFamilyIndex,
     const VkDevice& device)
 {
-    const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
-    assert(unifiedGraphicsAndTransferQueue == (transferQueueFamilyIndex == graphicsQueueFamilyIndex));
+    const bool unifiedGraphicsAndTransferQueue = (transferQueueFamilyIndex == graphicsQueueFamilyIndex);
 
     //transition memory to format optimal for copying from CPU->GPU
     ImageMemoryBarrier(
@@ -732,7 +729,7 @@ void ReadFile(char**const fileData, StackCpu<size_t>*const allocatorPtr, size_t*
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
     VkDebugReportFlagsEXT flags,
     VkDebugReportObjectTypeEXT objType,
-    uint64_t obj,
+    uint64_t obj, ///< this is the handle of the offending Vulkan object, which should be of type VkDebugReportObjectTypeEXT (but I have seen one case where VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT was reported instead of VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_POOL_EXT)
     size_t location,
     int32_t code,
     const char* layerPrefix,

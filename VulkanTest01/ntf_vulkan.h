@@ -94,10 +94,8 @@ void TransferImageFromCpuToGpu(
     const VkFormat& format,
     const VkBuffer& stagingBuffer,
     const VkCommandBuffer commandBufferTransfer,
-    const VkQueue& transferQueue,
     const uint32_t transferQueueFamilyIndex,
     const VkCommandBuffer commandBufferGraphics,
-    const VkQueue& graphicsQueue,
     const uint32_t graphicsQueueFamilyIndex,
     const VkDevice& device);
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device);
