@@ -275,11 +275,8 @@ private:
         vkDestroyCommandPool(m_device, m_commandPoolTransitionImage, GetVulkanAllocationCallbacks());
 
         vkFreeCommandBuffers(m_device, m_commandPoolTransfer, 1, &m_commandBufferTransfer);
-        vkDestroyCommandPool(m_device, m_commandPoolPrimary, GetVulkanAllocationCallbacks());//primary command pool allocates transfer command buffer as well as primary command buffer on Gpu's that don't have a transfer queue, so 
-        if (m_queueFamilyIndices.graphicsFamily != m_queueFamilyIndices.transferFamily)
-        {
-            vkDestroyCommandPool(m_device, m_commandPoolTransfer, GetVulkanAllocationCallbacks());
-        }
+        vkDestroyCommandPool(m_device, m_commandPoolTransfer, GetVulkanAllocationCallbacks());
+        vkDestroyCommandPool(m_device, m_commandPoolPrimary, GetVulkanAllocationCallbacks());
         for (auto& commandPoolSecondaryArray : m_commandPoolsSecondary)
         {
             for (auto& commandPoolSecondary : commandPoolSecondaryArray)
@@ -355,14 +352,7 @@ private:
         
         CreateCommandPool(&m_commandPoolPrimary, m_queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
         CreateCommandPool(&m_commandPoolTransitionImage, m_queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
-        if (m_queueFamilyIndices.graphicsFamily != m_queueFamilyIndices.transferFamily)
-        {
-            CreateCommandPool(&m_commandPoolTransfer, m_queueFamilyIndices.transferFamily, m_device, m_physicalDevice);
-        }
-        else
-        {
-            m_commandPoolTransfer = m_commandPoolPrimary;
-        }
+        CreateCommandPool(&m_commandPoolTransfer, m_queueFamilyIndices.transferFamily, m_device, m_physicalDevice);
 
         m_deviceLocalMemoryPersistent.Initialize(m_device, m_physicalDevice);
         for (auto& vulkanPagedStackAllocator : m_deviceLocalMemoryStreamingUnits)
@@ -506,7 +496,7 @@ private:
         while (!glfwWindowShouldClose(window)) 
         {
             //BEG_#StreamingTest
-            const StreamingUnitRuntime::FrameNumber frameToSwapState = 3000;
+            const StreamingUnitRuntime::FrameNumber frameToSwapState = 300;
             if (m_frameNumberCurrentCpu % frameToSwapState == frameToSwapState - 1)
             {
                 UnitTest(
