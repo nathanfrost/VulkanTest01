@@ -683,9 +683,6 @@ private:
                 }
                 FenceReset(drawFrameFinishedFence.m_fence, m_device);//queue has completed on the GPU and is ready to be prepared on the CPU
 
-                VkSubmitInfo submitInfo = {};
-                submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;//only value allowed
-
                 //theoretically the implementation can already start executing our vertex shader and such while the image is not
                 //available yet. Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores
                 VectorSafe<VkSemaphore, 4> signalSemaphores({ m_renderFinishedSemaphore[frameIndex] });
