@@ -51,16 +51,14 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 #pragma warning(disable : 4996)
 
 static void UnitTest(
-    StreamingUnitRuntime* streamingUnit0,
-    StreamingUnitRuntime* streamingUnit1,
-    VectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
-    ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
-    StreamingUnitRuntime** assetLoadingArgumentsStreamingUnit,
-    const AssetLoadingThreadData &m_assetLoadingThreadData)
+    StreamingUnitRuntime*const streamingUnit0,
+    StreamingUnitRuntime*const streamingUnit1,
+    StreamingUnitLoadQueueManager*const streamingUnitRuntimeQueueManager,
+    const HANDLE assetLoadingThreadWakeHandle)
 {
     assert(streamingUnit0);
     assert(streamingUnit1);
-    assert(assetLoadingArgumentsStreamingUnit);
+    assert(streamingUnitRuntimeQueueManager);
 
     const StreamingUnitRuntime::State state0 = streamingUnit0->StateMutexed();
     const StreamingUnitRuntime::State state1 = streamingUnit1->StateMutexed();
@@ -68,13 +66,9 @@ static void UnitTest(
     {
         if (state1 == StreamingUnitRuntime::kNotLoaded)
         {
-            StreamingUnitLoadStart(
-                streamingUnit1,
-                assetLoadingArgumentsStreamingUnit,
-                deviceLocalMemoryStreamingUnits,
-                deviceLocalMemoryStreamingUnitsAllocated,
-                m_assetLoadingThreadData.m_handles.wakeEventHandle,
-                m_assetLoadingThreadData.m_streamingUnitsDoneLoadingHandle);
+            VectorSafe<StreamingUnitRuntime*, 1> streamingUnits;
+            streamingUnits.Push(streamingUnit1);
+            StreamingUnitsLoadStart(&streamingUnits, streamingUnitRuntimeQueueManager, assetLoadingThreadWakeHandle);
         }
         else if (state1 == StreamingUnitRuntime::kReady)
         {
@@ -234,7 +228,7 @@ private:
 
     void Shutdown()
     {
-        WaitForSignalWindows(m_assetLoadingThreadData.m_streamingUnitsDoneLoadingHandle);//in case asset loading thread is loading one or more streaming units
+        m_streamingUnitLoadQueueManager.Destroy();
 
         m_assetLoadingThreadData.m_threadCommand = AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate;
         SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
@@ -247,7 +241,12 @@ private:
             if (state == StreamingUnitRuntime::kReady || state == StreamingUnitRuntime::kUnloading)
             {
                 streamingUnit.StateMutexed(StreamingUnitRuntime::kUnloading);//we are shutting down, and will not be issuing any more draw calls
-                streamingUnit.Free(&m_deviceLocalMemoryStreamingUnitsAllocated, m_deviceLocalMemoryStreamingUnits, true, m_device);
+                streamingUnit.Free(
+                    &m_deviceLocalMemoryStreamingUnitsAllocated, 
+                    m_deviceLocalMemoryStreamingUnits, 
+                    m_deviceLocalMemoryMutex, 
+                    true, 
+                    m_device);
                 streamingUnit.Destroy();
             }
         }
@@ -300,11 +299,11 @@ private:
 
         glfwDestroyWindow(m_window);
 
+        HandleCloseWindows(&m_deviceLocalMemoryMutex);
         HandleCloseWindows(&m_graphicsQueueMutex);
         HandleCloseWindows(&m_assetLoadingThreadData.m_handles.threadHandle);
         HandleCloseWindows(&m_assetLoadingThreadData.m_handles.doneEventHandle);
         HandleCloseWindows(&m_assetLoadingThreadData.m_handles.wakeEventHandle);
-        HandleCloseWindows(&m_assetLoadingThreadData.m_streamingUnitsDoneLoadingHandle);
 
         glfwTerminate();
     }
@@ -328,6 +327,7 @@ private:
         NTFVulkanInitialize(m_physicalDevice);
         m_queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
         m_graphicsQueueMutex = MutexCreate();
+        m_deviceLocalMemoryMutex = MutexCreate();
         CreateLogicalDevice(
             &m_device, 
             &m_graphicsQueue, 
@@ -406,6 +406,11 @@ private:
         for (auto& streamingUnit : m_streamingUnits)
         {
             streamingUnit.Initialize();
+            ///BEG_DONT_RECREATE_FENCES
+            const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
+            FenceCreate(&streamingUnit.m_transferQueueFinishedFence, fenceCreateFlagBits, m_device);
+            FenceCreate(&streamingUnit.m_graphicsQueueFinishedFence, fenceCreateFlagBits, m_device);
+            ///END_DONT_RECREATE_FENCES
             streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemory
         }
         m_streamingUnits[0].m_filenameNoExtension.Snprintf("unitTest0");
@@ -425,23 +430,25 @@ private:
 
         m_assetLoadingThreadData.m_handles.doneEventHandle = ThreadSignalingEventCreate();
         m_assetLoadingThreadData.m_handles.wakeEventHandle = ThreadSignalingEventCreate();
-        m_assetLoadingThreadData.m_streamingUnitsDoneLoadingHandle = ThreadSignalingEventCreate();
         
         m_assetLoadingThreadData.m_threadCommand = AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit;
+
+        m_assetLoadingArguments.m_deviceLocalMemoryPersistent = &m_deviceLocalMemoryPersistent;
+        m_assetLoadingArguments.m_deviceLocalMemoryStreamingUnits = &m_deviceLocalMemoryStreamingUnits;
+        m_assetLoadingArguments.m_deviceLocalMemoryStreamingUnitsAllocated = &m_deviceLocalMemoryStreamingUnitsAllocated;///<@todo: try to write an operator==() for ArraySafe/VectorSafe so you can assert on forgetting to set it
 
         m_assetLoadingArguments.m_commandBufferTransfer = &m_commandBufferTransfer;
         m_assetLoadingArguments.m_commandBufferTransitionImage = &m_commandBufferTransitionImage;
         m_assetLoadingArguments.m_device = &m_device;
-        m_assetLoadingArguments.m_deviceLocalMemoryPersistent = &m_deviceLocalMemoryPersistent;
+        m_assetLoadingArguments.m_deviceLocalMemoryMutex = &m_deviceLocalMemoryMutex;
         m_assetLoadingArguments.m_graphicsQueue = &m_graphicsQueue;
         m_assetLoadingArguments.m_graphicsQueueMutex = &m_graphicsQueueMutex;
         m_assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
         m_assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
-        m_assetLoadingArguments.m_streamingUnit = &m_streamingUnits[0];
+        m_assetLoadingArguments.m_streamingUnitLoadQueueManager = &m_streamingUnitLoadQueueManager;
         m_assetLoadingArguments.m_threadCommand = &m_assetLoadingThreadData.m_threadCommand;
         m_assetLoadingArguments.m_threadDone = &m_assetLoadingThreadData.m_handles.doneEventHandle;
         m_assetLoadingArguments.m_threadWake = &m_assetLoadingThreadData.m_handles.wakeEventHandle;
-        m_assetLoadingArguments.m_threadStreamingUnitsDoneLoading = &m_assetLoadingThreadData.m_streamingUnitsDoneLoadingHandle;
         m_assetLoadingArguments.m_transferQueue = &m_transferQueue;
 
         m_assetLoadingArguments.m_renderPass = &m_renderPass;
@@ -452,18 +459,14 @@ private:
         ///@todo: THREAD_MODE_BACKGROUND_BEGIN or THREAD_PRIORITY_BELOW_NORMAL and SetThreadPriority
         m_assetLoadingThreadData.m_handles.threadHandle = CreateThreadWindows(AssetLoadingThread, &m_assetLoadingArguments);
 
+        VectorSafe<StreamingUnitRuntime*, 1> streamingUnits;
+        streamingUnits.Push(&m_streamingUnits[0]);
+        StreamingUnitsLoadStart(&streamingUnits, &m_streamingUnitLoadQueueManager, m_assetLoadingThreadData.m_handles.wakeEventHandle);
+
         //finish initialization before launching asset loading thread
         FenceWaitUntilSignalled(initializationDone, m_device);
         vkDestroyFence(m_device, initializationDone, GetVulkanAllocationCallbacks());
         
-        StreamingUnitLoadStart(
-            &m_streamingUnits[0], 
-            &m_assetLoadingArguments.m_streamingUnit,
-            &m_deviceLocalMemoryStreamingUnits,
-            &m_deviceLocalMemoryStreamingUnitsAllocated,
-            m_assetLoadingThreadData.m_handles.wakeEventHandle, 
-            m_assetLoadingThreadData.m_streamingUnitsDoneLoadingHandle);
-
         //#CommandPoolDuplication
         m_commandBuffersPrimary.size(swapChainFramebuffersSize);//bake one command buffer for every image in the swapchain so Vulkan can blast through them
         AllocateCommandBuffers(
@@ -496,23 +499,19 @@ private:
         while (!glfwWindowShouldClose(window)) 
         {
             //BEG_#StreamingTest
-            const StreamingUnitRuntime::FrameNumber frameToSwapState = 300;
+            const StreamingUnitRuntime::FrameNumber frameToSwapState = 30;
             if (m_frameNumberCurrentCpu % frameToSwapState == frameToSwapState - 1)
             {
                 UnitTest(
                     &m_streamingUnits[0], 
                     &m_streamingUnits[1], 
-                    &m_deviceLocalMemoryStreamingUnits,
-                    &m_deviceLocalMemoryStreamingUnitsAllocated,
-                    &m_assetLoadingArguments.m_streamingUnit, 
-                    m_assetLoadingThreadData);
+                    &m_streamingUnitLoadQueueManager, 
+                    m_assetLoadingThreadData.m_handles.wakeEventHandle);
                 UnitTest(
                     &m_streamingUnits[1], 
                     &m_streamingUnits[0], 
-                    &m_deviceLocalMemoryStreamingUnits,
-                    &m_deviceLocalMemoryStreamingUnitsAllocated,
-                    &m_assetLoadingArguments.m_streamingUnit, 
-                    m_assetLoadingThreadData);
+                    &m_streamingUnitLoadQueueManager,
+                    m_assetLoadingThreadData.m_handles.wakeEventHandle);
             }
             //END_#StreamingTest
 
@@ -562,6 +561,8 @@ private:
                             vkCmdBeginRenderPass(commandBufferPrimary, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
                         }
 
+                        printf("FillCommandBufferPrimary(%s)\n", streamingUnit.m_filenameNoExtension.data());
+
                         UpdateUniformBuffer(
                             streamingUnit.m_uniformBufferCpuMemory,
                             s_cameraTranslation,
@@ -596,7 +597,12 @@ private:
                         if (streamingUnit.m_lastSubmittedCpuFrame <= m_lastCpuFrameCompleted)
                         {
                             //printf("MAIN THREAD: m_streamingUnit.Free(); time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-                            streamingUnit.Free(&m_deviceLocalMemoryStreamingUnitsAllocated, m_deviceLocalMemoryStreamingUnits, false, m_device);
+                            streamingUnit.Free(
+                                &m_deviceLocalMemoryStreamingUnitsAllocated, 
+                                m_deviceLocalMemoryStreamingUnits, 
+                                m_deviceLocalMemoryMutex, 
+                                false, 
+                                m_device);
                         }
                         break;
                     }
@@ -684,6 +690,10 @@ private:
                 //available yet. Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores
                 VectorSafe<VkSemaphore, 4> signalSemaphores({ m_renderFinishedSemaphore[frameIndex] });
                 VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+                //BEG_HAC
+                //printf( "vkGetFenceStatus(m_device, drawFrameFinishedFence.m_fence=%zx)=%i\n", 
+                //        (size_t)drawFrameFinishedFence.m_fence, vkGetFenceStatus(m_device, drawFrameFinishedFence.m_fence));
+                //END_HAC
                 SubmitCommandBuffer(
                     signalSemaphores,
                     ConstVectorSafeRef<VkSemaphore>(&imageAvailableSemaphore, 1),
@@ -753,6 +763,7 @@ private:
 
     enum { kStreamingUnitsNum = 3 };
     VectorSafe<StreamingUnitRuntime, kStreamingUnitsNum> m_streamingUnits;
+    StreamingUnitLoadQueueManager m_streamingUnitLoadQueueManager;
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
         
     VkCommandBuffer m_commandBufferTransfer;//automatically freed when VkCommandPool is destroyed
@@ -765,6 +776,7 @@ private:
     VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_renderFinishedSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor use ArraySafe
     ArraySafe<DrawFrameFinishedFence, NTF_FRAMES_IN_FLIGHT_NUM> m_drawFrameFinishedFences;
 
+    HANDLE m_deviceLocalMemoryMutex;
     VulkanPagedStackAllocator m_deviceLocalMemoryPersistent;
     VectorSafe<VulkanPagedStackAllocator, kStreamingUnitsNum> m_deviceLocalMemoryStreamingUnits = 
         VectorSafe<VulkanPagedStackAllocator, kStreamingUnitsNum>(kStreamingUnitsNum);

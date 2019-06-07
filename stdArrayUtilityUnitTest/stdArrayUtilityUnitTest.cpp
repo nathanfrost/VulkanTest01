@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include"../VulkanTest01/stdArrayUtility.h"
+#include"../VulkanTest01/QueueCircular.h"
 
 //don't complain about scanf being unsafe
 #pragma warning(disable : 4996)
@@ -85,8 +86,22 @@ static void ConstMethodTesting(const VectorSafe<T,kMaxSize>& vectorSafe, const i
     //}
 }
 
+template<class T, size_t kMaxElements>
+static void AddFirstThreeElements(QueueCircular<T, kMaxElements>*const testPtr)
+{
+    NTF_REF(testPtr, test);
+
+    test.Enqueue(0);
+    assert(test.Size() == 1);
+    test.Enqueue(1);
+    assert(test.Size() == 2);
+    test.Enqueue(2);
+    assert(test.Size() == 3);
+}
+
 int main()
 {
+    //BEG_#VectorSafe
     enum { kElementsMax = 16 };
     VectorSafe<int,kElementsMax> vectorSafe;
     
@@ -252,9 +267,112 @@ int main()
     }
 
     ConstMethodTesting(vectorSafe, actualSize, lastValidValue);
+    //END_#VectorSafe
 
+
+    //BEG_#QueueCircular
+    const int size = 3;
+    QueueCircular<int, 3> test;
+    test.Clear();
+    assert(test.Size() == 0);
+
+    AddFirstThreeElements(&test);
+    assert(test.PeekMostRecent() == 2);
+    assert(test[0] == 0);
+    assert(test[1] == 1);
+    assert(test[2] == 2);
+
+    int dequeued = test.Dequeue();
+    assert(dequeued == 0);
+    assert(test.Size() == 2);
+
+    dequeued = test.Dequeue();
+    assert(dequeued == 1);
+    assert(test.Size() == 1);
+    assert(test.PeekMostRecent() == 2);
+
+    test.Clear();
+    assert(test.Size() == 0);
+
+    AddFirstThreeElements(&test);
+    assert(test.Size() == size);
+    test.Clear();
+    assert(test.Size() == 0);
+
+    AddFirstThreeElements(&test);
+    assert(test.Size() == size);
+    test.Clear();
+    assert(test.Size() == 0);
+
+    test.Enqueue(1);
+    assert(test.PeekMostRecent() == 1);
+    assert(test.Size() == 1);
+    test.Clear();
+
+    AddFirstThreeElements(&test);
+    test.Dequeue(2);
+    assert(test.Size() == 1);
+    assert(test.PeekMostRecent() == 2);
+    test.Clear();
+
+    QueueCircular<int,4> testSize4;
+    AddFirstThreeElements(&testSize4);
+    testSize4.Enqueue(58);
+    testSize4[0] = 45;
+    testSize4[2] = 34;
+    testSize4[3] = 66;
+    assert(testSize4.Size() == 4);
+    assert(testSize4[0] == 45);
+    assert(testSize4[1] == 1);
+    assert(testSize4[2] == 34);
+    assert(testSize4[3] == 66);
+
+    //BEG_#QueueCircularIterator
+    //size_t index = 0;
+    //for (auto& element : testSize4)
+    //{
+    //    switch (index)
+    //    {
+    //        case 0:
+    //        {
+    //            assert(element == 45);
+    //            ++index;
+    //            break;
+    //        }
+    //        case 1:
+    //        {
+    //            assert(element == 1);
+    //            ++index;
+    //            break;
+    //        }
+    //        case 2:
+    //        {
+    //            assert(element == 34);
+    //            ++index;
+    //            break;
+    //        }
+    //        case 3:
+    //        {
+    //            assert(element == 66);
+    //            ++index;
+    //            break;
+    //        }
+    //        default:
+    //        {
+    //            assert(false);
+    //            break;
+    //        }
+    //    }
+    //}
+    //assert(index == testSize4.Size());
+    //END_#QueueCircularIterator
+
+    test.Clear();
+    //END_#QueueCircular
+
+
+    //done!
     printf("Unit test SUCCESS!\n");
     ConsolePauseForUserAcknowledgement();
     return 0;
 }
-

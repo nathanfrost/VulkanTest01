@@ -296,14 +296,26 @@ VkResult SubmitCommandBuffer(
     if (queueMutexPtr)
     {
         WaitForSignalWindows(*queueMutexPtr);
+        printf("Acquired mutex %zu\n", (size_t)*queueMutexPtr);
     }
-    
+    else
+    {
+        printf("No mutex to acquire\n");
+    }
+
+    printf( "commandBufferCount=%i;pCommandBuffers[0]=%zx,signalSemaphoreCount=%i;pSignalSemaphores[0]=%zx;waitSemaphoreCount=%i;pWaitSemaphores[0]=%zx, pWaitDstStageMask[0]=%zx, fenceToSignalWhenCommandBufferDone=%zx\n",
+            submitInfo.commandBufferCount, (size_t)submitInfo.pCommandBuffers[0], submitInfo.signalSemaphoreCount, submitInfo.signalSemaphoreCount ? (size_t)submitInfo.pSignalSemaphores[0] : 0, submitInfo.waitSemaphoreCount, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitSemaphores[0] : 0, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitDstStageMask[0] : 0, (size_t)fenceToSignalWhenCommandBufferDone);
     const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, fenceToSignalWhenCommandBufferDone);
     NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
 
     if (queueMutexPtr)
     {
-        ReleaseMutex(*queueMutexPtr);
+        MutexRelease(*queueMutexPtr);
+        printf("Released mutex %zu\n", (size_t)*queueMutexPtr);
+    }
+    else
+    {
+        printf("No mutex to release\n");
     }
 
     return queueSubmitResult;
@@ -724,6 +736,7 @@ void ReadFile(char**const fileData, StackCpu<size_t>*const allocatorPtr, size_t*
     fileSizeBytes = fileInfo.st_size;
     allocator.PushAlloc(reinterpret_cast<void**>(fileData), 0, fileSizeBytes);
     Fread(f, *fileData, 1, fileSizeBytes);
+    Fclose(f);
 }
 
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
@@ -1480,7 +1493,6 @@ void CreateUniformBuffer(
 
     assert(bufferSize > 0);
 
-    //TODO_NEXT: make sure each streaming unit lives on its own separate set of pages, which are recycled not freed/reallocated -- pretty sure we can just keep assign a VulkanPagedStackAllocator to each streaming unit from a pool
     CreateBuffer(
         &uniformBuffer,
         &uniformBufferGpuMemory,
@@ -2423,6 +2435,7 @@ void CreateSwapChain(
     uint32_t queueFamilyIndices[] = { static_cast<uint32_t>(indices.graphicsFamily), static_cast<uint32_t>(indices.presentFamily) };
     if (indices.graphicsFamily != indices.presentFamily)
     {
+        assert(false);///<@todo: maybe use explicit ownership transfers between graphics and present queues?  Seems crazy
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;//Images can be used across multiple queue families without explicit ownership transfers.
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndices;

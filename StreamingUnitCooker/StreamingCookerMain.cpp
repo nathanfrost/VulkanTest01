@@ -160,7 +160,7 @@ void StreamingUnitCooker::Cook()
             (rootDirectoryWithTrailingBackslash + texturedGeometry.m_modelPathRelativeFromRoot).c_str());
         assert(loadObjResult);
 
-        ///@todo: #StreamingMemory: replace this STL with a good, static-memory hashmap
+        ///@todo: replace this STL with a good, static-memory hashmap
         //build index list and un-duplicate vertices
         std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
 

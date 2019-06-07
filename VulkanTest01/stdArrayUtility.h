@@ -17,7 +17,7 @@ inline void Fopen(FILE**const f, const char*const filename, const char*const mod
     assert(mode && mode[0]);
     
     const errno_t fopen_sRet = fopen_s(f, filename, mode);
-    
+
     assert(*f);
     assert(fopen_sRet == 0);
 }

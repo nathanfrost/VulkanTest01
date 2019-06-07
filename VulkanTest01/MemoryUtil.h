@@ -5,12 +5,13 @@
 ///@todo: refactor to a more sensible translation unit
 #define NTF_STATIC_ASSERT(expr) static_assert(expr, #expr)
 
+#define NTF_ROUND_TO_NEAREST(i,alignment) (i + alignment - 1) & ~(alignment - 1)
 template<class T>
 inline T RoundToNearest(const T i, const T alignment)
 {
     assert(alignment > 0);
     assert(i >= 0);
-    return (i + alignment - 1) & ~(alignment - 1);
+    return NTF_ROUND_TO_NEAREST(i, alignment);
 }
 
 inline void* AlignedMalloc(size_t size, size_t alignment)

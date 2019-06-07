@@ -1,35 +1,32 @@
 #include"StreamingUnit.h"
 #include"ntf_vulkan.h"
+#include"StreamingUnitManager.h"
 
-void StreamingUnitLoadStart(
-    StreamingUnitRuntime*const streamingUnitPtr, 
-    StreamingUnitRuntime**const assetLoadingThreadStreamingUnitPtrPtr,
-    VectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
-    ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
-    const HANDLE assetLoadingThreadWakeHandle, 
-    const HANDLE assetLoadingThreadStreamingUnitsDoneLoading)
+void StreamingUnitsLoadStart(
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnits, 
+    StreamingUnitLoadQueueManager*const streamingUnitLoadQueueManagerPtr,
+    const HANDLE assetLoadingThreadWakeHandle)
 {
-    NTF_REF(assetLoadingThreadStreamingUnitPtrPtr, assetLoadingThreadStreamingUnitPtr);
-    NTF_REF(streamingUnitPtr, streamingUnit);
+    NTF_REF(streamingUnitLoadQueueManagerPtr, streamingUnitLoadQueueManager);
     assert(assetLoadingThreadWakeHandle);
 
-    assetLoadingThreadStreamingUnitPtr = &streamingUnit;
-    const size_t deviceLocalMemoryStreamingUnitsSize = deviceLocalMemoryStreamingUnits.size();
-    size_t deviceLocalMemoryStreamingUnitIndex = 0;
-    for (; deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize; ++deviceLocalMemoryStreamingUnitIndex)
+    auto& streamingUnitQueue = *streamingUnitLoadQueueManager.GetMainThreadStreamingUnitLoadQueue_after_WaitForSignalWindows();
+    for (auto streamingUnitPtr : streamingUnits)
     {
-        auto& deviceLocalMemoryStreamingUnitAllocated = deviceLocalMemoryStreamingUnitsAllocated[deviceLocalMemoryStreamingUnitIndex];
-        if (!deviceLocalMemoryStreamingUnitAllocated)
+        NTF_REF(streamingUnitPtr, streamingUnit);
+        if (streamingUnit.StateMutexed() == StreamingUnitRuntime::kUnloading)
         {
-            deviceLocalMemoryStreamingUnitAllocated = true;
-            streamingUnit.m_deviceLocalMemory = &deviceLocalMemoryStreamingUnits[deviceLocalMemoryStreamingUnitIndex];
-            break;
+            /*  an unloaded streaming unit is still in memory, and the main thread is waiting for the opportunity to free that streaming unit's 
+                memory -- just start rendering the streaming unit again, and stop waiting to free its memory */
+            streamingUnit.StateMutexed(StreamingUnitRuntime::kReady);
+        }
+        else
+        {
+            streamingUnitQueue.m_queue.Enqueue(&streamingUnit);
+            UnsignalSemaphoreWindows(streamingUnitQueue.m_streamingUnitsDoneLoadingHandle);
         }
     }
-    assert(deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize);
-    streamingUnit.StateMutexed(StreamingUnitRuntime::kLoading);
-
-    UnsignalSemaphoreWindows(assetLoadingThreadStreamingUnitsDoneLoading);///@todo: double-buffered streaming unit queue for 100% robustness: when you do that; get rid of this handle and instead check the double-buffered queue for being empty
+    streamingUnitLoadQueueManager.Release(&streamingUnitQueue);
     SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
 }
 
@@ -99,7 +96,7 @@ StreamingUnitRuntime::State StreamingUnitRuntime::StateMutexed::Get() const
     AssertValid();
     const State ret = m_state;
     //printf("Get: m_state=%i\n", ret);
-    ReleaseMutex(m_mutex);
+    MutexRelease(m_mutex);
     return ret;
 }
 void StreamingUnitRuntime::StateMutexed::Set(const StreamingUnitRuntime::State state)
@@ -111,7 +108,7 @@ void StreamingUnitRuntime::StateMutexed::Set(const StreamingUnitRuntime::State s
     m_state = state;
     AssertValid();
     //printf("Set: m_state=%i\n", m_state);
-    ReleaseMutex(m_mutex);
+    MutexRelease(m_mutex);
 }
 
 ///not threadsafe
@@ -136,10 +133,11 @@ void StreamingUnitRuntime::StateMutexed(const StreamingUnitRuntime::State state)
 void StreamingUnitRuntime::Free(
     ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
     ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+    const HANDLE deviceLocalMemoryMutex,
     const bool deallocateBackToGpu,
     const VkDevice& device)
 {
-    //printf("StreamingUnitRuntime::Free() enter\n");
+    printf("StreamingUnitRuntime::Free() enter\n");
 
     assert(m_stateMutexed.Get() == State::kUnloading);
     m_stateMutexed.Set(State::kNotLoaded);
@@ -164,11 +162,16 @@ void StreamingUnitRuntime::Free(
     vkDestroyPipelineLayout(device, m_pipelineLayout, GetVulkanAllocationCallbacks());
     vkDestroyPipeline(device, m_graphicsPipeline, GetVulkanAllocationCallbacks());
 
-    vkDestroyFence(device, m_transferQueueFinishedFence, GetVulkanAllocationCallbacks());
-    vkDestroyFence(device, m_graphicsQueueFinishedFence, GetVulkanAllocationCallbacks());
+    ///BEG_DONT_RECREATE_FENCES
+    //vkDestroyFence(device, m_transferQueueFinishedFence, GetVulkanAllocationCallbacks());
+    //vkDestroyFence(device, m_graphicsQueueFinishedFence, GetVulkanAllocationCallbacks());
+    FenceReset(m_transferQueueFinishedFence, device);
+    FenceReset(m_graphicsQueueFinishedFence, device);
+    ///END_DONT_RECREATE_FENCES
 
     //release allocator back to pool
     assert(m_deviceLocalMemory);
+    WaitForSignalWindows(deviceLocalMemoryMutex);
     size_t deviceLocalMemoryStreamingUnitsIndex = 0;
     for (auto& deviceLocalMemoryStreamingUnit : deviceLocalMemoryStreamingUnits)
     {
@@ -183,8 +186,9 @@ void StreamingUnitRuntime::Free(
         ++deviceLocalMemoryStreamingUnitsIndex;
     }
     assert(!m_deviceLocalMemory);
+    MutexRelease(deviceLocalMemoryMutex);
 
-    //printf("StreamingUnitRuntime::Free() exit\n");
+    printf("StreamingUnitRuntime::Free() exit\n");
 }
 
 /** Initialize()/Destroy() concern themselves solely with OS constructs like mutexes (which I don't want to risk fragmenting by creating and 
@@ -196,5 +200,6 @@ void StreamingUnitRuntime::Destroy()
 
 void StreamingUnitRuntime::AssertValid() const
 {
+    assert(m_filenameNoExtension.Strnlen() > 0);
     m_stateMutexed.AssertValid();
 }

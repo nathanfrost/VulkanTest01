@@ -7,6 +7,7 @@
 #include"StreamingCookAndRuntime.h"
 
 class VulkanPagedStackAllocator;
+class StreamingUnitLoadQueueManager;
 
 typedef uint32_t StreamingUnitVersion;
 typedef uint8_t StreamingUnitByte;
@@ -41,6 +42,7 @@ public:
     void Free(
         ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated, 
         ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+        const HANDLE deviceLocalMemoryMutex,
         const bool deallocateBackToGpu,
         const VkDevice& device);
     void Destroy();
@@ -88,8 +90,10 @@ public:
     //END_#FrameNumber
     FrameNumber m_lastSubmittedCpuFrame;
 
-private:
-    ///@todo: data should only be accessed by the main thread when in the appropriate m_state is (typically kNotLoaded or kReady) -- I could enforce this with methods
+///BEG_DONT_RECREATE_FENCES
+//private:
+///END_DONT_RECREATE_FENCES
+///@todo: data should only be accessed by the main thread when in the appropriate m_state is (typically kNotLoaded or kReady) -- I could enforce this with methods
     
     class StateMutexed
     {
@@ -113,13 +117,10 @@ private:
     VkFence m_transferQueueFinishedFence, m_graphicsQueueFinishedFence;
 };
 
-void StreamingUnitLoadStart(
-    StreamingUnitRuntime*const streamingUnitPtr,
-    StreamingUnitRuntime**const assetLoadingThreadStreamingUnitPtrPtr,
-    VectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
-    ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
-    const HANDLE assetLoadingThreadWakeHandle,
-    const HANDLE assetLoadingThreadStreamingUnitsDoneLoading);
+void StreamingUnitsLoadStart(
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnits,
+    StreamingUnitLoadQueueManager*const streamingUnitLoadQueueManagerPtr,
+    const HANDLE assetLoadingThreadWakeHandle);
 
 class SerializerCookerOut
 {
