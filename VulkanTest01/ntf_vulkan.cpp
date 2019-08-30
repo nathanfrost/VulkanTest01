@@ -4,6 +4,8 @@
 
 //extern LARGE_INTEGER g_queryPerformanceFrequency;
 
+bool g_deviceDiagnosticCheckpointsSupported;
+
 #if NTF_WIN_TIMER
 FILE* s_winTimer;
 #endif//NTF_WIN_TIMER
@@ -214,7 +216,8 @@ void CopyBufferToImage(
     const uint32_t width,
     const uint32_t height,
     const VkCommandBuffer& commandBuffer,
-    const VkDevice& device)
+    const VkDevice& device,
+    const VkInstance instance)
 {
     VkBufferImageCopy region = {};
     region.bufferOffset = 0;
@@ -227,7 +230,9 @@ void CopyBufferToImage(
     region.imageOffset = { 0, 0, 0 };
     region.imageExtent = { width,height,1 };
 
+    CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdCopyBufferToImage_kBefore)], instance);
     vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+    CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdCopyBufferToImage_kAfter)], instance);
 }
 
 void ImageMemoryBarrier(
@@ -241,7 +246,8 @@ void ImageMemoryBarrier(
     const VkAccessFlags& dstAccessMask, 
     const VkPipelineStageFlags& srcStageMask,
     const VkPipelineStageFlags& dstStageMask,
-    const VkCommandBuffer& commandBuffer)
+    const VkCommandBuffer& commandBuffer,
+    const VkInstance instance)
 {
     VkImageMemoryBarrier barrier = {};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -261,6 +267,7 @@ void ImageMemoryBarrier(
     barrier.srcAccessMask = srcAccessMask;
     barrier.dstAccessMask = dstAccessMask;
 
+    CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdPipelineBarrier_kBefore)], instance);
     vkCmdPipelineBarrier(
         commandBuffer,
         srcStageMask,//perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader),
@@ -270,6 +277,7 @@ void ImageMemoryBarrier(
         0, nullptr,
         1,
         &barrier);
+    CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdPipelineBarrier_kAfter)], instance);
 }
 
 VkResult SubmitCommandBuffer(
@@ -279,7 +287,8 @@ VkResult SubmitCommandBuffer(
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
     const HANDLE*const queueMutexPtr,
-    const VkFence& fenceToSignalWhenCommandBufferDone)
+    const VkFence& fenceToSignalWhenCommandBufferDone,
+    const VkInstance& instance)
 {
     VkSubmitInfo submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -296,26 +305,55 @@ VkResult SubmitCommandBuffer(
     if (queueMutexPtr)
     {
         WaitForSignalWindows(*queueMutexPtr);
-        printf("Acquired mutex %zu\n", (size_t)*queueMutexPtr);
+        //printf("Acquired mutex %zu\n", (size_t)*queueMutexPtr);//#LogStreaming
     }
     else
     {
-        printf("No mutex to acquire\n");
+        //printf("No mutex to acquire\n");//#LogStreaming
     }
 
-    printf( "commandBufferCount=%i;pCommandBuffers[0]=%zx,signalSemaphoreCount=%i;pSignalSemaphores[0]=%zx;waitSemaphoreCount=%i;pWaitSemaphores[0]=%zx, pWaitDstStageMask[0]=%zx, fenceToSignalWhenCommandBufferDone=%zx\n",
-            submitInfo.commandBufferCount, (size_t)submitInfo.pCommandBuffers[0], submitInfo.signalSemaphoreCount, submitInfo.signalSemaphoreCount ? (size_t)submitInfo.pSignalSemaphores[0] : 0, submitInfo.waitSemaphoreCount, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitSemaphores[0] : 0, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitDstStageMask[0] : 0, (size_t)fenceToSignalWhenCommandBufferDone);
+    //printf( "commandBufferCount=%i;pCommandBuffers[0]=%zx,signalSemaphoreCount=%i;pSignalSemaphores[0]=%zx;waitSemaphoreCount=%i;pWaitSemaphores[0]=%zx, pWaitDstStageMask[0]=%zx, fenceToSignalWhenCommandBufferDone=%zx\n",
+    //        submitInfo.commandBufferCount, (size_t)submitInfo.pCommandBuffers[0], submitInfo.signalSemaphoreCount, submitInfo.signalSemaphoreCount ? (size_t)submitInfo.pSignalSemaphores[0] : 0, submitInfo.waitSemaphoreCount, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitSemaphores[0] : 0, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitDstStageMask[0] : 0, (size_t)fenceToSignalWhenCommandBufferDone);//#LogStreaming
     const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, fenceToSignalWhenCommandBufferDone);
+    if (queueSubmitResult == VK_ERROR_DEVICE_LOST)
+    {
+        auto func = (PFN_vkGetQueueCheckpointDataNV)vkGetInstanceProcAddr(instance, "vkGetQueueCheckpointDataNV");
+        if (func)
+        {
+            const size_t checkpointCountMax = 1024;
+            uint32_t checkpointCount = checkpointCountMax;
+            ArraySafeRef<VkCheckpointDataNV> checkpointData((VkCheckpointDataNV*)malloc(checkpointCountMax * sizeof(VkCheckpointDataNV)), checkpointCountMax);
+            for (size_t i = 0; i < checkpointCountMax; ++i)
+            {
+                auto& checkpointDataNV = checkpointData[i];
+                checkpointDataNV.sType = VK_STRUCTURE_TYPE_CHECKPOINT_DATA_NV;
+                checkpointDataNV.pNext = nullptr;
+            }
+            func(queue, &checkpointCount, checkpointData.data());
+            assert(checkpointCount > 0);
+            assert(checkpointCount <= checkpointData.size());
+            printf("-------------vkGetQueueCheckpointDataNV-------------\n");
+            for (uint32_t i = 0; i < checkpointCount; ++i)
+            {
+                auto& checkpointDatum = checkpointData[i];
+                if (checkpointDatum.stage > 0)//for some reason many checkpoints appear to be zeroed/unset
+                {
+                    //assert(checkpointDatum.pCheckpointMarker);//for some reason many checkpoints have a nullptr here -- even if their stage is set seemingly correctly
+                    printf("checkpointData[%i]={stage=0x%x, pCheckpointMarker=%i}\n", i, checkpointDatum.stage, checkpointDatum.pCheckpointMarker ? *(int*)checkpointDatum.pCheckpointMarker : -1);
+                }
+            }
+        }
+    }
     NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
 
     if (queueMutexPtr)
     {
         MutexRelease(*queueMutexPtr);
-        printf("Released mutex %zu\n", (size_t)*queueMutexPtr);
+        //printf("Released mutex %zu\n", (size_t)*queueMutexPtr);//#LogStreaming
     }
     else
     {
-        printf("No mutex to release\n");
+        //printf("No mutex to release\n");//#LogStreaming
     }
 
     return queueSubmitResult;
@@ -331,7 +369,8 @@ void TransferImageFromCpuToGpu(
     const uint32_t transferQueueFamilyIndex,
     const VkCommandBuffer commandBufferGraphics,
     const uint32_t graphicsQueueFamilyIndex,
-    const VkDevice& device)
+    const VkDevice& device,
+    const VkInstance instance)
 {
     const bool unifiedGraphicsAndTransferQueue = (transferQueueFamilyIndex == graphicsQueueFamilyIndex);
 
@@ -347,9 +386,10 @@ void TransferImageFromCpuToGpu(
         VK_ACCESS_TRANSFER_WRITE_BIT,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,//perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader), 
         VK_PIPELINE_STAGE_TRANSFER_BIT,
-        commandBufferTransfer);
+        commandBufferTransfer,
+        instance);
 
-    CopyBufferToImage(stagingBuffer, image, width, height, commandBufferTransfer, device);    
+    CopyBufferToImage(stagingBuffer, image, width, height, commandBufferTransfer, device, instance);
     if (unifiedGraphicsAndTransferQueue)
     {
         //transferQueue == graphicsQueue, so prepare image for shader reads with no change of queue ownership
@@ -364,7 +404,8 @@ void TransferImageFromCpuToGpu(
             VK_ACCESS_SHADER_READ_BIT,
             VK_PIPELINE_STAGE_TRANSFER_BIT, 
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            commandBufferTransfer);
+            commandBufferTransfer, 
+            instance);
     }
     else
     {
@@ -380,7 +421,8 @@ void TransferImageFromCpuToGpu(
             0,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
             VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-            commandBufferTransfer);
+            commandBufferTransfer,
+            instance);
 
         //prepare texture for shader reads
         ImageMemoryBarrier(
@@ -394,7 +436,8 @@ void TransferImageFromCpuToGpu(
             VK_ACCESS_SHADER_READ_BIT,//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            commandBufferGraphics);
+            commandBufferGraphics,
+            instance);
     }
 }
 
@@ -466,11 +509,18 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     return allocateMemoryResult;
 }
 
-void CopyBuffer(const VkBuffer& srcBuffer,const VkBuffer& dstBuffer,const VkDeviceSize& size, const VkCommandBuffer commandBuffer)
+void CopyBuffer(
+    const VkBuffer& srcBuffer, 
+    const VkBuffer& dstBuffer, 
+    const VkDeviceSize& size, 
+    const VkCommandBuffer commandBuffer, 
+    const VkInstance instance)
 {
     VkBufferCopy copyRegion = {};
     copyRegion.size = size;
+    CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdCopyBuffer_kBefore)], instance);
     vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+    CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdCopyBuffer_kAfter)], instance);
 }
 
 #if NTF_DEBUG
@@ -482,6 +532,11 @@ void NTFVulkanInitialize(const VkPhysicalDevice& physicalDevice)
 {
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &s_memProperties);
     vkGetPhysicalDeviceProperties(physicalDevice, &s_physicalDeviceProperties);
+    size_t i = 0;
+    for (auto& cmdSetCheckpointDatum : s_cmdSetCheckpointData)
+    {
+        cmdSetCheckpointDatum = static_cast<CmdSetCheckpointValues>(i++);
+    }
 #if NTF_DEBUG
     s_ntfVulkanInitializeCalled = true;
 #endif//#if NTF_DEBUG
@@ -762,6 +817,7 @@ VkResult CreateDebugReportCallbackEXT(
     VkDebugReportCallbackEXT* pCallback)
 {
     auto func = (PFN_vkCreateDebugReportCallbackEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugReportCallbackEXT");
+    assert(func);
     if (func != nullptr)
     {
         return func(instance, pCreateInfo, pAllocator, pCallback);
@@ -775,6 +831,7 @@ VkResult CreateDebugReportCallbackEXT(
 void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator)
 {
     auto func = (PFN_vkDestroyDebugReportCallbackEXT)vkGetInstanceProcAddr(instance, "vkDestroyDebugReportCallbackEXT");
+    assert(func);
     if (func != nullptr)
     {
         func(instance, callback, pAllocator);
@@ -804,7 +861,7 @@ bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstVe
     }
     VectorSafe<VkExtensionProperties, maxExtensionCount> supportedExtensions(supportedExtensionCount);
     vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &supportedExtensionCount, supportedExtensions.data());
-
+    
     const char*const extensionSupportedSymbol = 0;
     VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM> requiredExtensions(deviceExtensions);
     const size_t requiredExtensionsSize = requiredExtensions.size();
@@ -850,7 +907,7 @@ bool IsDeviceSuitable(
     VkPhysicalDeviceFeatures supportedFeatures;
     vkGetPhysicalDeviceFeatures(physicalDevice, &supportedFeatures);
 
-    return indices.IsComplete() && extensionsSupported && supportedFeatures.samplerAnisotropy;
+    return indices.IsComplete() && extensionsSupported && supportedFeatures.samplerAnisotropy && swapChainAdequate;
 }
 
 bool PickPhysicalDevice(
@@ -862,9 +919,9 @@ bool PickPhysicalDevice(
     assert(physicalDevicePtr);
     VkPhysicalDevice& physicalDevice = *physicalDevicePtr;
 
-    uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-    if (deviceCount == 0)
+    uint32_t physicalDeviceCount = 0;
+    vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
+    if (physicalDeviceCount == 0)
     {
         //failed to find GPUs with Vulkan support
         assert(false);
@@ -872,15 +929,15 @@ bool PickPhysicalDevice(
     }
 
     const uint32_t deviceMax = 8;
-    VectorSafe<VkPhysicalDevice, deviceMax> devices;
-    devices.size(deviceCount);
-    vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
-    devices.size(deviceCount);
-    for (const VkPhysicalDevice& device : devices)
+    VectorSafe<VkPhysicalDevice, deviceMax> physicalDevices;
+    physicalDevices.size(physicalDeviceCount);
+    vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices.data());
+    physicalDevices.size(physicalDeviceCount);
+    for (const VkPhysicalDevice& physicalDeviceCandidate : physicalDevices)
     {
-        if (IsDeviceSuitable(device, surface, deviceExtensions))
+        if (IsDeviceSuitable(physicalDeviceCandidate, surface, deviceExtensions))
         {
-            physicalDevice = device;
+            physicalDevice = physicalDeviceCandidate;
             break;
         }
     }
@@ -1401,6 +1458,30 @@ void EndCommandBuffer(const VkCommandBuffer& commandBuffer)
     NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);
 }
 
+void CmdSetCheckpointNV(const VkCommandBuffer& commandBuffer, const CmdSetCheckpointValues*const pCheckpointMarker, const VkInstance& instance)
+{
+    if (g_deviceDiagnosticCheckpointsSupported)
+    {
+        assert(pCheckpointMarker);
+
+        static PFN_vkCmdSetCheckpointNV s_func;
+        if (!s_func)
+        {
+            //debug code to make sure the extension you expect to be here actually is
+            //uint32_t propertyCount;
+            //ArraySafe<VkExtensionProperties, 128> extensionProperties;
+            //const VkResult enumerateInstanceExtensionPropertiesResult = vkEnumerateInstanceExtensionProperties(nullptr, &propertyCount, extensionProperties.data());
+            //NTF_VK_ASSERT_SUCCESS(enumerateInstanceExtensionPropertiesResult);
+            //assert(propertyCount <= extensionProperties.size());
+
+            s_func = (PFN_vkCmdSetCheckpointNV)vkGetInstanceProcAddr(instance, "vkCmdSetCheckpointNV");
+            assert(s_func);
+        }
+
+        s_func(commandBuffer, pCheckpointMarker);
+    }
+}
+
 void FillCommandBufferPrimary(
     StreamingUnitRuntime::FrameNumber*const streamingUnitLastFrameSubmittedPtr,
     const StreamingUnitRuntime::FrameNumber currentFrameNumber,
@@ -1410,13 +1491,17 @@ void FillCommandBufferPrimary(
     const size_t objectNum,
     const size_t drawCallsPerObjectNum,
     const VkPipelineLayout& pipelineLayout,
-    const VkPipeline& graphicsPipeline)
+    const VkPipeline& graphicsPipeline,
+    const VkInstance& instance)
 {
     NTF_REF(streamingUnitLastFrameSubmittedPtr, streamingUnitLastFrameSubmitted);
     assert(objectNum > 0);
+    CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBindPipeline_kBefore)], instance);
     vkCmdBindPipeline(commandBufferPrimary, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+    CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBindPipeline_kAfter)], instance);
 
     //bind a single descriptorset per streaming unit.  Could also bind this descriptor set once at startup time for each primary command buffer, and then leave it bound indefinitely (this behavior was discovered on a UHD graphics 620; haven't tested on other hardware)
+    CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBindDescriptorSets_kBefore)], instance);
     vkCmdBindDescriptorSets(
         commandBufferPrimary,
         VK_PIPELINE_BIND_POINT_GRAPHICS/*graphics not compute*/,
@@ -1426,6 +1511,7 @@ void FillCommandBufferPrimary(
         &descriptorSet,
         0,
         nullptr);
+    CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBindDescriptorSets_kAfter)], instance);
     for (size_t objectIndex = 0; objectIndex < objectNum; ++objectIndex)
     {
         auto& texturedGeometry = texturedGeometries[objectIndex];
@@ -1433,14 +1519,25 @@ void FillCommandBufferPrimary(
 
         VkBuffer vertexBuffers[] = { texturedGeometry.vertexBuffer };
         VkDeviceSize offsets[] = { 0 };
+
+        CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBindVertexBuffers_kBefore)], instance);
         vkCmdBindVertexBuffers(commandBufferPrimary, 0, 1, vertexBuffers, offsets);
+        CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBindVertexBuffers_kAfter)], instance);
+
+        CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBindIndexBuffer_kBefore)], instance);
         vkCmdBindIndexBuffer(commandBufferPrimary, texturedGeometry.indexBuffer, 0, VK_INDEX_TYPE_UINT32);
+        CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBindIndexBuffer_kAfter)], instance);
 
         for (uint32_t drawCallIndex = 0; drawCallIndex < drawCallsPerObjectNum; ++drawCallIndex)
         {
             const uint32_t pushConstantValue = Cast_size_t_uint32_t(objectIndex*drawCallsPerObjectNum + drawCallIndex);
+            CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdPushConstants_kBefore)], instance);
             vkCmdPushConstants(commandBufferPrimary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstantBindIndexType), &pushConstantValue);
+            CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdPushConstants_kAfter)], instance);
+
+            CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdDrawIndexed_kBefore)], instance);
             vkCmdDrawIndexed(commandBufferPrimary, texturedGeometry.indicesSize, 1, 0, 0, 0);
+            CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdDrawIndexed_kAfter)], instance);
         }
     }
     
@@ -1687,7 +1784,8 @@ void CopyBufferToGpuPrepare(
     const VkMemoryPropertyFlags& memoryPropertyFlags,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice)
+    const VkPhysicalDevice& physicalDevice,
+    const VkInstance instance)
 {
     NTF_REF(deviceLocalMemoryPtr, deviceLocalMemory);
     NTF_REF(gpuBufferPtr, gpuBuffer);
@@ -1721,7 +1819,8 @@ void CopyBufferToGpuPrepare(
         memoryPropertyFlags,
         commandBuffer,
         device,
-        physicalDevice);
+        physicalDevice,
+        instance);
 }
 
 void CreateAndCopyToGpuBuffer(
@@ -1733,7 +1832,8 @@ void CreateAndCopyToGpuBuffer(
     const VkMemoryPropertyFlags& flags,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice)
+    const VkPhysicalDevice& physicalDevice,
+    const VkInstance instance)
 {
     assert(allocatorPtr);
     auto& allocator = *allocatorPtr;
@@ -1759,7 +1859,7 @@ void CreateAndCopyToGpuBuffer(
         device,
         physicalDevice);
 
-    CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandBuffer);
+    CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandBuffer, instance);
 }
 
 void EndSingleTimeCommandsStall(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device)
@@ -1797,7 +1897,8 @@ void CreateDepthResources(
     const VkExtent2D& swapChainExtent,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice)
+    const VkPhysicalDevice& physicalDevice,
+    const VkInstance instance)
 {
     assert(depthImagePtr);
     auto& depthImage = *depthImagePtr;
@@ -1838,7 +1939,8 @@ void CreateDepthResources(
         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-        commandBuffer);
+        commandBuffer,
+        instance);
 }
 
 VkFormat FindSupportedFormat(
@@ -2150,6 +2252,11 @@ void GetRequiredExtensions(VectorSafeRef<const char*> requiredExtensions)
 
 VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers)
 {
+    for (auto validationLayer : validationLayers)
+    {
+        printf("validationLayer=%s\n", validationLayer);
+    }
+
     //BEG_#AllocationCallbacks
     s_allocationCallbacks.pfnAllocation = NTF_vkAllocationFunction;
     s_allocationCallbacks.pfnFree = NTF_vkFreeFunction;
@@ -2174,12 +2281,21 @@ VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers)
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "No Engine";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    appInfo.apiVersion = VK_API_VERSION_1_1;
 
 
     VkInstanceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
+#if NTF_DEBUG
+    //instrument SPIR-V code with debugging checks
+    VkValidationFeatureEnableEXT enables[] = { VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT, VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT };
+    VkValidationFeaturesEXT features = {};
+    features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+    features.enabledValidationFeatureCount = 1;
+    features.pEnabledValidationFeatures = enables;
+    createInfo.pNext = &features;
+#endif NTF_DEBUG
 
     VectorSafe<const char*, 32> extensions(0);
     GetRequiredExtensions(&extensions);
@@ -2435,7 +2551,7 @@ void CreateSwapChain(
     uint32_t queueFamilyIndices[] = { static_cast<uint32_t>(indices.graphicsFamily), static_cast<uint32_t>(indices.presentFamily) };
     if (indices.graphicsFamily != indices.presentFamily)
     {
-        assert(false);///<@todo: maybe use explicit ownership transfers between graphics and present queues?  Seems crazy
+        //assert(false);///<@todo: maybe use explicit ownership transfers between graphics and present queues?  Seems crazy
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;//Images can be used across multiple queue families without explicit ownership transfers.
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndices;

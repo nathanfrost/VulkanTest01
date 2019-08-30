@@ -38,14 +38,14 @@ class StreamingUnitRuntime
 {
 public:
     StreamingUnitRuntime();
-    void Initialize();
+    void Initialize(const VkDevice& device);
     void Free(
         ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated, 
         ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
         const HANDLE deviceLocalMemoryMutex,
         const bool deallocateBackToGpu,
         const VkDevice& device);
-    void Destroy();
+    void Destroy(const VkDevice& device);
 
     enum State {    kFirstValidValue, kNotLoaded = kFirstValidValue,
                     kLoading, kReady, 
@@ -90,9 +90,7 @@ public:
     //END_#FrameNumber
     FrameNumber m_lastSubmittedCpuFrame;
 
-///BEG_DONT_RECREATE_FENCES
-//private:
-///END_DONT_RECREATE_FENCES
+private:
 ///@todo: data should only be accessed by the main thread when in the appropriate m_state is (typically kNotLoaded or kReady) -- I could enforce this with methods
     
     class StateMutexed

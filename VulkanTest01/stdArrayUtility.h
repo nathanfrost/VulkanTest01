@@ -697,10 +697,10 @@ public:
         AssertValid();
     }
     template<size_t kElementsMax>
-    ConstVectorSafeRef(const VectorSafe<T, kElementsMax>& arraySafe)
+    ConstVectorSafeRef(const VectorSafe<T, kElementsMax>& vectorSafe)
     {
-        SetArray(arraySafe.begin());
-        SetElementsNumMax(arraySafe.size());
+        SetArray(vectorSafe.begin());
+        SetElementsNumMax(vectorSafe.size());
         AssertValid();
     }
 

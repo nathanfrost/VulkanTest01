@@ -23,6 +23,7 @@
 
 #include"stdArrayUtility.h"
 
+extern bool g_deviceDiagnosticCheckpointsSupported;
 
 #define NTF_API_DUMP_VALIDATION_LAYER_ON 0
 #ifdef NDEBUG
@@ -50,8 +51,7 @@ const bool s_enableValidationLayers = false;
 #define NTF_VALIDATION_LAYERS_SIZE (NTF_VALIDATION_LAYERS_BASE_SIZE)
 #endif//NTF_API_DUMP_VALIDATION_LAYER_ON
 
-
-#define NTF_DEVICE_EXTENSIONS_NUM 1
+#define NTF_DEVICE_EXTENSIONS_NUM 2
 
 class VulkanPagedStackAllocator;
 
@@ -97,7 +97,8 @@ void TransferImageFromCpuToGpu(
     const uint32_t transferQueueFamilyIndex,
     const VkCommandBuffer commandBufferGraphics,
     const uint32_t graphicsQueueFamilyIndex,
-    const VkDevice& device);
+    const VkDevice& device, 
+    const VkInstance instance);
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device);
 bool CreateAllocateBindImageIfAllocatorHasSpace(
     VkImage*const imagePtr,
@@ -127,7 +128,8 @@ void CopyBufferToImage(
     const uint32_t width,
     const uint32_t height,
     const VkCommandBuffer& commandBuffer,
-    const VkDevice& device);
+    const VkDevice& device,
+    const VkInstance instance);
 VkResult SubmitCommandBuffer(
     ConstVectorSafeRef<VkSemaphore> signalSemaphores,
     ConstVectorSafeRef<VkSemaphore> waitSemaphores,
@@ -135,7 +137,8 @@ VkResult SubmitCommandBuffer(
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
     const HANDLE*const queueMutexPtr,
-    const VkFence& fenceToSignalWhenCommandBufferDone);
+    const VkFence& fenceToSignalWhenCommandBufferDone,
+    const VkInstance& instance);
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
 uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
 void CreateBuffer(
@@ -336,7 +339,8 @@ void FillCommandBufferPrimary(
     const size_t objectNum,
     const size_t drawCallsPerObjectNum,
     const VkPipelineLayout& pipelineLayout,
-    const VkPipeline& graphicsPipeline);
+    const VkPipeline& graphicsPipeline,
+    const VkInstance& instance);
 
 VkDeviceSize AlignToNonCoherentAtomSize(VkDeviceSize i);
 void MapMemory(
@@ -390,7 +394,8 @@ void CopyBufferToGpuPrepare(
     const VkMemoryPropertyFlags& memoryPropertyFlags,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice);
+    const VkPhysicalDevice& physicalDevice,
+    const VkInstance instance);
 void CreateAndCopyToGpuBuffer(
     VulkanPagedStackAllocator*const allocatorPtr,
     VkBuffer*const gpuBufferPtr,
@@ -400,7 +405,8 @@ void CreateAndCopyToGpuBuffer(
     const VkMemoryPropertyFlags& flags,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice);
+    const VkPhysicalDevice& physicalDevice,
+    const VkInstance instance);
 
 void EndCommandBuffer(const VkCommandBuffer& commandBuffer);
 void EndSingleTimeCommandsStall(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device);
@@ -412,7 +418,8 @@ void CreateDepthResources(
     const VkExtent2D& swapChainExtent,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice);
+    const VkPhysicalDevice& physicalDevice,
+    const VkInstance instance);
 
 VkFormat FindSupportedFormat(
     const VkPhysicalDevice& physicalDevice,
@@ -482,6 +489,34 @@ inline T MaxNtf(const T a, const T b)
     assert(b >= 0);
     return a > b ? a : b;
 }
+
+enum class CmdSetCheckpointValues :size_t 
+{
+    vkCmdBeginRenderPass_kBefore, 
+    vkCmdBeginRenderPass_kAfter,
+    vkCmdEndRenderPass_kBefore,
+    vkCmdEndRenderPass_kAfter,
+    vkCmdCopyBufferToImage_kBefore, 
+    vkCmdCopyBufferToImage_kAfter, 
+    vkCmdPipelineBarrier_kBefore, 
+    vkCmdPipelineBarrier_kAfter, 
+    vkCmdCopyBuffer_kBefore, 
+    vkCmdCopyBuffer_kAfter, 
+    vkCmdBindPipeline_kBefore, 
+    vkCmdBindPipeline_kAfter, 
+    vkCmdBindDescriptorSets_kBefore,
+    vkCmdBindDescriptorSets_kAfter, 
+    vkCmdBindVertexBuffers_kBefore, 
+    vkCmdBindVertexBuffers_kAfter, 
+    vkCmdBindIndexBuffer_kBefore, 
+    vkCmdBindIndexBuffer_kAfter, 
+    vkCmdPushConstants_kBefore, 
+    vkCmdPushConstants_kAfter, 
+    vkCmdDrawIndexed_kBefore, 
+    vkCmdDrawIndexed_kAfter,
+    Num};
+static ArraySafe<CmdSetCheckpointValues, static_cast<size_t>(CmdSetCheckpointValues::Num)> s_cmdSetCheckpointData;
+void CmdSetCheckpointNV(const VkCommandBuffer& commandBuffer, const CmdSetCheckpointValues*const pCheckpointMarker, const VkInstance& instance);
 
 class VulkanMemoryHeapPage
 {

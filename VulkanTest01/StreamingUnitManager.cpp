@@ -16,6 +16,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
     auto& deviceLocalMemoryStreamingUnitsAllocated = threadArguments.m_deviceLocalMemoryStreamingUnitsAllocated;
     NTF_REF(threadArguments.m_graphicsQueue, graphicsQueue);
     NTF_REF(threadArguments.m_graphicsQueueMutex, graphicsQueueMutex);
+    NTF_REF(threadArguments.m_instance, instance);
     NTF_REF(threadArguments.m_physicalDevice, physicalDevice);
     NTF_REF(threadArguments.m_queueFamilyIndices, queueFamilyIndices);
     NTF_REF(threadArguments.m_streamingUnitLoadQueueManager, streamingUnitLoadQueueManager);
@@ -74,7 +75,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         //#Wait
         //WaitOnAddress(&signalMemory, &undesiredValue, sizeof(AssetLoadingArguments::SignalMemoryType), INFINITE);//#SynchronizationWindows8+Only
         WaitForSignalWindows(threadWake);
-        printf("threadWake\n");
+        //printf("threadWake\n");////#LogStreaming
 
         if (threadCommand == AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate)
         {
@@ -95,7 +96,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 ensures duplicate and already-loaded streaming units are only loaded once, and that unloading streaming units sit in the queue
                 until they are unloaded*/
             NTF_REF(streamingUnitQueue.m_queue[streamingUnitIndex], streamingUnit);
-            printf("streamingUnit:%s\n", streamingUnit.m_filenameNoExtension.data());
+            //printf("streamingUnit:%s\n", streamingUnit.m_filenameNoExtension.data());//#LogStreaming
             if (streamingUnit.StateMutexed() == StreamingUnitRuntime::kNotLoaded)
             {
                 assert(stagingBuffersGpu.size() == 0);
@@ -124,12 +125,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                 }
                 assert(deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize);
                 MutexRelease(deviceLocalMemoryMutex);
-
-                ///BEG_DONT_RECREATE_FENCES
-                //const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
-                //FenceCreate(&streamingUnit.m_transferQueueFinishedFence, fenceCreateFlagBits, device);
-                //FenceCreate(&streamingUnit.m_graphicsQueueFinishedFence, fenceCreateFlagBits, device);
-                ///END_DONT_RECREATE_FENCES
 
                 assert(streamingUnit.StateMutexed() == StreamingUnitRuntime::kLoading);
 
@@ -214,7 +209,8 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                         queueFamilyIndices.transferFamily,
                         commandBufferTransitionImage,
                         queueFamilyIndices.graphicsFamily,
-                        device);
+                        device,
+                        instance);
 
                     CreateTextureImageView(&streamingUnit.m_textureImageViews[texturedGeometryIndex], texturedGeometry.textureImage, device);
                     {
@@ -249,7 +245,8 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
                         commandBufferTransfer,
                         device,
-                        physicalDevice);
+                        physicalDevice,
+                        instance);
 
                     ArraySafeRef<StreamingUnitByte> stagingBufferCpuToGpuIndices;
                     StreamingUnitIndicesNum indicesNum;
@@ -277,7 +274,8 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                         VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                         commandBufferTransfer,
                         device,
-                        physicalDevice);
+                        physicalDevice,
+                        instance);
                     {
                         //LARGE_INTEGER perfCount;
                         //QueryPerformanceCounter(&perfCount);
@@ -298,7 +296,8 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                     commandBufferTransfer,
                     transferQueue,
                     transferQueueMutex,
-                    streamingUnit.m_transferQueueFinishedFence);
+                    streamingUnit.m_transferQueueFinishedFence,
+                    instance);
 
                 if (!unifiedGraphicsAndTransferQueue)
                 {
@@ -310,7 +309,8 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                         commandBufferTransitionImage,
                         graphicsQueue,
                         &graphicsQueueMutex,
-                        streamingUnit.m_graphicsQueueFinishedFence);
+                        streamingUnit.m_graphicsQueueFinishedFence,
+                        instance);
                 }
 
                 const VkDeviceSize uniformBufferSize = streamingUnit.m_uniformBufferSizeAligned;
@@ -358,7 +358,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                         //printf("ASSET THREAD: vkDestroyBuffer(%llu) at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
                     }
                     stagingBuffersGpu.size(0);
-                    printf("Staging buffers cleaned up\n");
+                    //printf("Staging buffers cleaned up\n");
                 }
             }
         }

@@ -51,11 +51,15 @@ void StreamingUnitsLoadStart(
 StreamingUnitRuntime::StreamingUnitRuntime()
 {
 }
-/** Initialize()/Destroy() concern themselves solely with OS constructs like mutexes (which I don't want to risk fragmenting by creating and
-    destroying), but not Vulkan constructs that we memory-manage */
-void StreamingUnitRuntime::Initialize()
+///Initialize()/Destroy() concern themselves solely with constructs which we don't want to risk fragmenting by creating and destroying
+void StreamingUnitRuntime::Initialize(const VkDevice& device)
 {
     m_stateMutexed.Initialize();
+    const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
+
+    FenceCreate(&m_transferQueueFinishedFence, fenceCreateFlagBits, device);
+    FenceCreate(&m_graphicsQueueFinishedFence, fenceCreateFlagBits, device);
+
 }
 
 StreamingUnitRuntime::StateMutexed::StateMutexed()
@@ -137,7 +141,7 @@ void StreamingUnitRuntime::Free(
     const bool deallocateBackToGpu,
     const VkDevice& device)
 {
-    printf("StreamingUnitRuntime::Free() enter\n");
+    //printf("StreamingUnitRuntime::Free() enter\n");//#LogStreaming
 
     assert(m_stateMutexed.Get() == State::kUnloading);
     m_stateMutexed.Set(State::kNotLoaded);
@@ -162,12 +166,8 @@ void StreamingUnitRuntime::Free(
     vkDestroyPipelineLayout(device, m_pipelineLayout, GetVulkanAllocationCallbacks());
     vkDestroyPipeline(device, m_graphicsPipeline, GetVulkanAllocationCallbacks());
 
-    ///BEG_DONT_RECREATE_FENCES
-    //vkDestroyFence(device, m_transferQueueFinishedFence, GetVulkanAllocationCallbacks());
-    //vkDestroyFence(device, m_graphicsQueueFinishedFence, GetVulkanAllocationCallbacks());
     FenceReset(m_transferQueueFinishedFence, device);
     FenceReset(m_graphicsQueueFinishedFence, device);
-    ///END_DONT_RECREATE_FENCES
 
     //release allocator back to pool
     assert(m_deviceLocalMemory);
@@ -188,14 +188,15 @@ void StreamingUnitRuntime::Free(
     assert(!m_deviceLocalMemory);
     MutexRelease(deviceLocalMemoryMutex);
 
-    printf("StreamingUnitRuntime::Free() exit\n");
+    //printf("StreamingUnitRuntime::Free() exit\n");//#LogStreaming
 }
 
-/** Initialize()/Destroy() concern themselves solely with OS constructs like mutexes (which I don't want to risk fragmenting by creating and 
-    destroying), but not Vulkan constructs that we memory-manage */
-void StreamingUnitRuntime::Destroy()
+///Initialize()/Destroy() concern themselves solely with constructs we don't want to risk fragmenting by creating and destroying)
+void StreamingUnitRuntime::Destroy(const VkDevice& device)
 {
     m_stateMutexed.Destroy();
+    vkDestroyFence(device, m_transferQueueFinishedFence, GetVulkanAllocationCallbacks());
+    vkDestroyFence(device, m_graphicsQueueFinishedFence, GetVulkanAllocationCallbacks());
 }
 
 void StreamingUnitRuntime::AssertValid() const

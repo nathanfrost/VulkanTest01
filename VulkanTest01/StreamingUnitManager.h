@@ -25,6 +25,7 @@ public:
     const HANDLE* m_deviceLocalMemoryMutex;
     const VkQueue* m_graphicsQueue;
     const HANDLE* m_graphicsQueueMutex;
+    const VkInstance* m_instance;
     const VkPhysicalDevice* m_physicalDevice;
     const QueueFamilyIndices* m_queueFamilyIndices;
     const VkRenderPass* m_renderPass;
@@ -44,6 +45,7 @@ public:
         assert(m_deviceLocalMemoryMutex);
         assert(m_graphicsQueue);
         assert(m_graphicsQueueMutex);
+        assert(m_instance);
         assert(m_physicalDevice);
         assert(m_queueFamilyIndices);
         assert(m_renderPass);

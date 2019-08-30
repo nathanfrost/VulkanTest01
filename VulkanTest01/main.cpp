@@ -247,8 +247,8 @@ private:
                     m_deviceLocalMemoryMutex, 
                     true, 
                     m_device);
-                streamingUnit.Destroy();
             }
+            streamingUnit.Destroy(m_device);
         }
 
         CleanupSwapChain(
@@ -317,13 +317,21 @@ private:
 #if NTF_API_DUMP_VALIDATION_LAYER_ON
         s_validationLayers.Push("VK_LAYER_LUNARG_api_dump");///<this produces "file not found" after outputting to (I believe) stdout for a short while; seems like it overruns Windows 7's file descriptor or something.  Weirdly, running from Visual Studio 2015 does not seem to have this problem, but then I'm limited to 9999 lines of the command prompt VS2015 uses for output.  Not ideal
 #endif//NTF_API_DUMP_VALIDATION_LAYER_ON
-
-        m_deviceExtensions = VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
+        m_deviceExtensions = VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>({VK_KHR_SWAPCHAIN_EXTENSION_NAME});
 
         m_instance = CreateInstance(s_validationLayers);
         m_callback = SetupDebugCallback(m_instance);
         CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
         PickPhysicalDevice(&m_physicalDevice, m_surface, m_deviceExtensions, m_instance);
+
+        //if this is an Nvidia card, use diagnostic checkpoints in case of VK_DEVICE_LOST
+        VectorSafe<const char*, 1> deviceDiagnosticCheckpoints({ "VK_NV_device_diagnostic_checkpoints" });
+        if (CheckDeviceExtensionSupport(m_physicalDevice, deviceDiagnosticCheckpoints))
+        {
+            m_deviceExtensions.Push(deviceDiagnosticCheckpoints[0]);//device diagnostic checkpoints are supported, so use them
+            g_deviceDiagnosticCheckpointsSupported = true;//global variable used to avoid passing another boolean to practically every Vulkan function
+        }
+
         NTFVulkanInitialize(m_physicalDevice);
         m_queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
         m_graphicsQueueMutex = MutexCreate();
@@ -384,7 +392,8 @@ private:
             m_swapChainExtent,
             m_commandBufferTransitionImage,
             m_device,
-            m_physicalDevice);
+            m_physicalDevice, 
+            m_instance);
         EndCommandBuffer(m_commandBufferTransitionImage);
         SubmitCommandBuffer(
             ConstVectorSafeRef<VkSemaphore>(),
@@ -393,7 +402,8 @@ private:
             m_commandBufferTransitionImage,
             m_graphicsQueue,
             nullptr,//no need to mutex, since currently only the main thread is running and we guard against launching the asset loading thread until this command buffer completes
-            initializationDone);
+            initializationDone,
+            m_instance);
 
         CreateFrameSyncPrimitives(
             &m_imageAvailableSemaphore,
@@ -405,12 +415,7 @@ private:
         m_streamingUnits.size(2);
         for (auto& streamingUnit : m_streamingUnits)
         {
-            streamingUnit.Initialize();
-            ///BEG_DONT_RECREATE_FENCES
-            const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
-            FenceCreate(&streamingUnit.m_transferQueueFinishedFence, fenceCreateFlagBits, m_device);
-            FenceCreate(&streamingUnit.m_graphicsQueueFinishedFence, fenceCreateFlagBits, m_device);
-            ///END_DONT_RECREATE_FENCES
+            streamingUnit.Initialize(m_device);
             streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemory
         }
         m_streamingUnits[0].m_filenameNoExtension.Snprintf("unitTest0");
@@ -443,6 +448,7 @@ private:
         m_assetLoadingArguments.m_deviceLocalMemoryMutex = &m_deviceLocalMemoryMutex;
         m_assetLoadingArguments.m_graphicsQueue = &m_graphicsQueue;
         m_assetLoadingArguments.m_graphicsQueueMutex = &m_graphicsQueueMutex;
+        m_assetLoadingArguments.m_instance = &m_instance;
         m_assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
         m_assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
         m_assetLoadingArguments.m_streamingUnitLoadQueueManager = &m_streamingUnitLoadQueueManager;
@@ -558,10 +564,12 @@ private:
                             renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
                             renderPassInfo.pClearValues = clearValues.data();
 
+                            CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBeginRenderPass_kBefore)], m_instance);
                             vkCmdBeginRenderPass(commandBufferPrimary, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE/**<no secondary buffers will be executed; VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS = secondary command buffers will execute these commands*/);
+                            CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBeginRenderPass_kAfter)], m_instance);
                         }
 
-                        printf("FillCommandBufferPrimary(%s)\n", streamingUnit.m_filenameNoExtension.data());
+                        //printf("FillCommandBufferPrimary(%s)\n", streamingUnit.m_filenameNoExtension.data());//#LogStreaming
 
                         UpdateUniformBuffer(
                             streamingUnit.m_uniformBufferCpuMemory,
@@ -582,7 +590,8 @@ private:
                             NTF_OBJECTS_NUM,
                             NTF_DRAWS_PER_OBJECT_NUM,
                             streamingUnit.m_pipelineLayout,
-                            streamingUnit.m_graphicsPipeline);
+                            streamingUnit.m_graphicsPipeline,
+                            m_instance);
 
                         break;
                     }
@@ -614,9 +623,10 @@ private:
             }
             if(streamingUnitRendered)
             {
+                CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdEndRenderPass_kAfter)], m_instance);
                 vkCmdEndRenderPass(commandBufferPrimary);
+                CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdEndRenderPass_kAfter)], m_instance);
                 EndCommandBuffer(commandBufferPrimary);
-
 #if NTF_WIN_TIMER
                 WIN_TIMER_STOP(s_frameTimer);
                 ArraySafe<char, 256> string;
@@ -698,7 +708,8 @@ private:
                     m_commandBuffersPrimary[acquiredImageIndex],
                     m_graphicsQueue,
                     &m_graphicsQueueMutex,
-                    drawFrameFinishedFence.m_fence);
+                    drawFrameFinishedFence.m_fence,
+                    m_instance);
 
                 drawFrameFinishedFence.m_frameNumberCpuSubmitted = m_frameNumberCurrentCpu;//so we know when it's safe to unload streaming unit's assets
                 drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted = false;//this frame has not been completed by the Gpu until this fence signals
