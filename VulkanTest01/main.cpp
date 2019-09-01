@@ -301,7 +301,9 @@ private:
 
         HandleCloseWindows(&m_deviceLocalMemoryMutex);
         HandleCloseWindows(&m_graphicsQueueMutex);
+#if NTF_ASSET_LOADING_MULTITHREADED
         HandleCloseWindows(&m_assetLoadingThreadData.m_handles.threadHandle);
+#endif//#if NTF_ASSET_LOADING_MULTITHREADED
         HandleCloseWindows(&m_assetLoadingThreadData.m_handles.doneEventHandle);
         HandleCloseWindows(&m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
@@ -462,8 +464,10 @@ private:
         
         m_assetLoadingArguments.AssertValid();
 
+#if NTF_ASSET_LOADING_MULTITHREADED
         ///@todo: THREAD_MODE_BACKGROUND_BEGIN or THREAD_PRIORITY_BELOW_NORMAL and SetThreadPriority
         m_assetLoadingThreadData.m_handles.threadHandle = CreateThreadWindows(AssetLoadingThread, &m_assetLoadingArguments);
+#endif//#if NTF_ASSET_LOADING_MULTITHREADED
 
         VectorSafe<StreamingUnitRuntime*, 1> streamingUnits;
         streamingUnits.Push(&m_streamingUnits[0]);

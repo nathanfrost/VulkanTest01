@@ -2,6 +2,8 @@
 #include"ntf_vulkan.h"
 #include"QueueCircular.h"
 
+#define NTF_ASSET_LOADING_MULTITHREADED 1
+
 DWORD WINAPI AssetLoadingThread(void* arg);
 
 struct QueueFamilyIndices;

@@ -34,6 +34,8 @@ struct TexturedGeometry
     }
 };
 
+class AssetLoadingArguments;
+struct AssetLoadingPersistentResources;
 class StreamingUnitRuntime
 {
 public:
@@ -111,7 +113,9 @@ private:
         State m_state;
     } m_stateMutexed;
 
-    friend DWORD WINAPI AssetLoadingThread(void* arg);
+    friend void StreamingUnitsLoad(
+        AssetLoadingArguments*const threadArgumentsPtr, 
+        AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr);
     VkFence m_transferQueueFinishedFence, m_graphicsQueueFinishedFence;
 };
 
