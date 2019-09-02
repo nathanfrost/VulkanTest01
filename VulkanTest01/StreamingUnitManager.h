@@ -2,7 +2,7 @@
 #include"ntf_vulkan.h"
 #include"QueueCircular.h"
 
-#define NTF_ASSET_LOADING_MULTITHREADED 1
+#define NTF_ASSET_LOADING_MULTITHREADED 0
 
 DWORD WINAPI AssetLoadingThread(void* arg);
 
@@ -58,6 +58,25 @@ public:
         assert(m_transferQueue);
     }
 };
+struct AssetLoadingPersistentResources
+{
+    StackCpu<size_t> shaderLoadingScratchSpace;
+    VkBuffer stagingBufferGpu;
+    VkDeviceMemory stagingBufferGpuMemory;
+    VkDeviceSize offsetToFirstByteOfStagingBuffer;
+    VkDeviceSize stagingBufferGpuAlignmentStandard;
+    StackCpu<VkDeviceSize> stagingBufferMemoryMapCpuToGpu;
+    VkSemaphore transferFinishedSemaphore;
+};
+void AssetLoadingThreadPersistentResourcesCreate(
+    AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr,
+    VulkanPagedStackAllocator*const deviceLocalMemoryPersistentPtr,
+    const VkPhysicalDevice& physicalDevice,
+    const VkDevice& device);
+void AssetLoadingPersistentResourcesDestroy(
+    AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr,
+    const HANDLE& threadDone,
+    const VkDevice& device);
 class StreamingUnitQueue
 {
 public:
@@ -127,3 +146,7 @@ struct AssetLoadingThreadData
     StreamingUnitLoadQueueManager m_streamingUnitQueue;
     AssetLoadingArguments::ThreadCommand m_threadCommand;
 };
+
+void StreamingUnitsLoadAllQueued(
+    AssetLoadingArguments*const threadArgumentsPtr,
+    AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr);

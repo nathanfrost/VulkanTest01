@@ -467,6 +467,8 @@ private:
 #if NTF_ASSET_LOADING_MULTITHREADED
         ///@todo: THREAD_MODE_BACKGROUND_BEGIN or THREAD_PRIORITY_BELOW_NORMAL and SetThreadPriority
         m_assetLoadingThreadData.m_handles.threadHandle = CreateThreadWindows(AssetLoadingThread, &m_assetLoadingArguments);
+#else
+        AssetLoadingThreadPersistentResourcesCreate(&m_assetLoadingPersistentResources, &m_deviceLocalMemoryPersistent, m_physicalDevice, m_device);
 #endif//#if NTF_ASSET_LOADING_MULTITHREADED
 
         VectorSafe<StreamingUnitRuntime*, 1> streamingUnits;
@@ -739,10 +741,16 @@ private:
                 NTF_VK_ASSERT_SUCCESS(result);
 
             }
+#if !NTF_ASSET_LOADING_MULTITHREADED
+            StreamingUnitsLoadAllQueued(&m_assetLoadingArguments, &m_assetLoadingPersistentResources);
+#endif//!NTF_ASSET_LOADING_MULTITHREADED
 
             ++m_frameNumberCurrentCpu;
         }
 
+#if !NTF_ASSET_LOADING_MULTITHREADED
+        AssetLoadingPersistentResourcesDestroy(&m_assetLoadingPersistentResources, m_assetLoadingThreadData.m_handles.doneEventHandle, m_device);
+#endif//!NTF_ASSET_LOADING_MULTITHREADED
         //wait for the logical device to finish operations before exiting MainLoop and destroying the window
         vkDeviceWaitIdle(m_device);
     }
@@ -796,6 +804,9 @@ private:
 
     AssetLoadingThreadData m_assetLoadingThreadData;
     AssetLoadingArguments m_assetLoadingArguments;
+#if !NTF_ASSET_LOADING_MULTITHREADED
+    AssetLoadingPersistentResources m_assetLoadingPersistentResources;
+#endif//#if NTF_ASSET_LOADING_MULTITHREADED
 
     StreamingUnitRuntime::FrameNumber m_frameNumberCurrentCpu;
     StreamingUnitRuntime::FrameNumber m_lastCpuFrameCompleted = 0;

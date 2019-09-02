@@ -113,7 +113,7 @@ private:
         State m_state;
     } m_stateMutexed;
 
-    friend void StreamingUnitsLoad(
+    friend void StreamingUnitsLoadAllQueued(
         AssetLoadingArguments*const threadArgumentsPtr, 
         AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr);
     VkFence m_transferQueueFinishedFence, m_graphicsQueueFinishedFence;

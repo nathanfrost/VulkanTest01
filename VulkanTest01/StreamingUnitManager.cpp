@@ -4,17 +4,7 @@
 
 #define NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE (128 * 1024 * 1024)
 
-struct AssetLoadingPersistentResources
-{
-    StackCpu<size_t> shaderLoadingScratchSpace;
-    VkBuffer stagingBufferGpu;
-    VkDeviceMemory stagingBufferGpuMemory;
-    VkDeviceSize offsetToFirstByteOfStagingBuffer;
-    VkDeviceSize stagingBufferGpuAlignmentStandard;
-    StackCpu<VkDeviceSize> stagingBufferMemoryMapCpuToGpu;
-    VkSemaphore transferFinishedSemaphore;
-};
-static void AssetLoadingThreadPersistentResourcesCreate(
+void AssetLoadingThreadPersistentResourcesCreate(
     AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr, 
     VulkanPagedStackAllocator*const deviceLocalMemoryPersistentPtr,
     const VkPhysicalDevice& physicalDevice, 
@@ -58,7 +48,9 @@ static void AssetLoadingThreadPersistentResourcesCreate(
     CreateVulkanSemaphore(&transferFinishedSemaphore, device);
 }
 
-static void StreamingUnitsLoad(AssetLoadingArguments*const threadArgumentsPtr, AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr)
+void StreamingUnitsLoadAllQueued(
+    AssetLoadingArguments*const threadArgumentsPtr, 
+    AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr)
 {
     NTF_REF(threadArgumentsPtr, threadArguments);
 
@@ -389,7 +381,10 @@ static void StreamingUnitsLoad(AssetLoadingArguments*const threadArgumentsPtr, A
     streamingUnitLoadQueueManager.Release(&streamingUnitQueue);
 }
 
-static void AssetLoadingPersistentResourcesDestroy(AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr, const VkDevice& device)
+void AssetLoadingPersistentResourcesDestroy(
+    AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr, 
+    const HANDLE& threadDone, 
+    const VkDevice& device)
 {
     NTF_REF(assetLoadingPersistentResourcesPtr, assetLoadingPersistentResources);
 
@@ -400,6 +395,8 @@ static void AssetLoadingPersistentResourcesDestroy(AssetLoadingPersistentResourc
 
     assetLoadingPersistentResources.stagingBufferMemoryMapCpuToGpu.Destroy();
     vkDestroySemaphore(device, assetLoadingPersistentResources.transferFinishedSemaphore, GetVulkanAllocationCallbacks());
+
+    SignalSemaphoreWindows(threadDone);
 }
 DWORD WINAPI AssetLoadingThread(void* arg)
 {
@@ -428,11 +425,10 @@ DWORD WINAPI AssetLoadingThread(void* arg)
             break;
         }
 
-        StreamingUnitsLoad(&threadArguments, &assetLoadingPersistentResources);
+        StreamingUnitsLoadAllQueued(&threadArguments, &assetLoadingPersistentResources);
     }
 
-    AssetLoadingPersistentResourcesDestroy(&assetLoadingPersistentResources, device);
-    SignalSemaphoreWindows(threadDone);
+    AssetLoadingPersistentResourcesDestroy(&assetLoadingPersistentResources, threadDone, device);
     return 0;
 }
 
