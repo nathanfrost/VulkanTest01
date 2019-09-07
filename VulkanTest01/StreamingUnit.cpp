@@ -24,10 +24,14 @@ void StreamingUnitsLoadStart(
         {
             streamingUnitQueue.m_queue.Enqueue(&streamingUnit);
             UnsignalSemaphoreWindows(streamingUnitQueue.m_streamingUnitsDoneLoadingHandle);
+            NTF_LOG_STREAMING("%i:StreamingUnitsLoadStart:UnsignalSemaphoreWindows():streamingUnitQueue=%p->m_streamingUnitsDoneLoadingHandle=%zu\n", 
+                GetCurrentThreadId(), &streamingUnitQueue, (size_t)streamingUnitQueue.m_streamingUnitsDoneLoadingHandle);
         }
     }
     streamingUnitLoadQueueManager.Release(&streamingUnitQueue);
     SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
+    NTF_LOG_STREAMING("%i:SignalSemaphoreWindows():assetLoadingThreadWakeHandle=%zu\n", 
+        GetCurrentThreadId(), (size_t)assetLoadingThreadWakeHandle);
 }
 
 /*static*/ void Vertex::GetAttributeDescriptions(VectorSafeRef<VkVertexInputAttributeDescription> attributeDescriptions)
@@ -172,6 +176,7 @@ void StreamingUnitRuntime::Free(
     //release allocator back to pool
     assert(m_deviceLocalMemory);
     WaitForSignalWindows(deviceLocalMemoryMutex);
+    NTF_LOG_STREAMING("%i:StreamingUnitRuntime::Free:WaitForSignalWindows(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
     size_t deviceLocalMemoryStreamingUnitsIndex = 0;
     for (auto& deviceLocalMemoryStreamingUnit : deviceLocalMemoryStreamingUnits)
     {
@@ -187,6 +192,7 @@ void StreamingUnitRuntime::Free(
     }
     assert(!m_deviceLocalMemory);
     MutexRelease(deviceLocalMemoryMutex);
+    NTF_LOG_STREAMING("%i:StreamingUnitRuntime::Free:MutexRelease(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
 
     //printf("StreamingUnitRuntime::Free() exit\n");//#LogStreaming
 }

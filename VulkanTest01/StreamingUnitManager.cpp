@@ -91,7 +91,7 @@ void StreamingUnitsLoadAllQueued(
 
     const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
     assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.transferFamily == queueFamilyIndices.graphicsFamily));
-    const HANDLE*const transferQueueMutex = unifiedGraphicsAndTransferQueue ? &graphicsQueueMutex : nullptr;//if we have only one queue rather than a separate graphics and transfer queue, then we must be mutex that queue
+    const HANDLE*const transferQueueMutex = unifiedGraphicsAndTransferQueue ? &graphicsQueueMutex : nullptr;//if we have a single queue for graphics and transfer rather than two separate queues, then we must be mutex that one queue
 
     assert(threadCommand == AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit);
 
@@ -125,6 +125,7 @@ void StreamingUnitsLoadAllQueued(
 
             //allocate a memory allocator to the streaming unit
             WaitForSignalWindows(deviceLocalMemoryMutex);
+            NTF_LOG_STREAMING("%i:StreamingUnitsLoadAllQueued:WaitForSignalWindows(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
             const size_t deviceLocalMemoryStreamingUnitsSize = deviceLocalMemoryStreamingUnits.size();
             size_t deviceLocalMemoryStreamingUnitIndex = 0;
             for (; deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize; ++deviceLocalMemoryStreamingUnitIndex)
@@ -353,9 +354,11 @@ void StreamingUnitsLoadAllQueued(
             //clean up staging buffers if they were in use but have completed their transfers
             {
                 FenceWaitUntilSignalled(streamingUnit.m_transferQueueFinishedFence, device);
+                NTF_LOG_STREAMING("%i:FenceWaitUntilSignalled(streamingUnit.m_transferQueueFinishedFence=%zu)\n", GetCurrentThreadId(), (size_t)streamingUnit.m_transferQueueFinishedFence);
                 if (!unifiedGraphicsAndTransferQueue)
                 {
                     FenceWaitUntilSignalled(streamingUnit.m_graphicsQueueFinishedFence, device);
+                    NTF_LOG_STREAMING("%i:FenceWaitUntilSignalled(streamingUnit.m_graphicsQueueFinishedFence=%zu)\n", GetCurrentThreadId(), (size_t)streamingUnit.m_graphicsQueueFinishedFence);
                 }
 
                 streamingUnit.StateMutexed(StreamingUnitRuntime::kReady);//streaming unit is ready to render on the main thread
@@ -418,7 +421,7 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         //#Wait
         //WaitOnAddress(&signalMemory, &undesiredValue, sizeof(AssetLoadingArguments::SignalMemoryType), INFINITE);//#SynchronizationWindows8+Only
         WaitForSignalWindows(threadWake);
-        //printf("threadWake\n");////#LogStreaming
+        NTF_LOG_STREAMING("%i:AssetLoadingThread():threadWake\n", GetCurrentThreadId());
 
         if (threadCommand == AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate)
         {
@@ -437,11 +440,17 @@ void StreamingUnitLoadQueueManager::SwitchStreamingUnitLoadQueues_and_AcquireBot
     for (auto& streamingUnitQueue : m_streamingUnitQueues)
     {
         WaitForSignalWindows(streamingUnitQueue.m_modifyMutex);
+        NTF_LOG_STREAMING("%i:StreamingUnitLoadQueueManager::SwitchStreamingUnitLoadQueues_and_AcquireBothQueueMutexes:WaitForSignalWindows(&streamingUnitQueue=%p->streamingUnitQueue.m_modifyMutex=%zu)\n", 
+            GetCurrentThreadId(), &streamingUnitQueue, (size_t)streamingUnitQueue.m_modifyMutex);
     }
 
     WaitForSignalWindows(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
+    NTF_LOG_STREAMING("%i:StreamingUnitLoadQueueManager::WaitForSignalWindows:WaitForSignalWindows(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex=%zu)\n",
+        GetCurrentThreadId(), (size_t)m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
     m_mainThreadStreamingUnitQueue0 = !m_mainThreadStreamingUnitQueue0;
     MutexRelease(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
+    NTF_LOG_STREAMING("%i:StreamingUnitLoadQueueManager::WaitForSignalWindows:MutexRelease(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex=%zu)\n",
+        GetCurrentThreadId(), (size_t)m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
 }
 
 void StreamingUnitLoadQueueManager::Destroy()

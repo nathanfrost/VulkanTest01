@@ -611,6 +611,7 @@ private:
 
                         if (streamingUnit.m_lastSubmittedCpuFrame <= m_lastCpuFrameCompleted)
                         {
+                            NTF_LOG_STREAMING("%i:streamingUnit=%p->m_lastSubmittedCpuFrame=%i<=m_lastCpuFrameCompleted=%i -- FREEING\n", GetCurrentThreadId(), &streamingUnit, streamingUnit.m_lastSubmittedCpuFrame, m_lastCpuFrameCompleted);
                             //printf("MAIN THREAD: m_streamingUnit.Free(); time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
                             streamingUnit.Free(
                                 &m_deviceLocalMemoryStreamingUnitsAllocated, 
@@ -645,6 +646,7 @@ private:
                 WIN_TIMER_DEF_START(waitForFences);
                 FenceWaitUntilSignalled(drawFrameFinishedFence.m_fence, m_device);
                 WIN_TIMER_STOP(waitForFences);
+                NTF_LOG_STREAMING("%i:FenceWaitUntilSignalled(drawFrameFinishedFence.m_fence=%zu)\n", GetCurrentThreadId(), (size_t)drawFrameFinishedFence.m_fence);
                 //const int maxLen = 256;
                 //char buf[maxLen];
                 //snprintf(&buf[0], maxLen, "waitForFences:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(waitForFences));
@@ -731,7 +733,18 @@ private:
                 presentInfo.pResults = nullptr; // allows you to specify an array of VkResult values to check for every individual swap chain if presentation was successful
                 presentInfo.pImageIndices = &acquiredImageIndex;
 
+                const bool unifiedGraphicsAndPresentQueue = m_presentQueue == m_graphicsQueue;
+                if (unifiedGraphicsAndPresentQueue)
+                {
+                    WaitForSignalWindows(m_graphicsQueueMutex);
+                }
                 const VkResult result = vkQueuePresentKHR(m_presentQueue, &presentInfo);
+                NTF_LOG_STREAMING("%i:vkQueuePresentKHR(m_presentQueue=%zu,signalSemaphores.size()=%zu; &signalSemaphores[0]=%p)\n", 
+                    GetCurrentThreadId(), (size_t)m_presentQueue, signalSemaphores.size(), &signalSemaphores[0]);
+                if (unifiedGraphicsAndPresentQueue)
+                {
+                    ReleaseMutex(m_graphicsQueueMutex);
+                }
                 if (result == VK_ERROR_OUT_OF_DATE_KHR/*swap chain can no longer be used for rendering*/ ||
                     result == VK_SUBOPTIMAL_KHR/*swap chain can still present image, but surface properties don't entirely match; for example, during resizing*/)
                 {

@@ -2,7 +2,8 @@
 #include"ntf_vulkan.h"
 #include"QueueCircular.h"
 
-#define NTF_ASSET_LOADING_MULTITHREADED 0
+#define NTF_ASSET_LOADING_MULTITHREADED 1
+
 
 DWORD WINAPI AssetLoadingThread(void* arg);
 
@@ -110,24 +111,35 @@ public:
     inline StreamingUnitQueue* GetMainThreadStreamingUnitLoadQueue_after_WaitForSignalWindows() ///<should only be called by main thread
     {  
         WaitForSignalWindows(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
+        NTF_LOG_STREAMING("%i:GetMainThreadStreamingUnitLoadQueue_after_WaitForSignalWindows:WaitForSignalWindows(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex=%zu)\n", GetCurrentThreadId(), (size_t)m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
+        
         StreamingUnitQueue*const streamingUnitQueuePtr = GetMainThreadStreamingUnitLoadQueue();
         MutexRelease(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
+        NTF_LOG_STREAMING("%i:GetMainThreadStreamingUnitLoadQueue_after_WaitForSignalWindows:MutexRelease(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex=%zu)\n", GetCurrentThreadId(), (size_t)m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
 
         WaitForSignalWindows(streamingUnitQueuePtr->m_modifyMutex);
+        NTF_LOG_STREAMING("%i:GetMainThreadStreamingUnitLoadQueue_after_WaitForSignalWindows:WaitForSignalWindows(streamingUnitQueuePtr->m_modifyMutex=%zu)\n", GetCurrentThreadId(), (size_t)streamingUnitQueuePtr->m_modifyMutex);
+        NTF_LOG_STREAMING("%i:GetMainThreadStreamingUnitLoadQueue_after_WaitForSignalWindows:return streamingUnitQueuePtr=%p)\n", GetCurrentThreadId(), streamingUnitQueuePtr);
         return streamingUnitQueuePtr;
     }
     inline void Release(StreamingUnitQueue*const streamingUnitLoadQueuePtr)
     {
         NTF_REF(streamingUnitLoadQueuePtr, streamingUnitLoadQueue);
         MutexRelease(streamingUnitLoadQueue.m_modifyMutex);
+        NTF_LOG_STREAMING("%i:GetMainThreadStreamingUnitLoadQueue_after_WaitForSignalWindows:MutexRelease(streamingUnitLoadQueue.m_modifyMutex=%zu)\n", GetCurrentThreadId(), (size_t)streamingUnitLoadQueue.m_modifyMutex);
     }
     inline StreamingUnitQueue* GetAssetLoadingStreamingUnitLoadQueue_after_WaitForSignalWindows()
     {
         WaitForSignalWindows(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
+        NTF_LOG_STREAMING("%i:GetAssetLoadingStreamingUnitLoadQueue_after_WaitForSignalWindows:WaitForSignalWindows(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex=%zu)\n", GetCurrentThreadId(), (size_t)m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
+
         StreamingUnitQueue*const streamingUnitQueuePtr = GetAssetLoadingStreamingUnitLoadQueue();
         MutexRelease(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
+        NTF_LOG_STREAMING("%i:GetAssetLoadingStreamingUnitLoadQueue_after_WaitForSignalWindows:MutexRelease(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex=%zu)\n", GetCurrentThreadId(), (size_t)m_mainThread_StreamingUnitQueue_IsIndex0_Mutex);
 
         WaitForSignalWindows(streamingUnitQueuePtr->m_modifyMutex);
+        NTF_LOG_STREAMING("%i:GetAssetLoadingStreamingUnitLoadQueue_after_WaitForSignalWindows:WaitForSignalWindows(streamingUnitQueuePtr->m_modifyMutex=%zu)\n", GetCurrentThreadId(), (size_t)streamingUnitQueuePtr->m_modifyMutex);
+        NTF_LOG_STREAMING("%i:GetMainThreadStreamingUnitLoadQueue_after_WaitForSignalWindows:return streamingUnitQueuePtr=%p)\n", GetCurrentThreadId(), streamingUnitQueuePtr);
         return streamingUnitQueuePtr;
     }
     void SwitchStreamingUnitLoadQueues_and_AcquireBothQueueMutexes();///<should only be called by asset loading thread

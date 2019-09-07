@@ -305,15 +305,15 @@ VkResult SubmitCommandBuffer(
     if (queueMutexPtr)
     {
         WaitForSignalWindows(*queueMutexPtr);
-        //printf("Acquired mutex %zu\n", (size_t)*queueMutexPtr);//#LogStreaming
+        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:Acquired mutex(*queueMutexPtr=%zu)\n", GetCurrentThreadId(), (size_t)*queueMutexPtr);
     }
     else
     {
-        //printf("No mutex to acquire\n");//#LogStreaming
+        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:No mutex to acquire\n", GetCurrentThreadId());
     }
 
-    //printf( "commandBufferCount=%i;pCommandBuffers[0]=%zx,signalSemaphoreCount=%i;pSignalSemaphores[0]=%zx;waitSemaphoreCount=%i;pWaitSemaphores[0]=%zx, pWaitDstStageMask[0]=%zx, fenceToSignalWhenCommandBufferDone=%zx\n",
-    //        submitInfo.commandBufferCount, (size_t)submitInfo.pCommandBuffers[0], submitInfo.signalSemaphoreCount, submitInfo.signalSemaphoreCount ? (size_t)submitInfo.pSignalSemaphores[0] : 0, submitInfo.waitSemaphoreCount, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitSemaphores[0] : 0, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitDstStageMask[0] : 0, (size_t)fenceToSignalWhenCommandBufferDone);//#LogStreaming
+    NTF_LOG_STREAMING(  "%i:SubmitCommandBuffer:queue=%zu,commandBufferCount=%i;pCommandBuffers[0]=%zx,signalSemaphoreCount=%i;pSignalSemaphores[0]=%zx;waitSemaphoreCount=%i;pWaitSemaphores[0]=%zx, pWaitDstStageMask[0]=%zx, fenceToSignalWhenCommandBufferDone=%zx\n",
+                        GetCurrentThreadId(), (size_t)queue, submitInfo.commandBufferCount, (size_t)submitInfo.pCommandBuffers[0], submitInfo.signalSemaphoreCount, submitInfo.signalSemaphoreCount ? (size_t)submitInfo.pSignalSemaphores[0] : 0, submitInfo.waitSemaphoreCount, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitSemaphores[0] : 0, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitDstStageMask[0] : 0, (size_t)fenceToSignalWhenCommandBufferDone);
     const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, fenceToSignalWhenCommandBufferDone);
     if (queueSubmitResult == VK_ERROR_DEVICE_LOST)
     {
@@ -349,7 +349,7 @@ VkResult SubmitCommandBuffer(
     if (queueMutexPtr)
     {
         MutexRelease(*queueMutexPtr);
-        //printf("Released mutex %zu\n", (size_t)*queueMutexPtr);//#LogStreaming
+        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:MutexRelease(*queueMutexPtr=%zu)\n", GetCurrentThreadId(), (size_t)*queueMutexPtr);
     }
     else
     {
@@ -2706,6 +2706,7 @@ bool VulkanPagedStackAllocator::PushAlloc(
     const VkPhysicalDevice& physicalDevice)
 {
     WaitForSignalWindows(m_mutex);
+    NTF_LOG_STREAMING("%i:VulkanPagedStackAllocator::PushAlloc:WaitForSignalWindows(m_mutex=%zu)\n", GetCurrentThreadId(), (size_t)m_mutex);
     assert(m_initialized);
 
     assert(memoryOffsetPtr);
@@ -2732,6 +2733,7 @@ bool VulkanPagedStackAllocator::PushAlloc(
     assert(allocResult);
 
     MutexRelease(m_mutex);
+    NTF_LOG_STREAMING("%i:VulkanPagedStackAllocator::PushAlloc:MutexRelease(m_mutex=%zu)\n", GetCurrentThreadId(), (size_t)m_mutex);
     return allocResult;
 }
 

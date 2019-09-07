@@ -6,6 +6,13 @@
 #include"stdArrayUtility.h"
 #include"StreamingCookAndRuntime.h"
 
+#define NTF_LOG_STREAMING_ENABLED 0
+#if NTF_LOG_STREAMING_ENABLED
+#define NTF_LOG_STREAMING(...) printf(__VA_ARGS__)
+#else
+#define NTF_LOG_STREAMING
+#endif//#if NTF_LOG_STREAMING_ENABLED
+
 class VulkanPagedStackAllocator;
 class StreamingUnitLoadQueueManager;
 
