@@ -53,27 +53,100 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 static void UnitTest(
     StreamingUnitRuntime*const streamingUnit0,
     StreamingUnitRuntime*const streamingUnit1,
-    StreamingUnitLoadQueueManager*const streamingUnitRuntimeQueueManager,
+    StreamingUnitRuntime*const streamingUnit2,
+    StreamingCommandQueueManager*const streamingUnitRuntimeQueueManager,
     const HANDLE assetLoadingThreadWakeHandle)
 {
+    static enum class UnitTestState:size_t
+    {
+        k0_LoadIndexZero=0, 
+        k1_LoadIndexOne,
+        k2_LoadIndexTwo,
+        k3_UnloadIndexZero,
+        k4_UnloadIndexTwo,
+        k5_UnloadIndexOne_And_LoadIndexTwo,
+        k6_UnloadIndexTwo,
+        k7_LoadIndexZero_And_LoadIndexOne,
+        k8_UnloadIndexZero_And_UnloadIndexOne,
+        k9_DoNothing,
+        kNum
+    } s_state;
     assert(streamingUnit0);
     assert(streamingUnit1);
+    assert(streamingUnit2);
     assert(streamingUnitRuntimeQueueManager);
 
-    const StreamingUnitRuntime::State state0 = streamingUnit0->StateMutexed();
-    const StreamingUnitRuntime::State state1 = streamingUnit1->StateMutexed();
-    if (state0 == StreamingUnitRuntime::kReady)
+    VectorSafe<StreamingCommand, 2> streamingCommands;
+    switch (s_state)
     {
-        if (state1 == StreamingUnitRuntime::kNotLoaded)
+    case UnitTestState::k0_LoadIndexZero:
         {
-            VectorSafe<StreamingUnitRuntime*, 1> streamingUnits;
-            streamingUnits.Push(streamingUnit1);
-            StreamingUnitsLoadStart(&streamingUnits, streamingUnitRuntimeQueueManager, assetLoadingThreadWakeHandle);
+            streamingCommands.Push(StreamingCommand(StreamingCommand::kLoad, streamingUnit0));
+            StreamingCommandsStart(&streamingCommands, streamingUnitRuntimeQueueManager, assetLoadingThreadWakeHandle);
+            break;
         }
-        else if (state1 == StreamingUnitRuntime::kReady)
+        case UnitTestState::k1_LoadIndexOne:
         {
-            streamingUnit0->StateMutexed(StreamingUnitRuntime::kUnloading);
+            streamingCommands.Push(StreamingCommand(StreamingCommand::kLoad, streamingUnit1));
+            StreamingCommandsStart(&streamingCommands, streamingUnitRuntimeQueueManager, assetLoadingThreadWakeHandle);
+            break;
         }
+        case UnitTestState::k2_LoadIndexTwo:
+        {
+            streamingCommands.Push(StreamingCommand(StreamingCommand::kLoad, streamingUnit2));
+            StreamingCommandsStart(&streamingCommands, streamingUnitRuntimeQueueManager, assetLoadingThreadWakeHandle);
+            break;
+        }
+        case UnitTestState::k3_UnloadIndexZero:
+        {
+            streamingUnit0->m_unloadAsSoonAsGpuIsDoneRendering = true;
+            break;
+        }
+        case UnitTestState::k4_UnloadIndexTwo:
+        {
+            streamingUnit2->m_unloadAsSoonAsGpuIsDoneRendering = true;
+            break;
+        }
+        case UnitTestState::k5_UnloadIndexOne_And_LoadIndexTwo:
+        {
+            streamingUnit1->m_unloadAsSoonAsGpuIsDoneRendering = true;
+            streamingCommands.Push(StreamingCommand(StreamingCommand::kLoad, streamingUnit2));
+            StreamingCommandsStart(&streamingCommands, streamingUnitRuntimeQueueManager, assetLoadingThreadWakeHandle);
+            break;
+        }
+        case UnitTestState::k6_UnloadIndexTwo:
+        {
+            streamingUnit2->m_unloadAsSoonAsGpuIsDoneRendering = true;
+            break;
+        }
+        case UnitTestState::k7_LoadIndexZero_And_LoadIndexOne:
+        {
+            streamingCommands.Push(StreamingCommand(StreamingCommand::kLoad, streamingUnit0));
+            streamingCommands.Push(StreamingCommand(StreamingCommand::kLoad, streamingUnit1));
+            StreamingCommandsStart(&streamingCommands, streamingUnitRuntimeQueueManager, assetLoadingThreadWakeHandle);
+            break;
+        }
+        case UnitTestState::k8_UnloadIndexZero_And_UnloadIndexOne:
+        {
+            streamingUnit0->m_unloadAsSoonAsGpuIsDoneRendering = true;
+            streamingUnit1->m_unloadAsSoonAsGpuIsDoneRendering = true;
+            break;
+        }
+        case UnitTestState::k9_DoNothing:
+        {
+            break;
+        }
+        default:
+        {
+            assert(false);
+            break;
+        }
+    }
+
+    s_state = static_cast<UnitTestState>(static_cast<size_t>(s_state) + 1);
+    if (s_state >= UnitTestState::kNum)
+    {
+        s_state = UnitTestState::k0_LoadIndexZero;
     }
 }
 
@@ -228,7 +301,7 @@ private:
 
     void Shutdown()
     {
-        m_streamingUnitLoadQueueManager.Destroy();
+        m_streamingCommandQueueManager.Destroy();
 
         m_assetLoadingThreadData.m_threadCommand = AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate;
         SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
@@ -236,8 +309,7 @@ private:
 
         for (auto& streamingUnit : m_streamingUnits)
         {
-            StreamingUnitRuntime::State state = streamingUnit.StateMutexed();
-            assert(state != StreamingUnitRuntime::kLoading);//asset thread should have completed, cleaned up and destroyed itself
+            const StreamingUnitRuntime::State state = streamingUnit.StateMutexed();
             if (state == StreamingUnitRuntime::kReady || state == StreamingUnitRuntime::kUnloading)
             {
                 streamingUnit.StateMutexed(StreamingUnitRuntime::kUnloading);//we are shutting down, and will not be issuing any more draw calls
@@ -373,13 +445,13 @@ private:
          
         //#CommandPoolDuplication
         AllocateCommandBuffers(
-            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
+            &ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
             m_commandPoolTransfer,
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             1,
             m_device);
         AllocateCommandBuffers(
-            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
+			&ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
             m_commandPoolTransitionImage,
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             1,
@@ -414,14 +486,15 @@ private:
             NTF_FRAMES_IN_FLIGHT_NUM,
             m_device);
 
-        m_streamingUnits.size(2);
+        m_streamingUnits.size(3);
         for (auto& streamingUnit : m_streamingUnits)
         {
             streamingUnit.Initialize(m_device);
             streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemory
         }
-        m_streamingUnits[0].m_filenameNoExtension.Snprintf("unitTest0");
-        m_streamingUnits[1].m_filenameNoExtension.Snprintf("unitTest1");
+        m_streamingUnits[0].m_filenameNoExtension.Snprintf(g_streamingUnitName_UnitTest0);
+        m_streamingUnits[1].m_filenameNoExtension.Snprintf(g_streamingUnitName_UnitTest1);
+        m_streamingUnits[2].m_filenameNoExtension.Snprintf(g_streamingUnitName_UnitTest2);
 
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         
@@ -453,7 +526,7 @@ private:
         m_assetLoadingArguments.m_instance = &m_instance;
         m_assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
         m_assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
-        m_assetLoadingArguments.m_streamingUnitLoadQueueManager = &m_streamingUnitLoadQueueManager;
+        m_assetLoadingArguments.m_streamingCommandQueueManager = &m_streamingCommandQueueManager;
         m_assetLoadingArguments.m_threadCommand = &m_assetLoadingThreadData.m_threadCommand;
         m_assetLoadingArguments.m_threadDone = &m_assetLoadingThreadData.m_handles.doneEventHandle;
         m_assetLoadingArguments.m_threadWake = &m_assetLoadingThreadData.m_handles.wakeEventHandle;
@@ -471,9 +544,12 @@ private:
         AssetLoadingThreadPersistentResourcesCreate(&m_assetLoadingPersistentResources, &m_deviceLocalMemoryPersistent, m_physicalDevice, m_device);
 #endif//#if NTF_ASSET_LOADING_MULTITHREADED
 
-        VectorSafe<StreamingUnitRuntime*, 1> streamingUnits;
-        streamingUnits.Push(&m_streamingUnits[0]);
-        StreamingUnitsLoadStart(&streamingUnits, &m_streamingUnitLoadQueueManager, m_assetLoadingThreadData.m_handles.wakeEventHandle);
+		//BEG_#StreamingTest
+        //load first streaming unit
+        VectorSafe<StreamingCommand, 1> streamingCommands;
+		streamingCommands.Push(StreamingCommand(StreamingCommand::kLoad, &m_streamingUnits[0]));
+		StreamingCommandsStart(&streamingCommands, &m_streamingCommandQueueManager, m_assetLoadingThreadData.m_handles.wakeEventHandle);
+		//END_#StreamingTest
 
         //finish initialization before launching asset loading thread
         FenceWaitUntilSignalled(initializationDone, m_device);
@@ -511,20 +587,16 @@ private:
         while (!glfwWindowShouldClose(window)) 
         {
             //BEG_#StreamingTest
-            const StreamingUnitRuntime::FrameNumber frameToSwapState = 30;
-            if (m_frameNumberCurrentCpu % frameToSwapState == frameToSwapState - 1)
-            {
-                UnitTest(
-                    &m_streamingUnits[0], 
-                    &m_streamingUnits[1], 
-                    &m_streamingUnitLoadQueueManager, 
-                    m_assetLoadingThreadData.m_handles.wakeEventHandle);
-                UnitTest(
-                    &m_streamingUnits[1], 
-                    &m_streamingUnits[0], 
-                    &m_streamingUnitLoadQueueManager,
-                    m_assetLoadingThreadData.m_handles.wakeEventHandle);
-            }
+            //const StreamingUnitRuntime::FrameNumber frameToSwapState = 2400;
+            //if (m_frameNumberCurrentCpu % frameToSwapState == frameToSwapState - 1)
+            //{
+            //    UnitTest(
+            //        &m_streamingUnits[0], 
+            //        &m_streamingUnits[1], 
+            //        &m_streamingUnits[2],
+            //        &m_streamingCommandQueueManager, 
+            //        m_assetLoadingThreadData.m_handles.wakeEventHandle);
+            //}
             //END_#StreamingTest
 
             glfwPollEvents();
@@ -537,11 +609,12 @@ private:
             const size_t frameIndex = m_frameNumberCurrentCpu % NTF_FRAMES_IN_FLIGHT_NUM;
             
             //fill primary command buffers with loaded streaming units
-            for (auto& streamingUnit : m_streamingUnits)
+            VectorSafe<StreamingCommand, 16> streamingCommandsToUnload;
+            for (auto& streamingUnit : m_streamingUnits)///<@todo: make this a list of "renderable" streaming units rather than having ready/not-loaded states
             {
-                switch (streamingUnit.StateMutexed())
+                if (!streamingUnit.m_unloadAsSoonAsGpuIsDoneRendering)
                 {
-                    case StreamingUnitRuntime::kReady:
+                    if (streamingUnit.StateMutexed() == StreamingUnitRuntime::kReady)
                     {
                         if (!streamingUnitRendered)
                         {
@@ -589,6 +662,7 @@ private:
 
                         FillCommandBufferPrimary(
                             &streamingUnit.m_lastSubmittedCpuFrame,
+                            &streamingUnit.m_renderedOnceSinceLastLoad,
                             m_frameNumberCurrentCpu,
                             commandBufferPrimary,
                             &streamingUnit.m_texturedGeometries,
@@ -598,35 +672,46 @@ private:
                             streamingUnit.m_pipelineLayout,
                             streamingUnit.m_graphicsPipeline,
                             m_instance);
-
-                        break;
                     }
-                    case StreamingUnitRuntime::kUnloading:
+                }//if (!streamingUnit.m_unloadAsSoonAsGpuIsDoneRendering)
+                else//streaming unit should be unloaded as soon as the Gpu is done with it
+                {
+                    //LARGE_INTEGER perfCount;
+                    //QueryPerformanceCounter(&perfCount);
+                    //printf("MAIN THREAD: streamingUnit.m_lastSubmittedCpuFrame=%d m_lastCpuFrameCompleted=%d time=%f\n", streamingUnit.m_lastSubmittedCpuFrame, m_lastCpuFrameCompleted, static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+
+                    //printf("MAIN THREAD: streamingUnit.m_lastSubmittedCpuFrame=%d m_lastCpuFrameCompleted=%d\n", streamingUnit.m_lastSubmittedCpuFrame, m_lastCpuFrameCompleted);
+
+                    if (streamingUnit.StateMutexed() == StreamingUnitRuntime::kReady)//streaming unit must be loaded if it's to be unloaded
                     {
-                        //LARGE_INTEGER perfCount;
-                        //QueryPerformanceCounter(&perfCount);
-                        //printf("MAIN THREAD: streamingUnit.m_lastSubmittedCpuFrame=%d m_lastCpuFrameCompleted=%d time=%f\n", streamingUnit.m_lastSubmittedCpuFrame, m_lastCpuFrameCompleted, static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-
-                        //printf("MAIN THREAD: streamingUnit.m_lastSubmittedCpuFrame=%d m_lastCpuFrameCompleted=%d\n", streamingUnit.m_lastSubmittedCpuFrame, m_lastCpuFrameCompleted);
-
-                        if (streamingUnit.m_lastSubmittedCpuFrame <= m_lastCpuFrameCompleted)
+                        ///@todo: NTF_STATIC_ASSERT that streamingUnit.m_lastSubmittedCpuFrame is the same type as m_lastCpuFrameCompleted
+                        const StreamingUnitRuntime::FrameNumber halfRange = 2 << (sizeof(m_lastCpuFrameCompleted) - 1);//one half of the range of an unsigned type
+                        if (!streamingUnit.m_renderedOnceSinceLastLoad ||                                   //Gpu never rendered this streaming unit
+                            (streamingUnit.m_lastSubmittedCpuFrame <= m_lastCpuFrameCompleted) ||           //Gpu is done with this streaming unit
+                            (streamingUnit.m_lastSubmittedCpuFrame - m_lastCpuFrameCompleted < halfRange))  //Gpu is done with this streaming unit -- wraparound case where the last submitted cpu frame is near the end of the frame number range and the last cpu frame completed is near the beginning
                         {
-                            NTF_LOG_STREAMING("%i:streamingUnit=%p->m_lastSubmittedCpuFrame=%i<=m_lastCpuFrameCompleted=%i -- FREEING\n", GetCurrentThreadId(), &streamingUnit, streamingUnit.m_lastSubmittedCpuFrame, m_lastCpuFrameCompleted);
+                            //BEG_HAC -- ensure wraparound case triggers appropriately
+                            if (streamingUnit.m_lastSubmittedCpuFrame - m_lastCpuFrameCompleted < halfRange)
+                            {
+                                int hack = 0;
+                                ++hack;
+                            }
+                            //END_HAC
+                            NTF_LOG_STREAMING("%i:streamingUnit=%p->m_lastSubmittedCpuFrame=%i<=m_lastCpuFrameCompleted=%i -- Push(kUnload)\n", GetCurrentThreadId(), &streamingUnit, streamingUnit.m_lastSubmittedCpuFrame, m_lastCpuFrameCompleted);
                             //printf("MAIN THREAD: m_streamingUnit.Free(); time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-                            streamingUnit.Free(
-                                &m_deviceLocalMemoryStreamingUnitsAllocated, 
-                                m_deviceLocalMemoryStreamingUnits, 
-                                m_deviceLocalMemoryMutex, 
-                                false, 
-                                m_device);
+
+                            /*  for multithreaded correctness, this should be the one and only one place where a streaming unit is marked "unloading" and
+								the corresponding command is issued */
+                            streamingUnit.m_unloadAsSoonAsGpuIsDoneRendering = false;//command about to be issued
+                            streamingUnit.StateMutexed(StreamingUnitRuntime::kUnloading);
+                            streamingCommandsToUnload.Push(StreamingCommand(StreamingCommand::kUnload, &streamingUnit));
                         }
-                        break;
-                    }
-                    default:
-                    {
-                        ;
                     }
                 }
+            }//for (auto& streamingUnit : m_streamingUnits)
+            if (streamingCommandsToUnload.size())
+            {
+                StreamingCommandsStart(&streamingCommandsToUnload, &m_streamingCommandQueueManager, m_assetLoadingThreadData.m_handles.wakeEventHandle);
             }
             if(streamingUnitRendered)
             {
@@ -652,7 +737,7 @@ private:
                 //snprintf(&buf[0], maxLen, "waitForFences:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(waitForFences));
                 //fwrite(&buf[0], sizeof(buf[0]), strlen(&buf[0]), s_winTimer);
 
-                //determine last Cpu frame that the Gpu finished with -- needs to be done here, immediately before the fence from the most recently completed Gpu frame is reset (since this logic depends on seeing the signalled state of this fence)
+                //determine last Cpu frame that the Gpu finished with -- needs to be done here, immediately before the fence from the most recently completed Gpu frame is reset (since this logic depends on seeing the signaled state of this fence)
                 const StreamingUnitRuntime::FrameNumberSigned biggestPositiveDistanceInitial = 0;
                 const StreamingUnitRuntime::FrameNumberSigned biggestNegativeDistanceInitial = StreamingUnitRuntime::kFrameNumberSignedMinimum;
                 StreamingUnitRuntime::FrameNumberSigned biggestPositiveDistance = biggestPositiveDistanceInitial, biggestNegativeDistance = biggestNegativeDistanceInitial;//negative distance handles the wraparound case
@@ -755,7 +840,7 @@ private:
 
             }
 #if !NTF_ASSET_LOADING_MULTITHREADED
-            StreamingUnitsLoadAllQueued(&m_assetLoadingArguments, &m_assetLoadingPersistentResources);
+            StreamingCommandsProcess(&m_assetLoadingArguments, &m_assetLoadingPersistentResources);
 #endif//!NTF_ASSET_LOADING_MULTITHREADED
 
             ++m_frameNumberCurrentCpu;
@@ -796,7 +881,7 @@ private:
 
     enum { kStreamingUnitsNum = 3 };
     VectorSafe<StreamingUnitRuntime, kStreamingUnitsNum> m_streamingUnits;
-    StreamingUnitLoadQueueManager m_streamingUnitLoadQueueManager;
+    StreamingCommandQueueManager m_streamingCommandQueueManager;
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
         
     VkCommandBuffer m_commandBufferTransfer;//automatically freed when VkCommandPool is destroyed

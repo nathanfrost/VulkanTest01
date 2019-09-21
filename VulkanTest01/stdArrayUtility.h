@@ -444,6 +444,16 @@ public:
         SetElementsNumMax(arraySafe->size());
         SetArray(arraySafe->begin());
     }
+	//allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability
+	///@todo: unit tests
+	ArraySafeRef(ArraySafeRef<T>*const arraySafeRef)
+	{
+		assert(arraySafeRef);
+#if NTF_ARRAY_SAFE_DEBUG
+		SetElementsNumMax(arraySafeRef->m_elementsNumMax);
+#endif//#if NTF_ARRAY_SAFE_DEBUG
+		SetArray(arraySafeRef->m_array);
+	}
 
     ///@todo: unit tests
     ArraySafeRef(T*const p, const size_t elementsNumMax)
@@ -703,6 +713,13 @@ public:
         SetElementsNumMax(vectorSafe.size());
         AssertValid();
     }
+
+	ConstVectorSafeRef(const VectorSafeRef<T>& vectorSafeRef)
+	{
+		SetArray(vectorSafeRef.begin());
+		SetElementsNumMax(vectorSafeRef.size());
+		AssertValid();
+	}
 
     void AssertValid() const
     {

@@ -14,7 +14,8 @@
 #endif//#if NTF_LOG_STREAMING_ENABLED
 
 class VulkanPagedStackAllocator;
-class StreamingUnitLoadQueueManager;
+class StreamingCommandQueueManager;
+class StreamingCommand;
 
 typedef uint32_t StreamingUnitVersion;
 typedef uint8_t StreamingUnitByte;
@@ -56,15 +57,19 @@ public:
         const VkDevice& device);
     void Destroy(const VkDevice& device);
 
-    enum State {    kFirstValidValue, kNotLoaded = kFirstValidValue,
-                    kLoading, kReady, 
-                    kLastValidValue, kUnloading = kLastValidValue};
+    enum State 
+    {    
+        kNotLoaded, kFirstValidValue = kNotLoaded,
+        kReady, 
+        kUnloading, kLastValidValue = kUnloading
+    };
     State StateMutexed() const;
     void StateMutexed(const State state);
+    bool m_unloadAsSoonAsGpuIsDoneRendering;
     void AssertValid() const;
 
 
-    ArraySafe<char,128> m_filenameNoExtension;///<@todo NTF: consider creating a string database for this
+    ArraySafe<char,128> m_filenameNoExtension;///<@todo NTF: consider creating a string database for this -- OR JUST USE THE GLOBAL STATIC STRINGS
     VkSampler m_textureSampler;
 #define TODO_REFACTOR_NUM 2//is NTF_OBJECTS_NUM -- todo: generalize #StreamingMemory
     ArraySafe<TexturedGeometry, TODO_REFACTOR_NUM> m_texturedGeometries;
@@ -98,10 +103,10 @@ public:
     enum { kFrameNumberSignedMinimum = -2147483647 - 1};//avoid Visual Studio 2015 compiler warning C4146, which incorrectly claims a 32bit signed integer can't store -2^31
     //END_#FrameNumber
     FrameNumber m_lastSubmittedCpuFrame;
+    bool m_renderedOnceSinceLastLoad;
 
 private:
-///@todo: data should only be accessed by the main thread when in the appropriate m_state is (typically kNotLoaded or kReady) -- I could enforce this with methods
-    
+    ///@todo: data should only be accessed by the main thread when in the appropriate m_state is (typically kNotLoaded or kReady) -- I could enforce this with methods
     class StateMutexed
     {
     public:
@@ -119,16 +124,16 @@ private:
         HANDLE m_mutex;
         State m_state;
     } m_stateMutexed;
-
-    friend void StreamingUnitsLoadAllQueued(
+    ///@todo: data should only be accessed by the main thread when in the appropriate m_state is (typically kNotLoaded or kReady) -- I could enforce this with methods
+    friend void StreamingCommandsProcess(
         AssetLoadingArguments*const threadArgumentsPtr, 
         AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr);
     VkFence m_transferQueueFinishedFence, m_graphicsQueueFinishedFence;
 };
 
-void StreamingUnitsLoadStart(
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnits,
-    StreamingUnitLoadQueueManager*const streamingUnitLoadQueueManagerPtr,
+void StreamingCommandsStart(
+    VectorSafeRef<StreamingCommand> streamingCommands,
+    StreamingCommandQueueManager*const streamingCommandQueueManagerPtr,
     const HANDLE assetLoadingThreadWakeHandle);
 
 class SerializerCookerOut
@@ -242,8 +247,8 @@ inline void TextureSerialize1(
     Serializer::Execute(
         file,
         bufferSizeBytes,
-        pixelsCookOut,
-        pixelBufferRuntimeIn,
+		pixelsCookOut,
+		pixelBufferRuntimeIn,
         stagingBufferMemoryMapCpuToGpuRuntimeIn,
         stagingBufferGpuAlignmentRuntimeIn,
         nullptr,

@@ -332,6 +332,7 @@ void AcquireNextImage(
 
 void FillCommandBufferPrimary(
     StreamingUnitRuntime::FrameNumber*const streamingUnitLastFrameSubmittedPtr,
+    bool*const renderedOnceSinceLastLoadPtr,
     const StreamingUnitRuntime::FrameNumber currentFrameNumber,
     const VkCommandBuffer& commandBufferPrimary,
     const ArraySafeRef<TexturedGeometry> texturedGeometries,

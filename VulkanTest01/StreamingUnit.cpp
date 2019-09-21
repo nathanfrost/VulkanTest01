@@ -2,36 +2,41 @@
 #include"ntf_vulkan.h"
 #include"StreamingUnitManager.h"
 
-void StreamingUnitsLoadStart(
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnits, 
-    StreamingUnitLoadQueueManager*const streamingUnitLoadQueueManagerPtr,
+void StreamingCommandsStart(
+    VectorSafeRef<StreamingCommand> streamingCommands, 
+    StreamingCommandQueueManager*const streamingCommandQueueManagerPtr,
     const HANDLE assetLoadingThreadWakeHandle)
 {
-    NTF_REF(streamingUnitLoadQueueManagerPtr, streamingUnitLoadQueueManager);
+    NTF_REF(streamingCommandQueueManagerPtr, streamingCommandQueueManager);
     assert(assetLoadingThreadWakeHandle);
 
-    auto& streamingUnitQueue = *streamingUnitLoadQueueManager.GetMainThreadStreamingUnitLoadQueue_after_WaitForSignalWindows();
-    for (auto streamingUnitPtr : streamingUnits)
+    auto& streamingCommandQueue = *streamingCommandQueueManager.GetMainThreadStreamingCommandQueue_after_WaitForSignalWindows();
+    for (auto streamingCommand : streamingCommands)///<@todo: could make a memcpy, but performance difference should be negligible with a small number of streaming commands
     {
-        NTF_REF(streamingUnitPtr, streamingUnit);
-        if (streamingUnit.StateMutexed() == StreamingUnitRuntime::kUnloading)
+        NTF_REF(streamingCommand.m_streamingUnit, streamingUnit);
+        if (streamingCommand.m_command == StreamingCommand::kLoad && 
+            streamingUnit.m_unloadAsSoonAsGpuIsDoneRendering && 
+            streamingUnit.StateMutexed() == StreamingUnitRuntime::kReady)
         {
-            /*  an unloaded streaming unit is still in memory, and the main thread is waiting for the opportunity to free that streaming unit's 
-                memory -- just start rendering the streaming unit again, and stop waiting to free its memory */
-            streamingUnit.StateMutexed(StreamingUnitRuntime::kReady);
+            /*  streaming unit is still in memory, and the main thread is waiting for the opportunity to free that streaming unit's memory -- just 
+                start rendering the streaming unit again, and stop waiting to free its memory */
+            streamingUnit.m_unloadAsSoonAsGpuIsDoneRendering = false;
         }
         else
         {
-            streamingUnitQueue.m_queue.Enqueue(&streamingUnit);
-            UnsignalSemaphoreWindows(streamingUnitQueue.m_streamingUnitsDoneLoadingHandle);
-            NTF_LOG_STREAMING("%i:StreamingUnitsLoadStart:UnsignalSemaphoreWindows():streamingUnitQueue=%p->m_streamingUnitsDoneLoadingHandle=%zu\n", 
-                GetCurrentThreadId(), &streamingUnitQueue, (size_t)streamingUnitQueue.m_streamingUnitsDoneLoadingHandle);
+            if (streamingUnit.StateMutexed() == StreamingUnitRuntime::kNotLoaded && streamingCommand.m_command == StreamingCommand::kLoad)
+            {
+                streamingCommand.m_streamingUnit->m_renderedOnceSinceLastLoad = false;
+            }
+            streamingCommandQueue.m_queue.Enqueue(streamingCommand);
+            UnsignalSemaphoreWindows(streamingCommandQueue.m_streamingCommandsDoneHandle);
+            NTF_LOG_STREAMING("%i:StreamingCommandsStart:UnsignalSemaphoreWindows():streamingCommandQueue=%p->m_streamingCommandsDoneLoadingHandle=%zu\n",
+                GetCurrentThreadId(), &streamingCommandQueue, (size_t)streamingCommandQueue.m_streamingCommandsDoneHandle);
         }
     }
-    streamingUnitLoadQueueManager.Release(&streamingUnitQueue);
+    streamingCommandQueueManager.Release(&streamingCommandQueue);
     SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
-    NTF_LOG_STREAMING("%i:SignalSemaphoreWindows():assetLoadingThreadWakeHandle=%zu\n", 
-        GetCurrentThreadId(), (size_t)assetLoadingThreadWakeHandle);
+    NTF_LOG_STREAMING("%i:SignalSemaphoreWindows():assetLoadingThreadWakeHandle=%zu\n", GetCurrentThreadId(), (size_t)assetLoadingThreadWakeHandle);
 }
 
 /*static*/ void Vertex::GetAttributeDescriptions(VectorSafeRef<VkVertexInputAttributeDescription> attributeDescriptions)
@@ -63,7 +68,7 @@ void StreamingUnitRuntime::Initialize(const VkDevice& device)
 
     FenceCreate(&m_transferQueueFinishedFence, fenceCreateFlagBits, device);
     FenceCreate(&m_graphicsQueueFinishedFence, fenceCreateFlagBits, device);
-
+    m_unloadAsSoonAsGpuIsDoneRendering = false;
 }
 
 StreamingUnitRuntime::StateMutexed::StateMutexed()
@@ -134,7 +139,7 @@ StreamingUnitRuntime::State StreamingUnitRuntime::StateMutexed() const
 }
 void StreamingUnitRuntime::StateMutexed(const StreamingUnitRuntime::State state)
 {
-    m_stateMutexed.Set(state);
+	m_stateMutexed.Set(state);
 }
 
 ///concerns itself solely with Vulkan constructs that we memory-manage, not OS constructs like mutexes
@@ -147,8 +152,8 @@ void StreamingUnitRuntime::Free(
 {
     //printf("StreamingUnitRuntime::Free() enter\n");//#LogStreaming
 
-    assert(m_stateMutexed.Get() == State::kUnloading);
-    m_stateMutexed.Set(State::kNotLoaded);
+    assert(StateMutexed() == State::kUnloading);
+    assert(m_unloadAsSoonAsGpuIsDoneRendering == false);//this should have been set to true before issuing the command
 
     vkDestroySampler(device, m_textureSampler, GetVulkanAllocationCallbacks());
 
@@ -195,6 +200,7 @@ void StreamingUnitRuntime::Free(
     NTF_LOG_STREAMING("%i:StreamingUnitRuntime::Free:MutexRelease(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
 
     //printf("StreamingUnitRuntime::Free() exit\n");//#LogStreaming
+    StateMutexed(State::kNotLoaded);
 }
 
 ///Initialize()/Destroy() concern themselves solely with constructs we don't want to risk fragmenting by creating and destroying)
@@ -208,5 +214,6 @@ void StreamingUnitRuntime::Destroy(const VkDevice& device)
 void StreamingUnitRuntime::AssertValid() const
 {
     assert(m_filenameNoExtension.Strnlen() > 0);
-    m_stateMutexed.AssertValid();
+    assert(StateMutexed() >= kFirstValidValue);
+    assert(StateMutexed() <= kLastValidValue);
 }
