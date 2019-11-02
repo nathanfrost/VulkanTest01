@@ -267,6 +267,29 @@ int main()
     }
 
     ConstMethodTesting(vectorSafe, actualSize, lastValidValue);
+
+	VectorSafe<int, kElementsMax> vectorSafeRemove({ 0,1,2,3,4 });
+	size_t vectorSafeRemoveSize = vectorSafeRemove.size();
+	--vectorSafeRemoveSize;
+	vectorSafeRemove.Remove(1);
+	assert(vectorSafeRemove.size() == vectorSafeRemoveSize);
+	assert(vectorSafeRemove[0] == 0);
+	assert(vectorSafeRemove[1] == 4);
+	assert(vectorSafeRemove[2] == 2);
+	assert(vectorSafeRemove[3] == 3);
+
+	--vectorSafeRemoveSize;
+	vectorSafeRemove.RemoveItemAtIndex(vectorSafeRemove.GetLastValidIndex());
+	assert(vectorSafeRemove.size() == vectorSafeRemoveSize);
+	assert(vectorSafeRemove[0] == 0);
+	assert(vectorSafeRemove[1] == 4);
+	assert(vectorSafeRemove[2] == 2);
+
+	--vectorSafeRemoveSize;
+	vectorSafeRemove.Remove(0);
+	assert(vectorSafeRemove.size() == vectorSafeRemoveSize);
+	assert(vectorSafeRemove[0] == 2);
+	assert(vectorSafeRemove[1] == 4);
     //END_#VectorSafe
 
 
@@ -277,7 +300,12 @@ int main()
     assert(test.Size() == 0);
 
     AddFirstThreeElements(&test);
-    assert(test.PeekMostRecent() == 2);
+    int lastQueuedItem, nextItemToDequeue;
+    assert(test.PeekLastQueuedItem(&lastQueuedItem));
+    assert(lastQueuedItem == 2);
+    assert(test.PeekNextItemToDequeue(&nextItemToDequeue));
+    assert(nextItemToDequeue == 0);
+
     assert(test[0] == 0);
     assert(test[1] == 1);
     assert(test[2] == 2);
@@ -289,7 +317,8 @@ int main()
     dequeued = test.Dequeue();
     assert(dequeued == 1);
     assert(test.Size() == 1);
-    assert(test.PeekMostRecent() == 2);
+    assert(test.PeekLastQueuedItem(&lastQueuedItem));
+    assert(lastQueuedItem == 2);
 
     test.Clear();
     assert(test.Size() == 0);
@@ -305,14 +334,16 @@ int main()
     assert(test.Size() == 0);
 
     test.Enqueue(1);
-    assert(test.PeekMostRecent() == 1);
+    assert(test.PeekLastQueuedItem(&lastQueuedItem));
+    assert(lastQueuedItem == 1);
     assert(test.Size() == 1);
     test.Clear();
 
     AddFirstThreeElements(&test);
     test.Dequeue(2);
     assert(test.Size() == 1);
-    assert(test.PeekMostRecent() == 2);
+    assert(test.PeekLastQueuedItem(&lastQueuedItem));
+    assert(lastQueuedItem == 2);
     test.Clear();
 
     QueueCircular<int,4> testSize4;
@@ -369,7 +400,6 @@ int main()
 
     test.Clear();
     //END_#QueueCircular
-
 
     //done!
     printf("Unit test SUCCESS!\n");

@@ -62,6 +62,9 @@ template<class T, size_t kElementsNum>
 class ArraySafe;
 
 template<class T>
+class ConstVectorSafeRef;
+
+template<class T>
 class VectorSafeRef
 {
 public:
@@ -161,6 +164,33 @@ public:
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
 
+	///@todo: unit test
+	int Find(const T& item)
+	{
+        const size_type elementsNumCurrent = *m_elementsNumCurrent;
+		for (size_type i = 0; i < elementsNumCurrent; ++i)
+		{
+			if (m_array[i] == item)
+			{
+				return CastWithAssert<size_type,int>(i);
+			}
+		}
+		return -1;
+	}
+    ///@todo: unit tests
+    bool PushIfUnique(const T& item)
+    {
+        if (Find(item) >= 0)
+        {
+            return false;
+        }
+        else
+        {
+            Push(item);
+            return true;
+        }
+    }
+
     ///@todo: AssertCurrentSufficient() //m_elementsNumMax - m_elementsNumCurrent >= elementsNum
     void AssertSufficient(const size_t elementsNum) const
     {
@@ -202,13 +232,25 @@ public:
 #endif//#if NTF_ARRAY_SAFE_DEBUG
 
         assert(input);
-        assert(inputBytesNum > 0);
+        assert(inputBytesNum >= 0);
         assert(inputBytesNum % sizeof(T) == 0);
 
         memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
         SetElementsNumCurrent(inputBytesNum / sizeof(T));
         AssertValid();
     }
+
+    ///@todo: unit tests
+    void Append(const ConstVectorSafeRef<T>& vectorSafeOther)
+    {
+        const size_type vectorSafeOtherSize = vectorSafeOther.size();
+        const size_type thisOriginalSize = size();
+        size(thisOriginalSize + vectorSafeOtherSize);
+        AssertValid();
+
+        memcpy(GetAddressOfUnderlyingArray() + thisOriginalSize, vectorSafeOther.GetAddressOfUnderlyingArray(), sizeof(T)*vectorSafeOtherSize);
+    }
+
     ///@todo: unit tests
     void MemcpyFromFread(FILE*const f, const size_t elementsNum)
     {
@@ -259,7 +301,34 @@ public:
         AssertValid();
         const size_t indexForItem = *m_elementsNumCurrent;
         sizeIncrement();
-        m_array[indexForItem] = item;
+        operator[](indexForItem) = item;
+    }
+	void Pop()
+	{
+		sizeDecrement();
+	}
+	void RemoveItemAtIndex(const size_type indexToRemove)
+	{
+		const size_type lastValidIndex = GetLastValidIndex();
+		if (indexToRemove != lastValidIndex)
+		{
+			operator[](indexToRemove) = operator[](lastValidIndex);
+		}
+        sizeDecrement();
+	}
+    ///@todo: unit tests
+    bool Remove(const T& item)
+    {
+        const int itemIndex = Find(item);
+        if (itemIndex >= 0)
+        {
+            RemoveItemAtIndex(itemIndex);
+            return true;
+        }
+        else
+        {
+            return false;
+        }
     }
 
     const T* data() const
@@ -554,7 +623,7 @@ public:
 
         assert(input);
         assert(index >= 0);
-        assert(inputBytesNum > 0);
+        assert(inputBytesNum >= 0);
         assert(inputBytesNum % sizeof(T) == 0);
 
         memcpy(&GetAddressOfUnderlyingArray()[index], input, inputBytesNum);
@@ -730,6 +799,11 @@ public:
         AssertValid();
         return m_elementsNumMax;
     }
+	size_t SizeCurrentInBytes()
+	{
+		AssertValid();
+		return m_elementsNumMax * sizeof(T);//current size in bytes will never change; since *this has const-semantics
+	}
     size_t SizeMaxInBytes() const
     {
         return size()*sizeof(T);
@@ -1032,7 +1106,7 @@ public:
 };
 
 template<class T, size_t kElementsMax>
-class VectorSafe///@todo: rename VectorSafe
+class VectorSafe
 {
 public:
     typedef VectorSafe<T, kElementsMax> ThisDataType;
@@ -1081,8 +1155,19 @@ public:
         return VectorSafeRef(this);
     }
 
-    template<size_t kElementsMaxOther>
-    void Copy(const VectorSafe<T, kElementsMaxOther>& vectorSafeOther)
+	int Find(const T& item)
+	{
+		for(size_t i=0; i < m_elementsNumCurrent; ++i)
+		{
+			if (m_array[i] == item)
+			{
+				return CastWithAssert<size_t,int>(i);
+			}
+		}
+		return -1;
+	}
+
+    void Copy(ConstVectorSafeRef<T> vectorSafeOther)
     {
         MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
     }
@@ -1090,14 +1175,25 @@ public:
     void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
     {
         assert(input);
-        assert(inputBytesNum > 0);
+        assert(inputBytesNum >= 0);
         size(inputBytesNum / sizeof(T));
         assert(inputBytesNum <= SizeMaxInBytes());
         assert(inputBytesNum % sizeof(T) == 0);
+		AssertValid();
 
         memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
-        AssertValid();
     }
+
+	///@todo: unit tests
+	void Append(const ConstVectorSafeRef<T>& vectorSafeOther)
+	{
+		const size_type vectorSafeOtherSize = vectorSafeOther.size();
+		const size_type thisOriginalSize = size();
+		size(thisOriginalSize + vectorSafeOtherSize);
+		AssertValid();
+
+		memcpy(GetAddressOfUnderlyingArray() + thisOriginalSize, vectorSafeOther.GetAddressOfUnderlyingArray(), sizeof(T)*vectorSafeOtherSize);
+	}
 
     size_type size() const noexcept
     {
@@ -1145,6 +1241,46 @@ public:
         sizeIncrement();
         operator[](indexForItem) = item;
     }
+	///@todo: unit tests
+	bool PushIfUnique(const T& item)
+	{
+        if (Find(item) >= 0)
+		{
+			return false;
+		}
+		else
+		{
+			Push(item);
+			return true;
+		}
+	}
+	void Pop()
+	{
+		sizeDecrement();
+	}
+	void RemoveItemAtIndex(const size_type indexToRemove)
+	{
+		const size_type lastValidIndex = GetLastValidIndex();
+		if (indexToRemove != lastValidIndex)
+		{
+			operator[](indexToRemove) = operator[](lastValidIndex);
+		}
+        sizeDecrement();
+	}
+	///@todo: unit tests
+	bool Remove(const T& item)
+	{
+		const int itemIndex = Find(item);
+		if (itemIndex >= 0)
+		{
+            RemoveItemAtIndex(itemIndex);
+			return true;
+		}
+		else
+		{
+			return false;
+		}
+	}
 
     const T* data() const
     {

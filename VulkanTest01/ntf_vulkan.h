@@ -64,12 +64,12 @@ struct DrawFrameFinishedFence
 {
     DrawFrameFinishedFence()
     {
-        m_frameNumberCpuRecordedCompleted = true;//don't record garbage frame numbers -- wait until they're filled out on submission to Gpu
+        m_frameNumberCpuCompletedByGpu = true;//don't record garbage frame numbers -- wait until they're filled out on submission to Gpu
     }
 
     VkFence m_fence;
     StreamingUnitRuntime::FrameNumber m_frameNumberCpuSubmitted;///<to track when the Gpu is finished with a frame
-    bool m_frameNumberCpuRecordedCompleted;
+    bool m_frameNumberCpuCompletedByGpu;
 };
 
 void NTFVulkanInitialize(const VkPhysicalDevice& physicalDevice);
@@ -332,7 +332,7 @@ void AcquireNextImage(
 
 void FillCommandBufferPrimary(
     StreamingUnitRuntime::FrameNumber*const streamingUnitLastFrameSubmittedPtr,
-    bool*const renderedOnceSinceLastLoadPtr,
+    bool*const submittedToGpuOnceSinceLastLoadPtr,
     const StreamingUnitRuntime::FrameNumber currentFrameNumber,
     const VkCommandBuffer& commandBufferPrimary,
     const ArraySafeRef<TexturedGeometry> texturedGeometries,

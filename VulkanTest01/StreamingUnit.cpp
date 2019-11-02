@@ -2,41 +2,77 @@
 #include"ntf_vulkan.h"
 #include"StreamingUnitManager.h"
 
-void StreamingCommandsStart(
-    VectorSafeRef<StreamingCommand> streamingCommands, 
-    StreamingCommandQueueManager*const streamingCommandQueueManagerPtr,
-    const HANDLE assetLoadingThreadWakeHandle)
+void StreamingUnitAddToLoadMutexed(
+	StreamingUnitRuntime*const streamingUnitToLoadPtr, 
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable, 
+	const HANDLE streamingUnitsAddToLoadListMutex)
 {
-    NTF_REF(streamingCommandQueueManagerPtr, streamingCommandQueueManager);
-    assert(assetLoadingThreadWakeHandle);
+	NTF_REF(streamingUnitToLoadPtr, streamingUnitToLoad);
+	VectorSafe<StreamingUnitRuntime*, 1> temp;
+	temp.Push(&streamingUnitToLoad);
+	StreamingUnitsAddToLoadMutexed(&temp, streamingUnitsAddToLoadList, streamingUnitsRenderable, streamingUnitsAddToLoadListMutex);
+}
+void StreamingUnitsAddToLoadMutexed(
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToLoad,///<not ConstVectorSafeRef because I want to force the passer to use '&', since semantically want to emphasize that the streaming units contained in the vector will be modified, even if the vector itself will not
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
+	const HANDLE streamingUnitsAddToLoadListMutex)
+{
+	WaitForSignalWindows(streamingUnitsAddToLoadListMutex);
+	for (auto& streamingUnitToLoadPtr : streamingUnitsToLoad)
+	{
+		NTF_REF(streamingUnitToLoadPtr, streamingUnitToLoad);
 
-    auto& streamingCommandQueue = *streamingCommandQueueManager.GetMainThreadStreamingCommandQueue_after_WaitForSignalWindows();
-    for (auto streamingCommand : streamingCommands)///<@todo: could make a memcpy, but performance difference should be negligible with a small number of streaming commands
-    {
-        NTF_REF(streamingCommand.m_streamingUnit, streamingUnit);
-        if (streamingCommand.m_command == StreamingCommand::kLoad && 
-            streamingUnit.m_unloadAsSoonAsGpuIsDoneRendering && 
-            streamingUnit.StateMutexed() == StreamingUnitRuntime::kReady)
-        {
-            /*  streaming unit is still in memory, and the main thread is waiting for the opportunity to free that streaming unit's memory -- just 
-                start rendering the streaming unit again, and stop waiting to free its memory */
-            streamingUnit.m_unloadAsSoonAsGpuIsDoneRendering = false;
-        }
-        else
-        {
-            if (streamingUnit.StateMutexed() == StreamingUnitRuntime::kNotLoaded && streamingCommand.m_command == StreamingCommand::kLoad)
-            {
-                streamingCommand.m_streamingUnit->m_renderedOnceSinceLastLoad = false;
-            }
-            streamingCommandQueue.m_queue.Enqueue(streamingCommand);
-            UnsignalSemaphoreWindows(streamingCommandQueue.m_streamingCommandsDoneHandle);
-            NTF_LOG_STREAMING("%i:StreamingCommandsStart:UnsignalSemaphoreWindows():streamingCommandQueue=%p->m_streamingCommandsDoneLoadingHandle=%zu\n",
-                GetCurrentThreadId(), &streamingCommandQueue, (size_t)streamingCommandQueue.m_streamingCommandsDoneHandle);
-        }
-    }
-    streamingCommandQueueManager.Release(&streamingCommandQueue);
-    SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
-    NTF_LOG_STREAMING("%i:SignalSemaphoreWindows():assetLoadingThreadWakeHandle=%zu\n", GetCurrentThreadId(), (size_t)assetLoadingThreadWakeHandle);
+		WaitForSignalWindows(streamingUnitToLoad.m_streamingCommandQueueMutex);
+#if NTF_DEBUG
+        StreamingCommand lastQueuedStreamingCommand;
+        assert( !streamingUnitToLoad.m_streamingCommandQueue.PeekLastQueuedItem(&lastQueuedStreamingCommand) ||
+                lastQueuedStreamingCommand == StreamingCommand::kUnload);
+#endif//#if NTF_DEBUG
+		streamingUnitToLoad.m_streamingCommandQueue.Enqueue(StreamingCommand::kLoad);
+		MutexRelease(streamingUnitToLoad.m_streamingCommandQueueMutex);
+        //printf("MAIN THREAD: StreamingUnitsAddToLoadMutexed(%s)\n", streamingUnitToLoad.m_filenameNoExtension.data());
+		
+		assert(streamingUnitsRenderable.Find(&streamingUnitToLoad) < 0);//loading a unit means it should not be on the render list
+
+		streamingUnitsAddToLoadList.PushIfUnique(&streamingUnitToLoad);
+	}
+	MutexRelease(streamingUnitsAddToLoadListMutex);
+}
+void StreamingUnitAddToUnload(
+	StreamingUnitRuntime*const streamingUnitToUnloadPtr,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToUnload,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable)
+{
+	VectorSafe<StreamingUnitRuntime*, 1> temp;
+	
+	NTF_REF(streamingUnitToUnloadPtr, streamingUnitToUnload);
+#if NTF_DEBUG
+    StreamingCommand lastQueuedStreamingCommand;
+    assert( !streamingUnitToUnload.m_streamingCommandQueue.PeekLastQueuedItem(&lastQueuedStreamingCommand) ||
+            lastQueuedStreamingCommand == StreamingCommand::kLoad);
+#endif//#if NTF_DEBUG
+	temp.Push(&streamingUnitToUnload);
+	StreamingUnitsAddToUnload(&temp, streamingUnitsToUnload, streamingUnitsRenderable);
+}
+void StreamingUnitsAddToUnload(
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToAddToUnloadList,///<not ConstVectorSafeRef because I want to force the passer to use '&', since semantically want to emphasize that the streaming units contained in the vector will be modified, even if the vector itself will not
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToUnload,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable)
+{
+	for(auto& streamingUnitToAddToUnloadListPtr: streamingUnitsToAddToUnloadList)
+	{
+		NTF_REF(streamingUnitToAddToUnloadListPtr, streamingUnitToUnload);
+		streamingUnitsRenderable.Remove(&streamingUnitToUnload);
+
+        WaitForSignalWindows(streamingUnitToUnload.m_streamingCommandQueueMutex);
+        streamingUnitToUnload.m_streamingCommandQueue.Enqueue(StreamingCommand::kUnload);
+        MutexRelease(streamingUnitToUnload.m_streamingCommandQueueMutex);
+        //printf("MAIN THREAD: StreamingUnitsAddToUnload(%s)\n", streamingUnitToUnload.m_filenameNoExtension.data());
+
+		streamingUnitsToUnload.PushIfUnique(&streamingUnitToUnload);
+	}
 }
 
 /*static*/ void Vertex::GetAttributeDescriptions(VectorSafeRef<VkVertexInputAttributeDescription> attributeDescriptions)
@@ -63,83 +99,11 @@ StreamingUnitRuntime::StreamingUnitRuntime()
 ///Initialize()/Destroy() concern themselves solely with constructs which we don't want to risk fragmenting by creating and destroying
 void StreamingUnitRuntime::Initialize(const VkDevice& device)
 {
-    m_stateMutexed.Initialize();
+	m_streamingCommandQueueMutex = MutexCreate();
     const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
 
     FenceCreate(&m_transferQueueFinishedFence, fenceCreateFlagBits, device);
     FenceCreate(&m_graphicsQueueFinishedFence, fenceCreateFlagBits, device);
-    m_unloadAsSoonAsGpuIsDoneRendering = false;
-}
-
-StreamingUnitRuntime::StateMutexed::StateMutexed()
-{
-#if NTF_DEBUG
-    m_initialized = false;
-#endif//#if NTF_DEBUG
-}
-void StreamingUnitRuntime::StateMutexed::Initialize()
-{
-#if NTF_DEBUG
-    assert(!m_initialized);
-#endif//#if NTF_DEBUG
-    m_mutex = MutexCreate();
-
-#if NTF_DEBUG
-    m_initialized = true;
-#endif//#if NTF_DEBUG
-    Set(kNotLoaded);
-}
-
-void StreamingUnitRuntime::StateMutexed::Destroy()
-{
-#if NTF_DEBUG
-    assert(m_initialized);
-    m_initialized = false;
-#endif//#if NTF_DEBUG
-    WaitForSignalWindows(m_mutex);
-    HandleCloseWindows(&m_mutex);//assume no ReleaseMutex() needed before closing; not sure this is actually true
-}
-
-StreamingUnitRuntime::State StreamingUnitRuntime::StateMutexed::Get() const
-{
-#if NTF_DEBUG
-    assert(m_initialized);
-#endif//#if NTF_DEBUG
-    WaitForSignalWindows(m_mutex);
-    AssertValid();
-    const State ret = m_state;
-    //printf("Get: m_state=%i\n", ret);
-    MutexRelease(m_mutex);
-    return ret;
-}
-void StreamingUnitRuntime::StateMutexed::Set(const StreamingUnitRuntime::State state)
-{
-#if NTF_DEBUG
-    assert(m_initialized);
-#endif//#if NTF_DEBUG
-    WaitForSignalWindows(m_mutex);
-    m_state = state;
-    AssertValid();
-    //printf("Set: m_state=%i\n", m_state);
-    MutexRelease(m_mutex);
-}
-
-///not threadsafe
-void StreamingUnitRuntime::StateMutexed::AssertValid() const
-{
-#if NTF_DEBUG
-    assert(m_state >= kFirstValidValue);
-    assert(m_state <= kLastValidValue);
-#endif//#if NTF_DEBUG
-}
-
-StreamingUnitRuntime::State StreamingUnitRuntime::StateMutexed() const
-{
-    return m_stateMutexed.Get();
-}
-void StreamingUnitRuntime::StateMutexed(const StreamingUnitRuntime::State state)
-{
-	m_stateMutexed.Set(state);
 }
 
 ///concerns itself solely with Vulkan constructs that we memory-manage, not OS constructs like mutexes
@@ -151,10 +115,6 @@ void StreamingUnitRuntime::Free(
     const VkDevice& device)
 {
     //printf("StreamingUnitRuntime::Free() enter\n");//#LogStreaming
-
-    assert(StateMutexed() == State::kUnloading);
-    assert(m_unloadAsSoonAsGpuIsDoneRendering == false);//this should have been set to true before issuing the command
-
     vkDestroySampler(device, m_textureSampler, GetVulkanAllocationCallbacks());
 
     for (auto& texturedGeometry : m_texturedGeometries)
@@ -200,13 +160,14 @@ void StreamingUnitRuntime::Free(
     NTF_LOG_STREAMING("%i:StreamingUnitRuntime::Free:MutexRelease(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
 
     //printf("StreamingUnitRuntime::Free() exit\n");//#LogStreaming
-    StateMutexed(State::kNotLoaded);
 }
 
 ///Initialize()/Destroy() concern themselves solely with constructs we don't want to risk fragmenting by creating and destroying)
 void StreamingUnitRuntime::Destroy(const VkDevice& device)
 {
-    m_stateMutexed.Destroy();
+	WaitForSignalWindows(m_streamingCommandQueueMutex);
+	HandleCloseWindows(&m_streamingCommandQueueMutex);//assume no ReleaseMutex() needed before closing; not sure this is actually true
+
     vkDestroyFence(device, m_transferQueueFinishedFence, GetVulkanAllocationCallbacks());
     vkDestroyFence(device, m_graphicsQueueFinishedFence, GetVulkanAllocationCallbacks());
 }
@@ -214,6 +175,4 @@ void StreamingUnitRuntime::Destroy(const VkDevice& device)
 void StreamingUnitRuntime::AssertValid() const
 {
     assert(m_filenameNoExtension.Strnlen() > 0);
-    assert(StateMutexed() >= kFirstValidValue);
-    assert(StateMutexed() <= kLastValidValue);
 }

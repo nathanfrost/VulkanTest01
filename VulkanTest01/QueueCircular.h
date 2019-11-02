@@ -42,10 +42,32 @@ public:
         assert(elementsToDequeueNum >= 1);
         m_tail = (m_tail + elementsToDequeueNum) % QUEUE_CIRCULAR_MAX_ELEMENTS_INTERNAL;
     }
-    inline T& PeekMostRecent()
+    ///@todo: unit test
+	inline bool PeekNextItemToDequeue(T*const nextItem) const
+	{
+        assert(nextItem);
+        if (Size() > 0)
+        {
+            *nextItem = operator[](0);
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+	}
+    inline bool PeekLastQueuedItem(T*const lastQueuedItem) const
     {
-        assert(Size() > 0);
-        return operator[](Size() - 1);
+        assert(lastQueuedItem);
+        if (Size() > 0)
+        {
+            *lastQueuedItem = operator[](Size() - 1);
+            return true;
+        }
+        else
+        {
+            return false;
+        }
     }
     inline size_t Size() const
     {
@@ -56,6 +78,11 @@ public:
     inline bool Empty() const
     {
         return Size() == 0;
+    }
+    ///@todo: unit test
+    inline bool Full() const
+    {
+        return Size() == kElementsMaxNum;
     }
     inline void Clear()
     {

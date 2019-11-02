@@ -2,9 +2,12 @@
 #include<assert.h>
 #include<stdint.h>
 #include <vulkan/vulkan.h>
+#include"QueueCircular.h"
 #include"StackNTF.h"
 #include"stdArrayUtility.h"
 #include"StreamingCookAndRuntime.h"
+
+#define NTF_UNIT_TEST_STREAMING 1
 
 #define NTF_LOG_STREAMING_ENABLED 0
 #if NTF_LOG_STREAMING_ENABLED
@@ -15,7 +18,6 @@
 
 class VulkanPagedStackAllocator;
 class StreamingCommandQueueManager;
-class StreamingCommand;
 
 typedef uint32_t StreamingUnitVersion;
 typedef uint8_t StreamingUnitByte;
@@ -44,6 +46,17 @@ struct TexturedGeometry
 
 class AssetLoadingArguments;
 struct AssetLoadingPersistentResources;
+
+enum class StreamingCommand : size_t
+{
+	kLoad, kFirstValidValue = kLoad,
+	kUnload, kLastValidValue = kUnload
+};
+inline void AssertValid(const StreamingCommand command)
+{
+	assert(command >= StreamingCommand::kFirstValidValue);
+	assert(command <= StreamingCommand::kLastValidValue);
+}
 class StreamingUnitRuntime
 {
 public:
@@ -57,15 +70,8 @@ public:
         const VkDevice& device);
     void Destroy(const VkDevice& device);
 
-    enum State 
-    {    
-        kNotLoaded, kFirstValidValue = kNotLoaded,
-        kReady, 
-        kUnloading, kLastValidValue = kUnloading
-    };
-    State StateMutexed() const;
-    void StateMutexed(const State state);
-    bool m_unloadAsSoonAsGpuIsDoneRendering;
+	HANDLE m_streamingCommandQueueMutex;
+	QueueCircular<StreamingCommand, 8> m_streamingCommandQueue;
     void AssertValid() const;
 
 
@@ -103,38 +109,39 @@ public:
     enum { kFrameNumberSignedMinimum = -2147483647 - 1};//avoid Visual Studio 2015 compiler warning C4146, which incorrectly claims a 32bit signed integer can't store -2^31
     //END_#FrameNumber
     FrameNumber m_lastSubmittedCpuFrame;
-    bool m_renderedOnceSinceLastLoad;
+    bool m_submittedToGpuOnceSinceLastLoad;
 
-private:
-    ///@todo: data should only be accessed by the main thread when in the appropriate m_state is (typically kNotLoaded or kReady) -- I could enforce this with methods
-    class StateMutexed
-    {
-    public:
-        StateMutexed();
-        void Initialize();
-        void Destroy();
-        State Get() const;
-        void Set(const State state);
-        void AssertValid() const;
-
-    private:
-#if NTF_DEBUG
-        bool m_initialized;
-#endif//#if NTF_DEBUG
-        HANDLE m_mutex;
-        State m_state;
-    } m_stateMutexed;
-    ///@todo: data should only be accessed by the main thread when in the appropriate m_state is (typically kNotLoaded or kReady) -- I could enforce this with methods
-    friend void StreamingCommandsProcess(
-        AssetLoadingArguments*const threadArgumentsPtr, 
-        AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr);
     VkFence m_transferQueueFinishedFence, m_graphicsQueueFinishedFence;
 };
 
-void StreamingCommandsStart(
-    VectorSafeRef<StreamingCommand> streamingCommands,
-    StreamingCommandQueueManager*const streamingCommandQueueManagerPtr,
-    const HANDLE assetLoadingThreadWakeHandle);
+void StreamingUnitAddToLoadMutexed(
+	StreamingUnitRuntime*const streamingUnitToLoadPtr,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
+	const HANDLE streamingUnitsAddToLoadListMutex);
+void StreamingUnitsAddToLoadMutexed(
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToLoad,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
+	const HANDLE streamingUnitsAddToLoadListMutex);
+
+void StreamingUnitAddToUnload(
+	StreamingUnitRuntime*const streamingUnitToUnloadPtr,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToUnload,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable);
+void StreamingUnitsAddToUnload(
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToAddToUnloadList,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToUnload,
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable);
+
+///not threadsafe
+template<size_t kQueueSize>
+inline bool NextItemToDequeueIs(const StreamingCommand streamingCommandToTestFor, const QueueCircular<StreamingCommand, kQueueSize>& commandQueue)
+{
+    StreamingCommand streamingUnitToUnloadNextCommand;
+    return  commandQueue.PeekNextItemToDequeue(&streamingUnitToUnloadNextCommand) &&
+            streamingUnitToUnloadNextCommand == streamingCommandToTestFor;
+}
 
 class SerializerCookerOut
 {

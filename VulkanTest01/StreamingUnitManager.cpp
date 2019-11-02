@@ -1,4 +1,5 @@
 #include"StreamingUnitManager.h"
+#include"StreamingUnit.h"
 
 //extern LARGE_INTEGER g_queryPerformanceFrequency;
 
@@ -54,35 +55,37 @@ void StreamingCommandsProcess(
 {
     NTF_REF(threadArgumentsPtr, threadArguments);
 
+	NTF_REF(threadArguments.m_deviceLocalMemoryPersistent, deviceLocalMemoryPersistent);
+	auto& deviceLocalMemoryStreamingUnits = threadArguments.m_deviceLocalMemoryStreamingUnits;
+	auto& deviceLocalMemoryStreamingUnitsAllocated = threadArguments.m_deviceLocalMemoryStreamingUnitsAllocated;
+	NTF_REF(&threadArguments.m_streamingUnitsToAddToLoad, streamingUnitsToAddToLoad);
+	NTF_REF(&threadArguments.m_streamingUnitsToAddToRenderable, streamingUnitsToAddToRenderable);
+
     NTF_REF(threadArguments.m_commandBufferTransfer, commandBufferTransfer);
     NTF_REF(threadArguments.m_commandBufferTransitionImage, commandBufferTransitionImage);
     NTF_REF(threadArguments.m_device, device);
     NTF_REF(threadArguments.m_deviceLocalMemoryMutex, deviceLocalMemoryMutex);
-    NTF_REF(threadArguments.m_deviceLocalMemoryPersistent, deviceLocalMemoryPersistent);
-    auto& deviceLocalMemoryStreamingUnits = threadArguments.m_deviceLocalMemoryStreamingUnits;
-    auto& deviceLocalMemoryStreamingUnitsAllocated = threadArguments.m_deviceLocalMemoryStreamingUnitsAllocated;
     NTF_REF(threadArguments.m_graphicsQueue, graphicsQueue);
     NTF_REF(threadArguments.m_graphicsQueueMutex, graphicsQueueMutex);
     NTF_REF(threadArguments.m_instance, instance);
     NTF_REF(threadArguments.m_physicalDevice, physicalDevice);
     NTF_REF(threadArguments.m_queueFamilyIndices, queueFamilyIndices);
-    NTF_REF(threadArguments.m_streamingCommandQueueManager, streamingCommandQueueManager);
-    auto& threadCommand = *threadArguments.m_threadCommand;
+	NTF_REF(threadArguments.m_renderPass, renderPass);
+	NTF_REF(threadArguments.m_streamingUnitsAddToLoadListMutex, streamingUnitsAddToLoadListMutex);
+	NTF_REF(threadArguments.m_streamingUnitsAddToRenderableMutex, streamingUnitsAddToRenderableMutex);
+	NTF_REF(threadArguments.m_swapChainExtent, swapChainExtent);
     NTF_REF(threadArguments.m_threadDone, threadDone);
     NTF_REF(threadArguments.m_threadWake, threadWake);
     NTF_REF(threadArguments.m_transferQueue, transferQueue);
 
-    NTF_REF(threadArguments.m_renderPass, renderPass);
-    NTF_REF(threadArguments.m_swapChainExtent, swapChainExtent);
-
 
     NTF_REF(assetLoadingPersistentResourcesPtr, assetLoadingPersistentResources);
 
+	NTF_REF(&assetLoadingPersistentResources.offsetToFirstByteOfStagingBuffer, offsetToFirstByteOfStagingBuffer);
     NTF_REF(&assetLoadingPersistentResources.shaderLoadingScratchSpace, shaderLoadingScratchSpace);
     NTF_REF(&assetLoadingPersistentResources.stagingBufferGpu, stagingBufferGpu);
+	NTF_REF(&assetLoadingPersistentResources.stagingBufferGpuAlignmentStandard, stagingBufferGpuAlignmentStandard);
     NTF_REF(&assetLoadingPersistentResources.stagingBufferGpuMemory, stagingBufferGpuMemory);
-    NTF_REF(&assetLoadingPersistentResources.offsetToFirstByteOfStagingBuffer, offsetToFirstByteOfStagingBuffer);
-    NTF_REF(&assetLoadingPersistentResources.stagingBufferGpuAlignmentStandard, stagingBufferGpuAlignmentStandard);
     NTF_REF(&assetLoadingPersistentResources.stagingBufferMemoryMapCpuToGpu, stagingBufferMemoryMapCpuToGpu);
     NTF_REF(&assetLoadingPersistentResources.transferFinishedSemaphore, transferFinishedSemaphore);
 
@@ -93,326 +96,312 @@ void StreamingCommandsProcess(
     assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.transferFamily == queueFamilyIndices.graphicsFamily));
     const HANDLE*const transferQueueMutex = unifiedGraphicsAndTransferQueue ? &graphicsQueueMutex : nullptr;//if we have a single queue for graphics and transfer rather than two separate queues, then we must be mutex that one queue
 
-    assert(threadCommand == AssetLoadingArguments::ThreadCommand::kLoadStreamingUnit);
-
     VkPipelineStageFlags transferFinishedPipelineStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
     VectorSafe<VkBuffer, 32> stagingBuffersGpu;
 
-    //main thread should have enqueued one or more streaming units on its queue, so get access to that queue
-    streamingCommandQueueManager.SwitchStreamingCommandQueues_and_AcquireBothQueueMutexes();
-    streamingCommandQueueManager.Release(streamingCommandQueueManager.GetMainThreadStreamingCommandQueue());//give main thread the new main thread queue that we just acquired above
+	VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> streamingUnitsToLoad, streamingUnitsToLoadCurrent;
 
-    auto& streamingCommandQueue = *streamingCommandQueueManager.GetAssetLoadingStreamingCommandQueue();//no need to acquire the asset thread queue mutex, since we acquired it above
-    size_t streamingUnitQueueSize = streamingCommandQueue.m_queue.Size();
-    for (size_t streamingCommandIndex = 0; streamingCommandIndex < streamingUnitQueueSize; ++streamingCommandIndex)
+	WaitForSignalWindows(streamingUnitsAddToLoadListMutex);
+	streamingUnitsToLoad.Copy(streamingUnitsToAddToLoad);
+	streamingUnitsToAddToLoad.size(0);
+	ReleaseMutex(streamingUnitsAddToLoadListMutex);
+    
+    while (streamingUnitsToLoad.size())
     {
-        /*  advance past any streaming unit that isn't loaded; once no streaming units in the queue are not loaded clear the queue.  This
-            ensures duplicate and already-loaded streaming units are only loaded once, and that unloading streaming units sit in the queue
-            until they are unloaded*/
-        NTF_REF(&streamingCommandQueue.m_queue[streamingCommandIndex], streamingCommand);
-        //printf("streamingUnit:%s\n", streamingUnit.m_filenameNoExtension.data());//#LogStreaming
-        
-        assert(stagingBuffersGpu.size() == 0);
-        assert(stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
+        streamingUnitsToLoadCurrent.Copy(streamingUnitsToLoad);
+        streamingUnitsToLoad.size(0);//assume all processed, until shown otherwise
+        for (auto& streamingUnitToLoadPtr: streamingUnitsToLoadCurrent)
         {
-            //LARGE_INTEGER perfCount;
-            //QueryPerformanceCounter(&perfCount);
-            //printf("ASSET THREAD: AssetLoadingThread loading streaming unit; time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-        }
+            NTF_REF(streamingUnitToLoadPtr, streamingUnit);
+            //printf("streamingUnit:%s\n", streamingUnit.m_filenameNoExtension.data());//#LogStreaming
 
-        assert(streamingCommand.m_command >= StreamingCommand::kFirstValidValue);
-        assert(streamingCommand.m_command <= StreamingCommand::kLastValidValue);
-        NTF_REF(streamingCommand.m_streamingUnit, streamingUnit);
-
-        switch (streamingCommand.m_command)
-        {
-            case StreamingCommand::kLoad:
+            WaitForSignalWindows(streamingUnit.m_streamingCommandQueueMutex);
+            ///TODO_NEXT: "Peek and maybe process" and "assert and ignore if already loaded" like main thread on unload
+            if (NextItemToDequeueIs(StreamingCommand::kLoad, streamingUnit.m_streamingCommandQueue))
             {
-                const bool streamingUnitNotLoaded = streamingUnit.StateMutexed() == StreamingUnitRuntime::kNotLoaded;
-                assert(streamingUnitNotLoaded);
-                if (streamingUnitNotLoaded)
+                ReleaseMutex(streamingUnit.m_streamingCommandQueueMutex);
+
+                assert(stagingBuffersGpu.size() == 0);
+                assert(stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
                 {
-                    //allocate a memory allocator to the streaming unit
-                    WaitForSignalWindows(deviceLocalMemoryMutex);
-                    NTF_LOG_STREAMING("%i:StreamingUnitsLoadAllQueued:WaitForSignalWindows(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
-                    const size_t deviceLocalMemoryStreamingUnitsSize = deviceLocalMemoryStreamingUnits.size();
-                    size_t deviceLocalMemoryStreamingUnitIndex = 0;
-                    for (; deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize; ++deviceLocalMemoryStreamingUnitIndex)
+                    //LARGE_INTEGER perfCount;
+                    //QueryPerformanceCounter(&perfCount);
+                    //printf("ASSET THREAD: AssetLoadingThread loading streaming unit; time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+                }
+
+#if !NTF_UNIT_TEST_STREAMING
+                assert(streamingUnitNotLoaded);//it is an error to unload a streaming unit that isn't loaded, albeit an error we can probably recover from
+#endif//#if !NTF_UNIT_TEST_STREAMING
+                //allocate a memory allocator to the streaming unit
+                WaitForSignalWindows(deviceLocalMemoryMutex);
+                NTF_LOG_STREAMING("%i:StreamingUnitsLoadAllQueued:WaitForSignalWindows(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
+                const size_t deviceLocalMemoryStreamingUnitsSize = deviceLocalMemoryStreamingUnits.size();
+                size_t deviceLocalMemoryStreamingUnitIndex = 0;
+                for (; deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize; ++deviceLocalMemoryStreamingUnitIndex)
+                {
+                    auto& deviceLocalMemoryStreamingUnitAllocated = deviceLocalMemoryStreamingUnitsAllocated[deviceLocalMemoryStreamingUnitIndex];
+                    if (!deviceLocalMemoryStreamingUnitAllocated)
                     {
-                        auto& deviceLocalMemoryStreamingUnitAllocated = deviceLocalMemoryStreamingUnitsAllocated[deviceLocalMemoryStreamingUnitIndex];
-                        if (!deviceLocalMemoryStreamingUnitAllocated)
-                        {
-                            deviceLocalMemoryStreamingUnitAllocated = true;
-                            streamingUnit.m_deviceLocalMemory = &deviceLocalMemoryStreamingUnits[deviceLocalMemoryStreamingUnitIndex];
-                            break;
-                        }
+                        deviceLocalMemoryStreamingUnitAllocated = true;
+                        streamingUnit.m_deviceLocalMemory = &deviceLocalMemoryStreamingUnits[deviceLocalMemoryStreamingUnitIndex];
+                        break;
                     }
-                    assert(deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize);
-                    MutexRelease(deviceLocalMemoryMutex);
+                }
+                assert(deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize);
+                MutexRelease(deviceLocalMemoryMutex);
 
-                    const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-                    CreateDescriptorPool(&streamingUnit.m_descriptorPool, descriptorType, device, TODO_REFACTOR_NUM);
-                    CreateDescriptorSetLayout(&streamingUnit.m_descriptorSetLayout, descriptorType, device, TODO_REFACTOR_NUM);
-                    CreateGraphicsPipeline(
-                        &streamingUnit.m_pipelineLayout,
-                        &streamingUnit.m_graphicsPipeline,
-                        &shaderLoadingScratchSpace,
-                        renderPass,
-                        streamingUnit.m_descriptorSetLayout,
-                        swapChainExtent,
-                        device);
+                const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                CreateDescriptorPool(&streamingUnit.m_descriptorPool, descriptorType, device, TODO_REFACTOR_NUM);
+                CreateDescriptorSetLayout(&streamingUnit.m_descriptorSetLayout, descriptorType, device, TODO_REFACTOR_NUM);
+                CreateGraphicsPipeline(
+                    &streamingUnit.m_pipelineLayout,
+                    &streamingUnit.m_graphicsPipeline,
+                    &shaderLoadingScratchSpace,
+                    renderPass,
+                    streamingUnit.m_descriptorSetLayout,
+                    swapChainExtent,
+                    device);
 
-                    streamingUnit.m_uniformBufferSizeAligned = AlignToNonCoherentAtomSize(streamingUnit.m_uniformBufferSizeUnaligned);
-                    BeginCommandBuffer(commandBufferTransfer, device);
-                    if (!unifiedGraphicsAndTransferQueue)
-                    {
-                        BeginCommandBuffer(commandBufferTransitionImage, device);
-                    }
-                    CreateTextureSampler(&streamingUnit.m_textureSampler, device);
+                streamingUnit.m_uniformBufferSizeAligned = AlignToNonCoherentAtomSize(streamingUnit.m_uniformBufferSizeUnaligned);
+                BeginCommandBuffer(commandBufferTransfer, device);
+                if (!unifiedGraphicsAndTransferQueue)
+                {
+                    BeginCommandBuffer(commandBufferTransitionImage, device);
+                }
+                CreateTextureSampler(&streamingUnit.m_textureSampler, device);
 
-                    VectorSafe<VkSemaphore, 1> transferFinishedSemaphores;
+                VectorSafe<VkSemaphore, 1> transferFinishedSemaphores;
 
-                    ArraySafe<char, 512> streamingUnitFilePathRelative;
-                    streamingUnitFilePathRelative.Snprintf("%s\\%s.%s",
-                        CookedFileDirectoryGet(), streamingUnit.m_filenameNoExtension.data(), StreamingUnitFilenameExtensionGet());
-                    FILE* streamingUnitFile;
+                ArraySafe<char, 512> streamingUnitFilePathRelative;
+                streamingUnitFilePathRelative.Snprintf("%s\\%s.%s",
+                    CookedFileDirectoryGet(), streamingUnit.m_filenameNoExtension.data(), StreamingUnitFilenameExtensionGet());
+                FILE* streamingUnitFile;
 
-                    Fopen(&streamingUnitFile, streamingUnitFilePathRelative.begin(), "rb");
+                Fopen(&streamingUnitFile, streamingUnitFilePathRelative.begin(), "rb");
 
-                    //BEG_GENERALIZE_READER_WRITER
-                    StreamingUnitVersion version;
-                    StreamingUnitTexturedGeometryNum texturedGeometryNum;
-                    Fread(streamingUnitFile, &version, sizeof(version), 1);
-                    Fread(streamingUnitFile, &texturedGeometryNum, sizeof(texturedGeometryNum), 1);
-                    //END_GENERALIZE_READER_WRITER
-                    stagingBufferGpuOffsetToAllocatedBlock = 0;
-                    NTF_REF(streamingUnit.m_deviceLocalMemory, deviceLocalMemory);
-                    for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometryNum; ++texturedGeometryIndex)
-                    {
-                        //load texture
-                        StreamingUnitTextureDimension textureWidth, textureHeight;
-                        auto& texturedGeometry = streamingUnit.m_texturedGeometries[texturedGeometryIndex];
-                        size_t imageSizeBytes;
-                        const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
-                        ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
-                            &texturedGeometry.textureImage,
-                            &deviceLocalMemory,
-                            &textureWidth,
-                            &textureHeight,
-                            &stagingBufferMemoryMapCpuToGpu,
-                            &imageSizeBytes,
-                            &stagingBufferGpuOffsetToAllocatedBlock,
-                            streamingUnitFile,
-                            imageFormat,
-                            VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
-                            VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
-                            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                            device,
-                            physicalDevice);
-
-                        stagingBuffersGpu.sizeIncrement();
-                        CreateBuffer(
-                            &stagingBuffersGpu.back(),
-                            &stagingBufferGpuOffsetToAllocatedBlock,
-                            stagingBufferGpuMemory,
-                            offsetToFirstByteOfStagingBuffer,
-                            imageSizeBytes,
-                            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                            device,
-                            physicalDevice);
-
-                        TransferImageFromCpuToGpu(
-                            texturedGeometry.textureImage,
-                            textureWidth,
-                            textureHeight,
-                            imageFormat,
-                            stagingBuffersGpu.back(),
-                            commandBufferTransfer,
-                            queueFamilyIndices.transferFamily,
-                            commandBufferTransitionImage,
-                            queueFamilyIndices.graphicsFamily,
-                            device,
-                            instance);
-
-                        CreateTextureImageView(&streamingUnit.m_textureImageViews[texturedGeometryIndex], texturedGeometry.textureImage, device);
-                        {
-                            //LARGE_INTEGER perfCount;
-                            //QueryPerformanceCounter(&perfCount);
-                            //printf("ASSET THREAD: CreateBuffer()=%llu at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndex - 1], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-                        }
-
-                        //load vertex and index buffer
-                        ArraySafeRef<StreamingUnitByte> stagingBufferCpuToGpuVertices;
-                        StreamingUnitVerticesNum verticesNum;
-                        size_t vertexBufferSizeBytes;
-                        VertexBufferSerialize<SerializerRuntimeIn>(
-                            streamingUnitFile,
-                            &stagingBufferMemoryMapCpuToGpu,
-                            &stagingBufferGpuOffsetToAllocatedBlock,
-                            &verticesNum,
-                            ArraySafeRef<Vertex>(),
-                            stagingBufferCpuToGpuVertices,
-                            &vertexBufferSizeBytes,
-                            stagingBufferGpuAlignmentStandard);
-                        CopyBufferToGpuPrepare(
-                            &deviceLocalMemory,
-                            &texturedGeometry.vertexBuffer,
-                            &texturedGeometry.vertexBufferMemory,
-                            &stagingBuffersGpu,
-                            &stagingBufferGpuOffsetToAllocatedBlock,
-                            stagingBufferGpuMemory,
-                            stagingBufferGpuAlignmentStandard,
-                            offsetToFirstByteOfStagingBuffer,
-                            vertexBufferSizeBytes,
-                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
-                            commandBufferTransfer,
-                            device,
-                            physicalDevice,
-                            instance);
-
-                        ArraySafeRef<StreamingUnitByte> stagingBufferCpuToGpuIndices;
-                        StreamingUnitIndicesNum indicesNum;
-                        size_t indexBufferSizeBytes;
-                        IndexBufferSerialize<SerializerRuntimeIn>(
-                            streamingUnitFile,
-                            &stagingBufferMemoryMapCpuToGpu,
-                            &stagingBufferGpuOffsetToAllocatedBlock,
-                            &indicesNum,
-                            ArraySafeRef<IndexBufferValue>(),
-                            stagingBufferCpuToGpuIndices,
-                            &indexBufferSizeBytes,
-                            stagingBufferGpuAlignmentStandard);
-                        texturedGeometry.indicesSize = CastWithAssert<size_t, uint32_t>(indicesNum);
-                        CopyBufferToGpuPrepare(
-                            &deviceLocalMemory,
-                            &texturedGeometry.indexBuffer,
-                            &texturedGeometry.indexBufferMemory,
-                            &stagingBuffersGpu,
-                            &stagingBufferGpuOffsetToAllocatedBlock,
-                            stagingBufferGpuMemory,
-                            stagingBufferGpuAlignmentStandard,
-                            offsetToFirstByteOfStagingBuffer,
-                            indexBufferSizeBytes,
-                            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-                            commandBufferTransfer,
-                            device,
-                            physicalDevice,
-                            instance);
-                        {
-                            //LARGE_INTEGER perfCount;
-                            //QueryPerformanceCounter(&perfCount);
-                            //printf("ASSET THREAD: CreateBuffer()=%llu at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndex-1], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-                        }
-                    }
-                    Fclose(streamingUnitFile);
-                    if (!unifiedGraphicsAndTransferQueue)
-                    {
-                        transferFinishedSemaphores.Push(transferFinishedSemaphore);
-                    }
-
-                    EndCommandBuffer(commandBufferTransfer);
-                    SubmitCommandBuffer(
-                        transferFinishedSemaphores,
-                        ConstVectorSafeRef<VkSemaphore>(),
-                        ArraySafeRef<VkPipelineStageFlags>(),
-                        commandBufferTransfer,
-                        transferQueue,
-                        transferQueueMutex,
-                        streamingUnit.m_transferQueueFinishedFence,
-                        instance);
-
-                    if (!unifiedGraphicsAndTransferQueue)
-                    {
-                        EndCommandBuffer(commandBufferTransitionImage);
-                        SubmitCommandBuffer(
-                            ConstVectorSafeRef<VkSemaphore>(),
-                            transferFinishedSemaphores,
-                            ArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),///<@todo: ArraySafeRefConst
-                            commandBufferTransitionImage,
-                            graphicsQueue,
-                            &graphicsQueueMutex,
-                            streamingUnit.m_graphicsQueueFinishedFence,
-                            instance);
-                    }
-
-                    const VkDeviceSize uniformBufferSize = streamingUnit.m_uniformBufferSizeAligned;
-                    CreateUniformBuffer(
-                        &streamingUnit.m_uniformBufferCpuMemory,
-                        &streamingUnit.m_uniformBufferGpuMemory,
-                        &streamingUnit.m_uniformBuffer,
+                //BEG_GENERALIZE_READER_WRITER
+                StreamingUnitVersion version;
+                StreamingUnitTexturedGeometryNum texturedGeometryNum;
+                Fread(streamingUnitFile, &version, sizeof(version), 1);
+                Fread(streamingUnitFile, &texturedGeometryNum, sizeof(texturedGeometryNum), 1);
+                //END_GENERALIZE_READER_WRITER
+                stagingBufferGpuOffsetToAllocatedBlock = 0;
+                NTF_REF(streamingUnit.m_deviceLocalMemory, deviceLocalMemory);
+                for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometryNum; ++texturedGeometryIndex)
+                {
+                    //load texture
+                    StreamingUnitTextureDimension textureWidth, textureHeight;
+                    auto& texturedGeometry = streamingUnit.m_texturedGeometries[texturedGeometryIndex];
+                    size_t imageSizeBytes;
+                    const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+                    ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
+                        &texturedGeometry.textureImage,
                         &deviceLocalMemory,
-                        &streamingUnit.m_uniformBufferOffsetToGpuMemory,
-                        uniformBufferSize,
+                        &textureWidth,
+                        &textureHeight,
+                        &stagingBufferMemoryMapCpuToGpu,
+                        &imageSizeBytes,
+                        &stagingBufferGpuOffsetToAllocatedBlock,
+                        streamingUnitFile,
+                        imageFormat,
+                        VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
+                        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
+                        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                         device,
                         physicalDevice);
 
-                    CreateDescriptorSet(
-                        &streamingUnit.m_descriptorSet,
-                        descriptorType,
-                        streamingUnit.m_descriptorSetLayout,
-                        streamingUnit.m_descriptorPool,
-                        streamingUnit.m_uniformBuffer,
-                        uniformBufferSize,
-                        &streamingUnit.m_textureImageViews,///<@todo NTF: @todo: ConstArraySafeRef that does not need ambersand here
-                        TODO_REFACTOR_NUM,
-                        streamingUnit.m_textureSampler,
-                        device);
+                    stagingBuffersGpu.sizeIncrement();
+                    CreateBuffer(
+                        &stagingBuffersGpu.back(),
+                        &stagingBufferGpuOffsetToAllocatedBlock,
+                        stagingBufferGpuMemory,
+                        offsetToFirstByteOfStagingBuffer,
+                        imageSizeBytes,
+                        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                        device,
+                        physicalDevice);
 
-                    //clean up staging buffers if they were in use but have completed their transfers
+                    TransferImageFromCpuToGpu(
+                        texturedGeometry.textureImage,
+                        textureWidth,
+                        textureHeight,
+                        imageFormat,
+                        stagingBuffersGpu.back(),
+                        commandBufferTransfer,
+                        queueFamilyIndices.transferFamily,
+                        commandBufferTransitionImage,
+                        queueFamilyIndices.graphicsFamily,
+                        device,
+                        instance);
+
+                    CreateTextureImageView(&streamingUnit.m_textureImageViews[texturedGeometryIndex], texturedGeometry.textureImage, device);
                     {
-                        FenceWaitUntilSignalled(streamingUnit.m_transferQueueFinishedFence, device);
-                        NTF_LOG_STREAMING("%i:FenceWaitUntilSignalled(streamingUnit.m_transferQueueFinishedFence=%zu)\n", GetCurrentThreadId(), (size_t)streamingUnit.m_transferQueueFinishedFence);
-                        if (!unifiedGraphicsAndTransferQueue)
-                        {
-                            FenceWaitUntilSignalled(streamingUnit.m_graphicsQueueFinishedFence, device);
-                            NTF_LOG_STREAMING("%i:FenceWaitUntilSignalled(streamingUnit.m_graphicsQueueFinishedFence=%zu)\n", GetCurrentThreadId(), (size_t)streamingUnit.m_graphicsQueueFinishedFence);
-                        }
+                        //LARGE_INTEGER perfCount;
+                        //QueryPerformanceCounter(&perfCount);
+                        //printf("ASSET THREAD: CreateBuffer()=%llu at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndex - 1], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+                    }
 
-                        streamingUnit.StateMutexed(StreamingUnitRuntime::kReady);//streaming unit is ready to render on the main thread
+                    //load vertex and index buffer
+                    ArraySafeRef<StreamingUnitByte> stagingBufferCpuToGpuVertices;
+                    StreamingUnitVerticesNum verticesNum;
+                    size_t vertexBufferSizeBytes;
+                    VertexBufferSerialize<SerializerRuntimeIn>(
+                        streamingUnitFile,
+                        &stagingBufferMemoryMapCpuToGpu,
+                        &stagingBufferGpuOffsetToAllocatedBlock,
+                        &verticesNum,
+                        ArraySafeRef<Vertex>(),
+                        stagingBufferCpuToGpuVertices,
+                        &vertexBufferSizeBytes,
+                        stagingBufferGpuAlignmentStandard);
+                    CopyBufferToGpuPrepare(
+                        &deviceLocalMemory,
+                        &texturedGeometry.vertexBuffer,
+                        &texturedGeometry.vertexBufferMemory,
+                        &stagingBuffersGpu,
+                        &stagingBufferGpuOffsetToAllocatedBlock,
+                        stagingBufferGpuMemory,
+                        stagingBufferGpuAlignmentStandard,
+                        offsetToFirstByteOfStagingBuffer,
+                        vertexBufferSizeBytes,
+                        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
+                        commandBufferTransfer,
+                        device,
+                        physicalDevice,
+                        instance);
 
-                        //clean up staging memory
-                        stagingBufferMemoryMapCpuToGpu.Clear();
-
-                        for (auto& stagingBufferGpu : stagingBuffersGpu)
-                        {
-                            vkDestroyBuffer(device, stagingBufferGpu, GetVulkanAllocationCallbacks());
-
-                            //LARGE_INTEGER perfCount;
-                            //QueryPerformanceCounter(&perfCount);
-                            //printf("ASSET THREAD: vkDestroyBuffer(%llu) at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-                        }
-                        stagingBuffersGpu.size(0);
-                        //printf("Staging buffers cleaned up\n");
+                    ArraySafeRef<StreamingUnitByte> stagingBufferCpuToGpuIndices;
+                    StreamingUnitIndicesNum indicesNum;
+                    size_t indexBufferSizeBytes;
+                    IndexBufferSerialize<SerializerRuntimeIn>(
+                        streamingUnitFile,
+                        &stagingBufferMemoryMapCpuToGpu,
+                        &stagingBufferGpuOffsetToAllocatedBlock,
+                        &indicesNum,
+                        ArraySafeRef<IndexBufferValue>(),
+                        stagingBufferCpuToGpuIndices,
+                        &indexBufferSizeBytes,
+                        stagingBufferGpuAlignmentStandard);
+                    texturedGeometry.indicesSize = CastWithAssert<size_t, uint32_t>(indicesNum);
+                    CopyBufferToGpuPrepare(
+                        &deviceLocalMemory,
+                        &texturedGeometry.indexBuffer,
+                        &texturedGeometry.indexBufferMemory,
+                        &stagingBuffersGpu,
+                        &stagingBufferGpuOffsetToAllocatedBlock,
+                        stagingBufferGpuMemory,
+                        stagingBufferGpuAlignmentStandard,
+                        offsetToFirstByteOfStagingBuffer,
+                        indexBufferSizeBytes,
+                        VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                        commandBufferTransfer,
+                        device,
+                        physicalDevice,
+                        instance);
+                    {
+                        //LARGE_INTEGER perfCount;
+                        //QueryPerformanceCounter(&perfCount);
+                        //printf("ASSET THREAD: CreateBuffer()=%llu at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndex-1], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
                     }
                 }
-
-                break;
-            }
-            case StreamingCommand::kUnload:
-            {
-                const bool streamingUnitReady = streamingUnit.StateMutexed() == StreamingUnitRuntime::kReady;
-                assert(streamingUnitReady);
-                if (streamingUnitReady)
+                Fclose(streamingUnitFile);
+                if (!unifiedGraphicsAndTransferQueue)
                 {
-                    streamingUnit.Free(
-                        &deviceLocalMemoryStreamingUnitsAllocated,
-                        deviceLocalMemoryStreamingUnits,
-                        deviceLocalMemoryMutex,
-                        false,
-                        device);
+                    transferFinishedSemaphores.Push(transferFinishedSemaphore);
                 }
-                break;
-            }
-            default:
+
+                EndCommandBuffer(commandBufferTransfer);
+                SubmitCommandBuffer(
+                    transferFinishedSemaphores,
+                    ConstVectorSafeRef<VkSemaphore>(),
+                    ArraySafeRef<VkPipelineStageFlags>(),
+                    commandBufferTransfer,
+                    transferQueue,
+                    transferQueueMutex,
+                    streamingUnit.m_transferQueueFinishedFence,
+                    instance);
+
+                if (!unifiedGraphicsAndTransferQueue)
+                {
+                    EndCommandBuffer(commandBufferTransitionImage);
+                    SubmitCommandBuffer(
+                        ConstVectorSafeRef<VkSemaphore>(),
+                        transferFinishedSemaphores,
+                        ArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),///<@todo: ArraySafeRefConst
+                        commandBufferTransitionImage,
+                        graphicsQueue,
+                        &graphicsQueueMutex,
+                        streamingUnit.m_graphicsQueueFinishedFence,
+                        instance);
+                }
+
+                const VkDeviceSize uniformBufferSize = streamingUnit.m_uniformBufferSizeAligned;
+                CreateUniformBuffer(
+                    &streamingUnit.m_uniformBufferCpuMemory,
+                    &streamingUnit.m_uniformBufferGpuMemory,
+                    &streamingUnit.m_uniformBuffer,
+                    &deviceLocalMemory,
+                    &streamingUnit.m_uniformBufferOffsetToGpuMemory,
+                    uniformBufferSize,
+                    device,
+                    physicalDevice);
+
+                CreateDescriptorSet(
+                    &streamingUnit.m_descriptorSet,
+                    descriptorType,
+                    streamingUnit.m_descriptorSetLayout,
+                    streamingUnit.m_descriptorPool,
+                    streamingUnit.m_uniformBuffer,
+                    uniformBufferSize,
+                    &streamingUnit.m_textureImageViews,///<@todo NTF: @todo: ConstArraySafeRef that does not need ambersand here
+                    TODO_REFACTOR_NUM,
+                    streamingUnit.m_textureSampler,
+                    device);
+
+                //clean up staging buffers if they were in use but have completed their transfers
+                {
+                    FenceWaitUntilSignalled(streamingUnit.m_transferQueueFinishedFence, device);
+                    NTF_LOG_STREAMING("%i:FenceWaitUntilSignalled(streamingUnit.m_transferQueueFinishedFence=%zu)\n", GetCurrentThreadId(), (size_t)streamingUnit.m_transferQueueFinishedFence);
+                    if (!unifiedGraphicsAndTransferQueue)
+                    {
+                        FenceWaitUntilSignalled(streamingUnit.m_graphicsQueueFinishedFence, device);
+                        NTF_LOG_STREAMING("%i:FenceWaitUntilSignalled(streamingUnit.m_graphicsQueueFinishedFence=%zu)\n", GetCurrentThreadId(), (size_t)streamingUnit.m_graphicsQueueFinishedFence);
+                    }
+
+                    //clean up staging memory
+                    stagingBufferMemoryMapCpuToGpu.Clear();
+
+                    for (auto& stagingBufferGpu : stagingBuffersGpu)
+                    {
+                        vkDestroyBuffer(device, stagingBufferGpu, GetVulkanAllocationCallbacks());
+
+                        //LARGE_INTEGER perfCount;
+                        //QueryPerformanceCounter(&perfCount);
+                        //printf("ASSET THREAD: vkDestroyBuffer(%llu) at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndexFree], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
+                    }
+                    stagingBuffersGpu.size(0);
+                    //printf("Staging buffers cleaned up\n");
+                }
+
+                //streaming unit is now loaded
+                streamingUnit.m_submittedToGpuOnceSinceLastLoad = false;//must happen before removing the streaming command below so that if an Unload command is pending after this Load command, the streaming unit is not unloaded while being left on the renderable list, thus attempting to render freed Gpu resources
+                WaitForSignalWindows(streamingUnit.m_streamingCommandQueueMutex);
+                streamingUnit.m_streamingCommandQueue.Dequeue();
+                ReleaseMutex(streamingUnit.m_streamingCommandQueueMutex);
+
+                WaitForSignalWindows(streamingUnitsAddToRenderableMutex);
+                streamingUnitsToAddToRenderable.Push(&streamingUnit);
+                ReleaseMutex(streamingUnitsAddToRenderableMutex);
+                
+                //printf("ASSET THREAD: streamingUnit.Load('%s') completed\n", streamingUnit.m_filenameNoExtension.data());
+            }//(NextItemToDequeueIs(StreamingCommand::kLoad, streamingUnit.m_streamingCommandQueue))
+            else
             {
-                assert(false);
-                break;
+                ReleaseMutex(streamingUnit.m_streamingCommandQueueMutex);
+                streamingUnitsToLoad.Push(&streamingUnit);//can't be processed yet; try again next loop
             }
-        }        
+        }//for (auto& streamingUnitToLoadPtr: streamingUnitsToLoadCurrent)
     }
-    streamingCommandQueue.m_queue.Clear();//processed all commands
-    SignalSemaphoreWindows(streamingCommandQueue.m_streamingCommandsDoneHandle);
-    streamingCommandQueueManager.Release(&streamingCommandQueue);
 }
 
 void AssetLoadingPersistentResourcesDestroy(
@@ -464,40 +453,4 @@ DWORD WINAPI AssetLoadingThread(void* arg)
 
     AssetLoadingPersistentResourcesDestroy(&assetLoadingPersistentResources, threadDone, device);
     return 0;
-}
-
-void StreamingCommandQueueManager::SwitchStreamingCommandQueues_and_AcquireBothQueueMutexes()
-{
-    for (auto& streamingCommandQueue : m_streamingCommandQueues)
-    {
-        WaitForSignalWindows(streamingCommandQueue.m_modifyMutex);
-        NTF_LOG_STREAMING("%i:StreamingCommandQueueManager::SwitchStreamingCommandQueues_and_AcquireBothQueueMutexes:WaitForSignalWindows(&streamingCommandQueue=%p->streamingCommandQueue.m_modifyMutex=%zu)\n", 
-            GetCurrentThreadId(), &streamingCommandQueue, (size_t)streamingCommandQueue.m_modifyMutex);
-    }
-
-    WaitForSignalWindows(m_mainThread_StreamingCommandQueue_IsIndex0_Mutex);
-    NTF_LOG_STREAMING("%i:StreamingCommandQueueManager::WaitForSignalWindows:WaitForSignalWindows(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex=%zu)\n",
-        GetCurrentThreadId(), (size_t)m_mainThread_StreamingCommandQueue_IsIndex0_Mutex);
-    m_mainThreadStreamingCommandQueue0 = !m_mainThreadStreamingCommandQueue0;
-    MutexRelease(m_mainThread_StreamingCommandQueue_IsIndex0_Mutex);
-    NTF_LOG_STREAMING("%i:StreamingCommandQueueManager::WaitForSignalWindows:MutexRelease(m_mainThread_StreamingUnitQueue_IsIndex0_Mutex=%zu)\n",
-        GetCurrentThreadId(), (size_t)m_mainThread_StreamingCommandQueue_IsIndex0_Mutex);
-}
-
-void StreamingCommandQueueManager::Destroy()
-{
-    auto& mainThreadStreamingUnitQueue = *GetMainThreadStreamingCommandQueue_after_WaitForSignalWindows();
-    auto& assetThreadStreamingUnitQueue = *GetAssetLoadingStreamingCommandQueue_after_WaitForSignalWindows();
-
-    //in case asset loading thread is loading one or more streaming units
-    WaitForSignalWindows(mainThreadStreamingUnitQueue.m_streamingCommandsDoneHandle);
-    WaitForSignalWindows(assetThreadStreamingUnitQueue.m_streamingCommandsDoneHandle);
-    assert(mainThreadStreamingUnitQueue.m_queue.Empty());
-    assert(assetThreadStreamingUnitQueue.m_queue.Empty());
-
-    for (auto& streamingCommandQueue : m_streamingCommandQueues)
-    {
-        streamingCommandQueue.Destroy();
-    }
-    HandleCloseWindows(&m_mainThread_StreamingCommandQueue_IsIndex0_Mutex);
 }
