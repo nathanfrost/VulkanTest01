@@ -2531,7 +2531,7 @@ void CreateSwapChain(
                             minImageCount+x-1 images.  This is because, for example, if the minImageCount member of VkSurfaceCapabilitiesKHR is 2, 
                             and the application creates a swapchain with 2 presentable images, the application can acquire one image, and must 
                             present it before trying to acquire another image -- per Vulkan spec */
-    const uint32_t swapChainImagesNumRequired = std::min(swapChainSupport.capabilities.minImageCount, framesNum);
+    const uint32_t swapChainImagesNumRequired = std::max(framesNum, swapChainSupport.capabilities.minImageCount + 1);//simply sticking to this minimum means that we may sometimes have to wait on the driver to complete internal operations before we can acquire another image to render to.Therefore it is recommended to request at least one more image than the minimum
     uint32_t swapChainImagesNum = swapChainImagesNumRequired;
     if (swapChainSupport.capabilities.maxImageCount > 0 && //0 means max image count is unlimited
         swapChainImagesNum > swapChainSupport.capabilities.maxImageCount)

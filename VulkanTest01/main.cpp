@@ -504,7 +504,7 @@ private:
         CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
         PickPhysicalDevice(&m_physicalDevice, m_surface, m_deviceExtensions, m_instance);
 
-        //if this is an Nvidia card, use diagnostic checkpoints in case of VK_DEVICE_LOST
+        //if this is an Nvidia card, use diagnostic checkpoints in case of VK_ERROR_DEVICE_LOST
         VectorSafe<const char*, 1> deviceDiagnosticCheckpoints({ "VK_NV_device_diagnostic_checkpoints" });
         if (CheckDeviceExtensionSupport(m_physicalDevice, deviceDiagnosticCheckpoints))
         {
@@ -905,7 +905,7 @@ private:
 
             //determine last Cpu frame that the Gpu finished with -- needs to be done here, immediately before the fence from the most recently completed Gpu frame is reset (since this logic depends on seeing the signaled state of this fence)
             LastFrameGpuCompletedDetermine(&m_drawFrameFinishedFences, &m_lastCpuFrameCompleted, &m_renderingSystemHasRenderedAtLeastOnce, m_device);
-            
+
             if (streamingUnitsToRenderNum)
             {
                 FenceReset(drawFrameFinishedFence.m_fence, m_device);//this fence has signaled, showing that the Gpu is ready for a new frame submission
@@ -983,7 +983,7 @@ private:
 #endif//!NTF_ASSET_LOADING_MULTITHREADED
 
             ++m_frameNumberCurrentCpu;
-        }
+        }//while (!glfwWindowShouldClose(window)) 
 
 #if !NTF_ASSET_LOADING_MULTITHREADED
         AssetLoadingPersistentResourcesDestroy(&m_assetLoadingPersistentResources, m_assetLoadingThreadData.m_handles.doneEventHandle, m_device);
