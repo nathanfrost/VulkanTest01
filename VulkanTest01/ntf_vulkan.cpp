@@ -2527,11 +2527,11 @@ void CreateSwapChain(
     const VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainSupport.presentModes);
     const VkExtent2D extent = ChooseSwapExtent(window, swapChainSupport.capabilities);
 
-    /*  #FramesInFlight:    Example: If we're GPU-bound, we might want to able to acquire at most 3 images without presenting, so we must exceed minImageCount by 
-                            one less than this number.  This is because, for example, if the minImageCount member of VkSurfaceCapabilitiesKHR is 
-                            2, and the application creates a swapchain with 2 presentable images, the application can acquire one image, and must 
+    /*  #FramesInFlight:    If we're GPU-bound, we might want to able to acquire at most x images without presenting, so we must request 
+                            minImageCount+x-1 images.  This is because, for example, if the minImageCount member of VkSurfaceCapabilitiesKHR is 2, 
+                            and the application creates a swapchain with 2 presentable images, the application can acquire one image, and must 
                             present it before trying to acquire another image -- per Vulkan spec */
-    const uint32_t swapChainImagesNumRequired = swapChainSupport.capabilities.minImageCount + framesNum;
+    const uint32_t swapChainImagesNumRequired = std::min(swapChainSupport.capabilities.minImageCount, framesNum);
     uint32_t swapChainImagesNum = swapChainImagesNumRequired;
     if (swapChainSupport.capabilities.maxImageCount > 0 && //0 means max image count is unlimited
         swapChainImagesNum > swapChainSupport.capabilities.maxImageCount)
