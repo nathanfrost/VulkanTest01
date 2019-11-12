@@ -43,6 +43,20 @@ public:
         m_tail = (m_tail + elementsToDequeueNum) % QUEUE_CIRCULAR_MAX_ELEMENTS_INTERNAL;
     }
     ///@todo: unit test
+    int64_t Find(const T& item)///<@todo: note that int64_t is not consistent with size_t used elsewhere; ideally this would be made consistent
+    {
+        const int64_t size = CastWithAssert<size_t, int64_t>(Size());
+        int64_t i = 0;
+        for (; i < size; ++i)
+        {
+            if (operator[](i) == item)
+            {
+                return i;
+            }
+        }
+        return -1;//not found
+    }
+    ///@todo: unit test
 	inline bool PeekNextItemToDequeue(T*const nextItem) const
 	{
         assert(nextItem);

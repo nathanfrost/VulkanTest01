@@ -70,10 +70,12 @@ public:
         const VkDevice& device);
     void Destroy(const VkDevice& device);
 
-	HANDLE m_streamingCommandQueueMutex;
-	QueueCircular<StreamingCommand, 8> m_streamingCommandQueue;
     void AssertValid() const;
 
+	HANDLE m_streamingCommandQueueMutex;
+    typedef QueueCircular<StreamingCommand, 8> StreamingCommandQueue;
+    StreamingCommandQueue m_streamingCommandQueue;
+    bool m_loaded;//protected by m_streamingCommandQueueMutex
 
     ArraySafe<char,128> m_filenameNoExtension;///<@todo NTF: consider creating a string database for this -- OR JUST USE THE GLOBAL STATIC STRINGS
     VkSampler m_textureSampler;
@@ -116,27 +118,32 @@ public:
 
 void StreamingUnitAddToLoadMutexed(
 	StreamingUnitRuntime*const streamingUnitToLoadPtr,
-	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
-	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
-	const HANDLE streamingUnitsAddToLoadListMutex);
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnloadList,
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
+    const HANDLE streamingUnitsAddToLoadListMutex);
 void StreamingUnitsAddToLoadMutexed(
 	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToLoad,
-	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
-	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
-	const HANDLE streamingUnitsAddToLoadListMutex);
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnloadList,
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
+    const HANDLE streamingUnitsAddToLoadListMutex);
 
 void StreamingUnitAddToUnload(
-	StreamingUnitRuntime*const streamingUnitToUnloadPtr,
-	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToUnload,
-	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable);
+    StreamingUnitRuntime*const streamingUnitToUnloadPtr,
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnloadList,
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
+    const HANDLE streamingUnitsAddToLoadListMutex);
 void StreamingUnitsAddToUnload(
-	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToAddToUnloadList,
-	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToUnload,
-	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable);
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToAddToUnloadList,///<not ConstVectorSafeRef because I want to force the passer to use '&', since semantically want to emphasize that the streaming units contained in the vector will be modified, even if the vector itself will not
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnloadList,
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
+    const HANDLE streamingUnitsAddToLoadListMutex);
 
 ///not threadsafe
-template<size_t kQueueSize>
-inline bool NextItemToDequeueIs(const StreamingCommand streamingCommandToTestFor, const QueueCircular<StreamingCommand, kQueueSize>& commandQueue)
+inline bool NextItemToDequeueIs(const StreamingCommand streamingCommandToTestFor, const StreamingUnitRuntime::StreamingCommandQueue& commandQueue)
 {
     StreamingCommand streamingUnitToUnloadNextCommand;
     return  commandQueue.PeekNextItemToDequeue(&streamingUnitToUnloadNextCommand) &&

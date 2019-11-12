@@ -1,4 +1,5 @@
 *.cachefile
+*.enc
 *.exe
 *.exp
 *.dll
