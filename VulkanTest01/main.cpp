@@ -210,7 +210,6 @@ static void UnitTest(
             SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
             break;
         }
-        ///TODO_NEXT: test (Load,Load), (Unload,Unload), (Load, Unload), and doubling up each of these patterns
         default:
         {
             assert(false);
@@ -245,7 +244,6 @@ static void UnloadStreamingUnitsIfGpuDone(
         WaitForSignalWindows(streamingUnitToUnload.m_streamingCommandQueueMutex);
         if (NextItemToDequeueIs(StreamingCommand::kUnload, streamingUnitToUnload.m_streamingCommandQueue))
         {
-            assert(streamingUnitToUnload.m_loaded);//as long as unloading remains on the main thread, the Load and Unload functions should ensure no unloaded streaming unit makes it onto this list.  If this unloading functionality moves to another thread, then that will no longer be true
             ReleaseMutex(streamingUnitToUnload.m_streamingCommandQueueMutex);
             streamingUnitsRenderable.Remove(&streamingUnitToUnload);//if an unload command is issued immediately after load command, then when the unload command gets processed the streaming unit will be on the renderable list, and will need to be removed so that draw calls can stop being issued and the streaming unit can be unloaded
 
@@ -260,6 +258,7 @@ static void UnloadStreamingUnitsIfGpuDone(
             const StreamingUnitRuntime::FrameNumber halfRange = CastWithAssert<size_t, StreamingUnitRuntime::FrameNumber>(1 << (frameNumberBits - 1));//one half of the range of an unsigned type
             if (streamingUnitToUnload.m_submittedToGpuOnceSinceLastLoad && renderingSystemHasRenderedAtLeastOnce)//Gpu needs to render at least once to make its last submitted frame values meaningful
             {
+                assert(streamingUnitToUnload.m_loaded);//as long as unloading remains on the main thread, the Load and Unload functions should ensure no unloaded streaming unit makes it onto this list and into this conditional.  If this unloading functionality moves to another thread, then that will no longer be true
                 if ((streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted) ||           //Gpu is done with this streaming unit
                     (streamingUnitToUnload.m_lastSubmittedCpuFrame - lastCpuFrameCompleted > halfRange))  //Gpu is done with this streaming unit -- wraparound case where the last submitted cpu frame is near the end of the frame number range and the last cpu frame completed is near the beginning
                 {

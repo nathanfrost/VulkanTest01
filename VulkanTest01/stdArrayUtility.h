@@ -1155,13 +1155,13 @@ public:
         return VectorSafeRef(this);
     }
 
-	int Find(const T& item)
+	int64_t Find(const T& item)
 	{
 		for(size_t i=0; i < m_elementsNumCurrent; ++i)
 		{
 			if (m_array[i] == item)
 			{
-				return CastWithAssert<size_t,int>(i);
+				return CastWithAssert<size_t, int64_t>(i);
 			}
 		}
 		return -1;
@@ -1270,10 +1270,10 @@ public:
 	///@todo: unit tests
 	bool Remove(const T& item)
 	{
-		const int itemIndex = Find(item);
+		const int64_t itemIndex = Find(item);
 		if (itemIndex >= 0)
 		{
-            RemoveItemAtIndex(itemIndex);
+            RemoveItemAtIndex(CastWithAssert<int64_t,size_t>(itemIndex));
 			return true;
 		}
 		else

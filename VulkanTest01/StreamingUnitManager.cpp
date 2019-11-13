@@ -404,7 +404,11 @@ void StreamingCommandsProcess(
             else
             {
                 ReleaseMutex(streamingUnit.m_streamingCommandQueueMutex);
-                streamingUnitsToLoad.Push(&streamingUnit);//can't be processed yet; try again next loop
+                if (streamingUnit.m_streamingCommandQueue.Find(StreamingCommand::kLoad) >= 0)
+                {
+                    streamingUnitsToLoad.Push(&streamingUnit);//can't be processed yet; try again next loop
+                }
+                //else//streaming unit no longer wants to be loaded, so don't
             }
         }//for (auto& streamingUnitToLoadPtr: streamingUnitsToLoadCurrent)
     }

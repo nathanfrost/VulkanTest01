@@ -49,7 +49,7 @@ public:
         int64_t i = 0;
         for (; i < size; ++i)
         {
-            if (operator[](i) == item)
+            if (operator[](CastWithAssert<int64_t, size_t>(i)) == item)
             {
                 return i;
             }
