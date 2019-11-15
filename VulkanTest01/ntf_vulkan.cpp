@@ -2256,11 +2256,6 @@ void GetRequiredExtensions(VectorSafeRef<const char*> requiredExtensions)
 
 VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers)
 {
-    for (auto validationLayer : validationLayers)
-    {
-        printf("validationLayer=%s\n", validationLayer);
-    }
-
     //BEG_#AllocationCallbacks
     s_allocationCallbacks.pfnAllocation = NTF_vkAllocationFunction;
     s_allocationCallbacks.pfnFree = NTF_vkFreeFunction;
@@ -2310,6 +2305,11 @@ VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers)
     {
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
+
+        for (auto validationLayer : validationLayers)
+        {
+            printf("validationLayer=%s\n", validationLayer);
+        }
     }
     else
     {
