@@ -2266,7 +2266,7 @@ VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers)
     //END_#AllocationCallbacks
 
 #if NTF_WIN_TIMER
-    Fopen(&s_winTimer, "WinTimer.txt", "w+");
+    Fopen(&s_winTimer, "WinTiming.txt", "w+");
 #endif//NTF_WIN_TIMER
 
     if (s_enableValidationLayers && !CheckValidationLayerSupport(validationLayers))

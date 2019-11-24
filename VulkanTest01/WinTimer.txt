@@ -1,6 +1,0 @@
-s_frameTimer:396479090.646000ms
-s_frameTimer:0.795200ms
-s_frameTimer:0.306300ms
-s_frameTimer:0.377500ms
-s_frameTimer:0.314500ms
-s_frameTimer:0.287700ms
