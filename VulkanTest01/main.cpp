@@ -59,6 +59,7 @@ static void UnitTest(
 	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
 	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
 	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsUnloadList,
+    AssetLoadingArgumentsThreadCommand*const threadCommandPtr,
     bool*const issuedLoadCommandPtr,
 	const HANDLE streamingUnitsAddToLoadListMutex,
     const HANDLE assetLoadingThreadWakeHandle)
@@ -86,6 +87,7 @@ static void UnitTest(
 	NTF_REF(streamingUnit1Ptr, streamingUnit1);
 	NTF_REF(streamingUnit2Ptr, streamingUnit2);
     NTF_REF(issuedLoadCommandPtr, issuedLoadCommand);
+    NTF_REF(threadCommandPtr, threadCommand);
 
     issuedLoadCommand = false;
     VectorSafe<StreamingCommand, 2> streamingCommands;
@@ -94,21 +96,21 @@ static void UnitTest(
 		case UnitTestState::k0_LoadIndexZero:
         {
 			StreamingUnitAddToLoadMutexed(&streamingUnit0, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
-            SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
+            AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             issuedLoadCommand = true;
             break;
         }
         case UnitTestState::k1_LoadIndexOne:
         {
 			StreamingUnitAddToLoadMutexed(&streamingUnit1, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
-            SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
+            AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             issuedLoadCommand = true;
             break;
         }
         case UnitTestState::k2_LoadIndexTwo:
         {
 			StreamingUnitAddToLoadMutexed(&streamingUnit2, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
-            SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
+            AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             issuedLoadCommand = true;
             break;
         }
@@ -126,7 +128,7 @@ static void UnitTest(
         {
 			StreamingUnitAddToUnload(&streamingUnit1, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
 			StreamingUnitAddToLoadMutexed(&streamingUnit2, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
-            SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
+            AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             issuedLoadCommand = true;
             break;
         }
@@ -141,7 +143,7 @@ static void UnitTest(
 			streamingUnitsToLoad.Push(&streamingUnit0);
 			streamingUnitsToLoad.Push(&streamingUnit1);
 			StreamingUnitsAddToLoadMutexed(&streamingUnitsToLoad, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
-            SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
+            AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             issuedLoadCommand = true;
             break;
         }
@@ -163,7 +165,7 @@ static void UnitTest(
             streamingUnitsToLoad.Push(&streamingUnit0);
             streamingUnitsToLoad.Push(&streamingUnit0);
             StreamingUnitsAddToLoadMutexed(&streamingUnitsToLoad,streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
-            SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
+            AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             issuedLoadCommand = true;
             break;
         }
@@ -179,14 +181,14 @@ static void UnitTest(
         {
             StreamingUnitAddToLoadMutexed(&streamingUnit0, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
             StreamingUnitAddToUnload(&streamingUnit0, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
-            SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
+            AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             break;
         }
         case UnitTestState::k13_UnloadThenLoadIndexZero:
         {
             StreamingUnitAddToUnload(&streamingUnit0, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
             StreamingUnitAddToLoadMutexed(&streamingUnit0, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
-            SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
+            AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             break;
         }
         case UnitTestState::k14_ManyCommandsIssuedForIndexZero:
@@ -207,7 +209,7 @@ static void UnitTest(
             StreamingUnitAddToLoadMutexed(&streamingUnit0, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
             StreamingUnitAddToUnload(&streamingUnit0, streamingUnitsRenderable, streamingUnitsUnloadList, streamingUnitsAddToLoadList, streamingUnitsAddToLoadListMutex);
 
-            SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
+            AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             break;
         }
         default:
@@ -449,13 +451,13 @@ private:
 
     void Shutdown()
     {
-        m_assetLoadingThreadData.m_threadCommand = AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate;
+        m_assetLoadingThreadData.m_threadCommand = AssetLoadingArgumentsThreadCommand::kCleanupAndTerminate;
         SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
         WaitForSignalWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);//no need to wait on any other mutexes; if this mutex signals, the asset thread is finished and will not block these other mutexes
 
         //unload all loaded streaming units as soon as the Gpu is done with them
-        StreamingUnitsAddToUnload(&m_streamingUnitsRenderable, &m_streamingUnitsRenderable, &m_streamingUnitsToUnloadList, &m_streamingUnitsAddToLoadList, m_streamingUnitsAddToLoadListMutex);
-        StreamingUnitsAddToUnload(&m_streamingUnitsToAddToRenderable, &m_streamingUnitsRenderable, &m_streamingUnitsToUnloadList, &m_streamingUnitsAddToLoadList, m_streamingUnitsAddToLoadListMutex);
+        StreamingUnitsAddToUnload(&m_streamingUnitsRenderable, &m_streamingUnitsRenderable, &m_streamingUnitsToUnloadList, &m_streamingUnitsToAddToLoad, m_streamingUnitsAddToLoadMutex);
+        StreamingUnitsAddToUnload(&m_streamingUnitsToAddToRenderable, &m_streamingUnitsRenderable, &m_streamingUnitsToUnloadList, &m_streamingUnitsToAddToLoad, m_streamingUnitsAddToLoadMutex);
         m_streamingUnitsToAddToRenderable.size(0);
 
         while (m_streamingUnitsToUnloadList.size())
@@ -538,8 +540,8 @@ private:
 #endif//#if NTF_ASSET_LOADING_MULTITHREADED
         HandleCloseWindows(&m_assetLoadingThreadData.m_handles.doneEventHandle);
         HandleCloseWindows(&m_assetLoadingThreadData.m_handles.wakeEventHandle);
-		HandleCloseWindows(&m_streamingUnitsAddToLoadListMutex);
-		HandleCloseWindows(&m_streamingUnitsAddToRenderableMutex);
+		HandleCloseWindows(&m_streamingUnitsAddToLoadMutex);
+		HandleCloseWindows(&m_streamingUnitsToAddToRenderableMutex);
 
         glfwTerminate();
     }
@@ -571,8 +573,8 @@ private:
         NTFVulkanInitialize(m_physicalDevice);
         m_queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
         m_graphicsQueueMutex = MutexCreate();
-		m_streamingUnitsAddToLoadListMutex = MutexCreate();
-		m_streamingUnitsAddToRenderableMutex = MutexCreate();
+		m_streamingUnitsAddToLoadMutex = MutexCreate();
+		m_streamingUnitsToAddToRenderableMutex = MutexCreate();
         m_deviceLocalMemoryMutex = MutexCreate();
         CreateLogicalDevice(
             &m_device, 
@@ -675,12 +677,12 @@ private:
         m_assetLoadingThreadData.m_handles.doneEventHandle = ThreadSignalingEventCreate();
         m_assetLoadingThreadData.m_handles.wakeEventHandle = ThreadSignalingEventCreate();
         
-        m_assetLoadingThreadData.m_threadCommand = AssetLoadingArguments::ThreadCommand::kProcessStreamingUnits;
+        m_assetLoadingThreadData.m_threadCommand = AssetLoadingArgumentsThreadCommand::kProcessStreamingUnits;
 
         m_assetLoadingArguments.m_deviceLocalMemoryPersistent = &m_deviceLocalMemoryPersistent;
         m_assetLoadingArguments.m_deviceLocalMemoryStreamingUnits = &m_deviceLocalMemoryStreamingUnits;
         m_assetLoadingArguments.m_deviceLocalMemoryStreamingUnitsAllocated = &m_deviceLocalMemoryStreamingUnitsAllocated;///<@todo: try to write an operator==() for ArraySafe/VectorSafe so you can assert on forgetting to set it
-		m_assetLoadingArguments.m_streamingUnitsToAddToLoad = &m_streamingUnitsAddToLoadList;
+		m_assetLoadingArguments.m_streamingUnitsToAddToLoad = &m_streamingUnitsToAddToLoad;
 		m_assetLoadingArguments.m_streamingUnitsToAddToRenderable = &m_streamingUnitsToAddToRenderable;
 		m_assetLoadingArguments.m_threadCommand = &m_assetLoadingThreadData.m_threadCommand;
 
@@ -694,8 +696,8 @@ private:
         m_assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
 		m_assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
 		m_assetLoadingArguments.m_renderPass = &m_renderPass;
-		m_assetLoadingArguments.m_streamingUnitsAddToLoadListMutex = &m_streamingUnitsAddToLoadListMutex;
-		m_assetLoadingArguments.m_streamingUnitsAddToRenderableMutex = &m_streamingUnitsAddToRenderableMutex;
+		m_assetLoadingArguments.m_streamingUnitsAddToLoadListMutex = &m_streamingUnitsAddToLoadMutex;
+		m_assetLoadingArguments.m_streamingUnitsAddToRenderableMutex = &m_streamingUnitsToAddToRenderableMutex;
         m_assetLoadingArguments.m_swapChainExtent = &m_swapChainExtent;
 		m_assetLoadingArguments.m_threadDone = &m_assetLoadingThreadData.m_handles.doneEventHandle;
 		m_assetLoadingArguments.m_threadWake = &m_assetLoadingThreadData.m_handles.wakeEventHandle;
@@ -842,11 +844,12 @@ private:
                     &m_streamingUnits[0],
                     &m_streamingUnits[1],
                     &m_streamingUnits[2],
-                    &m_streamingUnitsAddToLoadList,
+                    &m_streamingUnitsToAddToLoad,
                     &m_streamingUnitsRenderable,
                     &m_streamingUnitsToUnloadList,
+                    &m_assetLoadingThreadData.m_threadCommand,
                     &executedLoadCommand,
-                    m_streamingUnitsAddToLoadListMutex,
+                    m_streamingUnitsAddToLoadMutex,
                     m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
                 if (!m_streamingUnitsRenderable.size() && !s_unitTestIssuedLoadLastFrameWithNoRenderableStreamingUnits && executedLoadCommand)
@@ -865,10 +868,10 @@ private:
             VkFramebuffer swapChainFramebuffer;
 
 			//add newly loaded streaming units to the renderable list
-			WaitForSignalWindows(m_streamingUnitsAddToRenderableMutex);
+			WaitForSignalWindows(m_streamingUnitsToAddToRenderableMutex);
 			m_streamingUnitsRenderable.Append(m_streamingUnitsToAddToRenderable);
 			m_streamingUnitsToAddToRenderable.size(0);
-			ReleaseMutex(m_streamingUnitsAddToRenderableMutex);
+			ReleaseMutex(m_streamingUnitsToAddToRenderableMutex);
 
             //fill primary command buffers with loaded streaming units
             const size_t streamingUnitsToRenderNum = m_streamingUnitsRenderable.size();
@@ -1019,6 +1022,7 @@ private:
                 {
                     ///#TODO_CALLBACK
                     //hackToRecreateSwapChainIfNecessary.SwapChainRecreate();//haven't seen this get hit yet, even when minimizing and resizing the window
+                    printf("FAIL: vkQueuePresentKHR() returned %i", result);
                 }
                 NTF_VK_ASSERT_SUCCESS(result);
 
@@ -1049,23 +1053,23 @@ private:
     }
 
     GLFWwindow* m_window;
-    VkInstance m_instance;
+    VkInstance m_instance;//need not be synchronized until, of course, vkDestroyInstance()
     VkDebugReportCallbackEXT m_callback;
     VkSurfaceKHR m_surface;
-    QueueFamilyIndices m_queueFamilyIndices;
-    VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;//doesn't need to be deleted, since physical devices can't be created or destroyed by software
-    VkDevice m_device;//interface to the physical device; must be destroyed before the physical device
+    QueueFamilyIndices m_queueFamilyIndices;//needs no synchronization; queried during creation-time and then immutable from that point forward
+    VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;//doesn't need to be deleted, since physical devices can't be created or destroyed by software.  Needs no synchronization
+    VkDevice m_device;//interface to the physical device; must be destroyed before the physical device.  Need not be synchronized until, of course, vkDestroyDevice()
     VkSwapchainKHR m_swapChain;//must be destroyed before the logical device
     VkQueue m_graphicsQueue, m_presentQueue, m_transferQueue;//queues are implicitly cleaned up with the logical device; no need to delete
-    HANDLE m_graphicsQueueMutex;//synchronizes one-and-only graphics queue between asset loading thread (which uses it to load textures) and main thread
+    HANDLE m_graphicsQueueMutex;//synchronizes one-and-only graphics queue between asset loading thread (which uses it to load textures) and main thread.  On devices that don't have separate transfer or present queues, this mutex synchronizes these queue accesses as well
     VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM> m_deviceExtensions;
     enum { kSwapChainImagesNumMax=8 };
     VectorSafe<VkImage, kSwapChainImagesNumMax> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html
     VkFormat m_swapChainImageFormat;
-    VkExtent2D m_swapChainExtent;
+    VkExtent2D m_swapChainExtent;//needs no synchronization; queried during creation-time and then immutable from that point forward
     VectorSafe<VkImageView, kSwapChainImagesNumMax> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
     VectorSafe<VkFramebuffer, kSwapChainImagesNumMax> m_swapChainFramebuffers;
-    VkRenderPass m_renderPass;
+    VkRenderPass m_renderPass;//needs no synchronization
     VectorSafe<ArraySafe<VkCommandPool, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandPoolsSecondary;
     VkImage m_depthImage;
     VkImageView m_depthImageView;
@@ -1079,11 +1083,11 @@ private:
 	VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> m_streamingUnitsToUnloadList;
 	VectorSafe<StreamingUnitRuntime*, kStreamingUnitsRenderableNum> m_streamingUnitsRenderable;
 
-	HANDLE m_streamingUnitsAddToRenderableMutex;
+	HANDLE m_streamingUnitsToAddToRenderableMutex;
 	VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> m_streamingUnitsToAddToRenderable;
 
-	HANDLE m_streamingUnitsAddToLoadListMutex;
-	VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> m_streamingUnitsAddToLoadList;
+	HANDLE m_streamingUnitsAddToLoadMutex;
+	VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> m_streamingUnitsToAddToLoad;
 
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
         

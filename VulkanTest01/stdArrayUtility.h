@@ -127,6 +127,16 @@ public:
     //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     //    AssertValid();
     //}
+
+    //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability
+    VectorSafeRef(VectorSafeRef<T>*const vectorSafeRef)
+    {
+        assert(vectorSafeRef);
+        SetElementsNumCurrentPtr(&vectorSafeRef->m_elementsNumCurrent);
+        SetElementsNumMax(vectorSafeRef->SizeMax());
+        SetArray(vectorSafeRef->begin());
+    }
+
     template<size_t kElementsMax>
     VectorSafeRef(VectorSafe<T, kElementsMax>*const vectorSafe)
     {

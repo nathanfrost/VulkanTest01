@@ -12,6 +12,11 @@ DWORD WINAPI AssetLoadingThread(void* arg);
 struct QueueFamilyIndices;
 class StreamingCommandQueueManager;
 
+enum class AssetLoadingArgumentsThreadCommand
+{
+    kFirstValidArgument, kProcessStreamingUnits = kFirstValidArgument,
+    kLastValidArgument, kCleanupAndTerminate = kLastValidArgument
+};
 class AssetLoadingArguments
 {
 public:
@@ -20,11 +25,7 @@ public:
     ArraySafeRef<bool> m_deviceLocalMemoryStreamingUnitsAllocated;
 	VectorSafeRef<StreamingUnitRuntime*> m_streamingUnitsToAddToLoad;
 	VectorSafeRef<StreamingUnitRuntime*> m_streamingUnitsToAddToRenderable;
-	enum ThreadCommand 
-	{
-		kFirstValidArgument, kProcessStreamingUnits = kFirstValidArgument,
-		kLastValidArgument, kCleanupAndTerminate = kLastValidArgument
-	} *m_threadCommand;
+    AssetLoadingArgumentsThreadCommand *m_threadCommand;
 
     const VkCommandBuffer* m_commandBufferTransfer;
     const VkCommandBuffer* m_commandBufferTransitionImage;
@@ -92,7 +93,7 @@ void AssetLoadingPersistentResourcesDestroy(
 struct AssetLoadingThreadData
 {
 	ThreadHandles m_handles;
-	AssetLoadingArguments::ThreadCommand m_threadCommand;
+	AssetLoadingArgumentsThreadCommand m_threadCommand;
 };
 void StreamingCommandsProcess(
     AssetLoadingArguments*const threadArgumentsPtr,

@@ -41,7 +41,9 @@ template<typename OriginType, typename DestinationType>
 inline DestinationType CastWithAssert(const OriginType numOrigin)
 {
     const DestinationType numDestination = static_cast<DestinationType>(numOrigin);
+#pragma warning(disable : 4389)//ignore signed/unsigned mismatches; this assert is meant to guard against any such mismatch that causes numOrigin's value to change as a result of being cast.  Any other mismatches are fine
     assert(numDestination == numOrigin);
+#pragma warning(default : 4389)
     return numDestination;
 }
 

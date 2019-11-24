@@ -128,12 +128,14 @@ void StreamingUnitsAddToLoadMutexed(
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnloadList,
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
     const HANDLE streamingUnitsAddToLoadListMutex);
+enum class AssetLoadingArgumentsThreadCommand;
+void AssetLoadingThreadExecuteLoad(AssetLoadingArgumentsThreadCommand*const threadCommandPtr, const HANDLE assetLoadingThreadWakeHandle);
 
 void StreamingUnitAddToUnload(
     StreamingUnitRuntime*const streamingUnitToUnloadPtr,
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnloadList,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnload,
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,
     const HANDLE streamingUnitsAddToLoadListMutex);
 void StreamingUnitsAddToUnload(
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToAddToUnloadList,///<not ConstVectorSafeRef because I want to force the passer to use '&', since semantically want to emphasize that the streaming units contained in the vector will be modified, even if the vector itself will not

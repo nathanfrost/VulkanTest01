@@ -34,4 +34,5 @@ mayaExporterTestPlugin/_UpgradeReport_Files
 */ReleaseDebug/*.lib
 !VulkanTest01/models/*.obj
 VulkanTest01/cooked/*
+VulkanTest01/WinTimer.txt
 *.VC.db

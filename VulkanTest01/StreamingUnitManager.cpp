@@ -55,7 +55,6 @@ void StreamingCommandsProcess(
 {
     NTF_REF(threadArgumentsPtr, threadArguments);
 
-	NTF_REF(threadArguments.m_deviceLocalMemoryPersistent, deviceLocalMemoryPersistent);
 	auto& deviceLocalMemoryStreamingUnits = threadArguments.m_deviceLocalMemoryStreamingUnits;
 	auto& deviceLocalMemoryStreamingUnitsAllocated = threadArguments.m_deviceLocalMemoryStreamingUnitsAllocated;
 	NTF_REF(&threadArguments.m_streamingUnitsToAddToLoad, streamingUnitsToAddToLoad);
@@ -117,13 +116,17 @@ void StreamingCommandsProcess(
             ///TODO_NEXT: "Peek and maybe process" and "assert and ignore if already loaded" like main thread on unload
             if (NextItemToDequeueIs(StreamingCommand::kLoad, streamingUnit.m_streamingCommandQueue))
             {
-                const bool streamingUnitNotLoaded = !streamingUnit.m_loaded;
-#if !NTF_UNIT_TEST_STREAMING
-                assert(streamingUnitNotLoaded);
-#endif//#if !NTF_UNIT_TEST_STREAMING
+                const bool streamingUnitNotLoaded = !streamingUnit.m_loaded;//if the streaming unit wasn't loaded, we can trust it won't become loaded until this thread loads it, so this boolean can be relied upon outside of this mutexed section of code
+//#if !NTF_UNIT_TEST_STREAMING
+                assert(streamingUnitNotLoaded);//if this assert is ever struck, then comment back in the NTF_UNIT_TEST_STREAMING #ifdef's enclosing this line, and mutex the streaming unit's use of its assigned deviceLocalMemory
+//#endif//#if !NTF_UNIT_TEST_STREAMING
                 if (streamingUnitNotLoaded)
                 {
+#if NTF_DEBUG
+                    WaitForSignalWindows(streamingUnitsAddToRenderableMutex);
                     assert(streamingUnitsToAddToRenderable.Find(&streamingUnit) < 0);
+                    ReleaseMutex(streamingUnitsAddToRenderableMutex);
+#endif//NTF_DEBUG
                     streamingUnit.m_submittedToGpuOnceSinceLastLoad = false;//must happen before removing the streaming command below so that if an Unload command is pending after this Load command, the streaming unit is not unloaded before its Gpu resources have been fully loaded
                 }
                 streamingUnit.m_streamingCommandQueue.Dequeue();//if the streaming unit is loaded we're done with the load command; otherwise we will load it, meaning we're still done with this load command
@@ -142,7 +145,7 @@ void StreamingCommandsProcess(
 #if !NTF_UNIT_TEST_STREAMING
                     assert(streamingUnitNotLoaded);//it is an error to unload a streaming unit that isn't loaded, albeit an error we can probably recover from
 #endif//#if !NTF_UNIT_TEST_STREAMING
-                //allocate a memory allocator to the streaming unit
+                    //allocate a memory allocator to the streaming unit
                     WaitForSignalWindows(deviceLocalMemoryMutex);
                     NTF_LOG_STREAMING("%i:StreamingUnitsLoadAllQueued:WaitForSignalWindows(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
                     const size_t deviceLocalMemoryStreamingUnitsSize = deviceLocalMemoryStreamingUnits.size();
@@ -196,7 +199,7 @@ void StreamingCommandsProcess(
                     Fread(streamingUnitFile, &texturedGeometryNum, sizeof(texturedGeometryNum), 1);
                     //END_GENERALIZE_READER_WRITER
                     stagingBufferGpuOffsetToAllocatedBlock = 0;
-                    NTF_REF(streamingUnit.m_deviceLocalMemory, deviceLocalMemory);
+                    NTF_REF(streamingUnit.m_deviceLocalMemory, deviceLocalMemory);//does not need to be mutexed, because allocation and freeing of GPU deviceLocalMemory is mutexed, and a streaming unit cannot get unloaded if it isn't loaded first, like here
                     for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometryNum; ++texturedGeometryIndex)
                     {
                         //load texture
@@ -453,11 +456,12 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         WaitForSignalWindows(threadWake);
         NTF_LOG_STREAMING("%i:AssetLoadingThread():threadWake\n", GetCurrentThreadId());
 
-        if (threadCommand == AssetLoadingArguments::ThreadCommand::kCleanupAndTerminate)
+        if (threadCommand == AssetLoadingArgumentsThreadCommand::kCleanupAndTerminate)
         {
             break;
         }
 
+        assert(threadCommand == AssetLoadingArgumentsThreadCommand::kProcessStreamingUnits);
         StreamingCommandsProcess(&threadArguments, &assetLoadingPersistentResources);
     }
 
