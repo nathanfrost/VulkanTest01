@@ -72,10 +72,9 @@ public:
 
     void AssertValid() const;
 
-	HANDLE m_streamingCommandQueueMutex;
-    typedef QueueCircular<StreamingCommand, 8> StreamingCommandQueue;
-    StreamingCommandQueue m_streamingCommandQueue;
-    bool m_loaded;//protected by m_streamingCommandQueueMutex
+    HANDLE m_stateMutex;
+    enum class State:size_t {kUnloaded, kLoading, kLoaded} m_state;
+    State StateMutexed() const;
 
     ArraySafe<char,128> m_filenameNoExtension;///<@todo NTF: consider creating a string database for this -- OR JUST USE THE GLOBAL STATIC STRINGS
     VkSampler m_textureSampler;
@@ -118,39 +117,23 @@ public:
 
 void StreamingUnitAddToLoadMutexed(
 	StreamingUnitRuntime*const streamingUnitToLoadPtr,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnloadList,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
-    const HANDLE streamingUnitsAddToLoadListMutex);
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,
+    const HANDLE streamingUnitsAddToLoadMutex);
 void StreamingUnitsAddToLoadMutexed(
 	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToLoad,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnloadList,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
-    const HANDLE streamingUnitsAddToLoadListMutex);
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,///<@todo: attempt to typedef (probably trivial class derivation, since typedef is treated as underling type by compiler?) to make types less ambiguous
+    const HANDLE streamingUnitsAddToLoadMutex);
 enum class AssetLoadingArgumentsThreadCommand;
 void AssetLoadingThreadExecuteLoad(AssetLoadingArgumentsThreadCommand*const threadCommandPtr, const HANDLE assetLoadingThreadWakeHandle);
 
 void StreamingUnitAddToUnload(
     StreamingUnitRuntime*const streamingUnitToUnloadPtr,
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnload,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,
-    const HANDLE streamingUnitsAddToLoadListMutex);
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnload);
 void StreamingUnitsAddToUnload(
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToAddToUnloadList,///<not ConstVectorSafeRef because I want to force the passer to use '&', since semantically want to emphasize that the streaming units contained in the vector will be modified, even if the vector itself will not
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToAddToUnload,///<not ConstVectorSafeRef because I want to force the passer to use '&', since semantically want to emphasize that the streaming units contained in the vector will be modified, even if the vector itself will not
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnloadList,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoadList,
-    const HANDLE streamingUnitsAddToLoadListMutex);
-
-///not threadsafe
-inline bool NextItemToDequeueIs(const StreamingCommand streamingCommandToTestFor, const StreamingUnitRuntime::StreamingCommandQueue& commandQueue)
-{
-    StreamingCommand streamingUnitToUnloadNextCommand;
-    return  commandQueue.PeekNextItemToDequeue(&streamingUnitToUnloadNextCommand) &&
-            streamingUnitToUnloadNextCommand == streamingCommandToTestFor;
-}
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnload);
 
 class SerializerCookerOut
 {

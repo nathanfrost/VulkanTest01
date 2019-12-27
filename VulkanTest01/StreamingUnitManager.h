@@ -4,6 +4,11 @@
 
 ///@todo: update to latest code; this is currently broken
 #define NTF_ASSET_LOADING_MULTITHREADED 1
+#define NTF_UNIT_TEST_STREAMING_LOG 0
+
+#if NTF_UNIT_TEST_STREAMING_LOG
+extern FILE* s_streamingDebug;
+#endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
 enum { kStreamingUnitsNum = 6, kStreamingUnitsRenderableNum = 3, kStreamingUnitCommandsNum = kStreamingUnitsRenderableNum * 4 };
 
@@ -20,6 +25,7 @@ enum class AssetLoadingArgumentsThreadCommand
 class AssetLoadingArguments
 {
 public:
+    bool *m_assetLoadingThreadIdle;
     VulkanPagedStackAllocator* m_deviceLocalMemoryPersistent;
     VectorSafeRef<VulkanPagedStackAllocator> m_deviceLocalMemoryStreamingUnits;
     ArraySafeRef<bool> m_deviceLocalMemoryStreamingUnitsAllocated;
@@ -46,6 +52,7 @@ public:
 
     inline void AssertValid()
     {
+        assert(m_assetLoadingThreadIdle);
         assert(m_deviceLocalMemoryPersistent);
 		//assert(m_deviceLocalMemoryStreamingUnits);//alphabetical placeholder since class already auto-asserts
 		//assert(m_deviceLocalMemoryStreamingUnitsAllocated);//alphabetical placeholder since class already auto-asserts

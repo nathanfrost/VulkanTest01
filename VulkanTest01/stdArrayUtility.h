@@ -29,6 +29,23 @@ inline void Fclose(FILE*const f)
     assert(fcloseRet == 0);
 }
 
+///@todo: unit test
+template<size_t kElementsMax=512>
+void FwriteSnprintf(FILE*const file, const char*const formatString, ...)
+{
+    assert(file);
+    assert(formatString);
+    assert(strlen(formatString) > 0);
+
+    ArraySafe<char, kElementsMax> string;
+    va_list args;
+    va_start(args, formatString);
+    string.Snprintf_va_list(formatString, args);
+    va_end(args);
+
+    string.Fwrite(file, strlen(string.begin()));
+}
+
 /*  users of this translation unit should directly use this function only for non-array elements; array elements should reside in an array 
     with its own assert-safe Fwrite method*/
 inline void Fwrite(FILE*const file, const void*const buf, const size_t sizeOfElement, const size_t elementsNum)
@@ -132,8 +149,10 @@ public:
     VectorSafeRef(VectorSafeRef<T>*const vectorSafeRef)
     {
         assert(vectorSafeRef);
-        SetElementsNumCurrentPtr(&vectorSafeRef->m_elementsNumCurrent);
-        SetElementsNumMax(vectorSafeRef->SizeMax());
+        SetElementsNumCurrentPtr(vectorSafeRef->m_elementsNumCurrent);
+#if NTF_ARRAY_SAFE_DEBUG
+        SetElementsNumMax(vectorSafeRef->m_elementsNumMax);
+#endif//#if NTF_ARRAY_SAFE_DEBUG
         SetArray(vectorSafeRef->begin());
     }
 
@@ -175,7 +194,7 @@ public:
     }
 
 	///@todo: unit test
-	int Find(const T& item)
+	int Find(const T& item) const
 	{
         const size_type elementsNumCurrent = *m_elementsNumCurrent;
 		for (size_type i = 0; i < elementsNumCurrent; ++i)
@@ -800,6 +819,19 @@ public:
 		AssertValid();
 	}
 
+    ///@todo: unit test
+    int Find(const T& item) const
+    {
+        for (size_type i = 0; i < m_elementsNumMax; ++i)
+        {
+            if (m_array[i] == item)
+            {
+                return CastWithAssert<size_type, int>(i);
+            }
+        }
+        return -1;
+    }
+
     void AssertValid() const
     {
     }
@@ -951,6 +983,14 @@ public:
     ///@todo: unit test
     void Snprintf(const char*const formatString, ...)
     {
+        va_list args;
+        va_start(args, formatString);
+        Snprintf_va_list(formatString, args);
+        va_end(args);
+    }
+    ///@todo: unit test
+    void Snprintf_va_list(const char*const formatString, va_list args)
+    {
         NTF_STATIC_ASSERT(sizeof(T) == sizeof(char));//this function is intended to be used only when *this holds ASCII characters
 #if NTF_ARRAY_SAFE_DEBUG
         assert(formatString);
@@ -959,18 +999,16 @@ public:
         char*const lastElement = &m_array[GetLastValidIndex()];
         *lastElement = bellAsciiKeyCode;//no "bell key" allowed -- use it as a sentinel to guard against the possibility of vsnprintf truncation
 #endif//#if NTF_ARRAY_SAFE_DEBUG
-        assert(strlen(formatString) > 0);
 
-        va_list args;
-        va_start(args, formatString);
+        assert(strlen(formatString) > 0);
         vsnprintf(&m_array[0], kElementsNum, formatString, args);
-        va_end(args);
 
 #if NTF_ARRAY_SAFE_DEBUG
         assert(m_array);
         assert(*lastElement == bellAsciiKeyCode);//vsnprintf may have had to truncate its result to stay within the buffer
 #endif//#if NTF_ARRAY_SAFE_DEBUG
     }
+
     ///@todo: unit test
     size_t Strnlen() const
     {
