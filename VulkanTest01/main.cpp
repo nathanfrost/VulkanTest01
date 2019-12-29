@@ -1145,6 +1145,20 @@ private:
 #endif//#if NTF_DEBUG
 
 			m_streamingUnitsRenderable.Append(m_streamingUnitsToAddToRenderable);
+            for (auto& streamingUnitPtr : m_streamingUnitsToAddToRenderable)
+            {
+                NTF_REF(streamingUnitPtr, streamingUnit);
+
+                WaitForSignalWindows(streamingUnit.m_stateMutex);
+                streamingUnit.m_state = StreamingUnitRuntime::State::kLoaded;//must happen here, because now the streaming unit is guaranteed to be rendered at least once (correctly defining its cpu frame submitted number), which will allow it to be unloaded correctly -- all provided the app doesn't shut down first
+                ReleaseMutex(streamingUnit.m_stateMutex);
+#if NTF_UNIT_TEST_STREAMING_LOG
+                WaitForSignalWindows(s_streamingDebugMutex);
+                FwriteSnprintf(s_streamingDebug, "%s:%i:%s.m_state=kLoaded\n", __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data());
+                ReleaseMutex(s_streamingDebugMutex);
+#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+            }
+
 			m_streamingUnitsToAddToRenderable.size(0);
 			ReleaseMutex(m_streamingUnitsAddToRenderableMutex);
 
@@ -1199,6 +1213,11 @@ private:
                         m_swapChainExtent,
                         m_device);
 
+#if NTF_UNIT_TEST_STREAMING_LOG
+                    FwriteSnprintf(s_streamingDebug,
+                        "%s:%i:About to call FillCommandBufferPrimary():%s.m_lastSubmittedCpuFrame=%i\n",
+                        __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame);
+#endif//#if NTF_UNIT_TEST_STREAMING_LOG
                     FillCommandBufferPrimary(
                         &streamingUnit.m_lastSubmittedCpuFrame,
                         m_frameNumberCurrentCpu,
@@ -1212,7 +1231,7 @@ private:
                         m_instance);
 #if NTF_UNIT_TEST_STREAMING_LOG
                     FwriteSnprintf( s_streamingDebug,
-                                    "%s:%i:%s.m_lastSubmittedCpuFrame=%i\n",
+                                    "%s:%i:Completed FillCommandBufferPrimary():%s.m_lastSubmittedCpuFrame=%i\n",
                                     __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
                 }

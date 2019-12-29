@@ -394,15 +394,7 @@ void StreamingCommandsProcess(
                 //printf("Staging buffers cleaned up\n");
             }
 
-            //streaming unit is now loaded so tag it renderable
-            WaitForSignalWindows(streamingUnit.m_stateMutex);
-            streamingUnit.m_state = StreamingUnitRuntime::State::kLoaded;
-            ReleaseMutex(streamingUnit.m_stateMutex);
-#if NTF_UNIT_TEST_STREAMING_LOG
-            WaitForSignalWindows(s_streamingDebugMutex);
-            FwriteSnprintf(s_streamingDebug, "%s:%i:%s.m_state=kLoaded\n", __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data());
-            ReleaseMutex(s_streamingDebugMutex);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+            //streaming unit is now loaded so tag it renderable -- but don't set state to loaded until it is guaranteed to be rendered at least once (provided the app doesn't shut down first)
             WaitForSignalWindows(streamingUnitsAddToRenderableMutex);
             streamingUnitsToAddToRenderable.Push(&streamingUnit);
             ReleaseMutex(streamingUnitsAddToRenderableMutex);
