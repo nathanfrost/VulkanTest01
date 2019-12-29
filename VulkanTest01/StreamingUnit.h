@@ -110,7 +110,6 @@ public:
     enum { kFrameNumberSignedMinimum = -2147483647 - 1};//avoid Visual Studio 2015 compiler warning C4146, which incorrectly claims a 32bit signed integer can't store -2^31
     //END_#FrameNumber
     FrameNumber m_lastSubmittedCpuFrame;
-    bool m_submittedToGpuOnceSinceLastLoad;
 
     VkFence m_transferQueueFinishedFence, m_graphicsQueueFinishedFence;
 };

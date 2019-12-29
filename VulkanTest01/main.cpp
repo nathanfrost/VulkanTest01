@@ -547,29 +547,16 @@ static void UnloadStreamingUnitsIfGpuDone(
 #if NTF_UNIT_TEST_STREAMING_LOG
                 WaitForSignalWindows(s_streamingDebugMutex);
                 FwriteSnprintf(s_streamingDebug,
-                    "%s:%i:%s.m_submittedToGpuOnceSinceLastLoad=%i,renderingSystemHasRenderedAtLeastOnce=%i,%s.m_state=%i,%s.m_lastSubmittedCpuFrame=%u,lastCpuFrameCompleted=%u\n",
-                    __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_submittedToGpuOnceSinceLastLoad, renderingSystemHasRenderedAtLeastOnce, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_state, streamingUnitToUnload.m_filenameNoExtension.data(), static_cast<unsigned int>(streamingUnitToUnload.m_lastSubmittedCpuFrame), lastCpuFrameCompleted);
+                    "%s:%i:renderingSystemHasRenderedAtLeastOnce=%i,%s.m_state=%i,%s.m_lastSubmittedCpuFrame=%u,lastCpuFrameCompleted=%u\n",
+                    __FILE__, __LINE__, renderingSystemHasRenderedAtLeastOnce, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_state, streamingUnitToUnload.m_filenameNoExtension.data(), static_cast<unsigned int>(streamingUnitToUnload.m_lastSubmittedCpuFrame), lastCpuFrameCompleted);
                 ReleaseMutex(s_streamingDebugMutex);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
-                if (!streamingUnitToUnload.m_submittedToGpuOnceSinceLastLoad ||                             //if Gpu never rendered the streaming unit, then it can unload it
-                    (streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted ||              //Gpu is done with this streaming unit
-                    (streamingUnitToUnload.m_lastSubmittedCpuFrame - lastCpuFrameCompleted) > halfRange))   //Gpu is done with this streaming unit -- wraparound case where the last submitted cpu frame is near the end of the frame number range and the last cpu frame completed is near the beginning)
+                /*  Gpu is done with this streaming unit -- eg last submitted frame is in the present or the past, and last submitted cpu frame 
+                    did not wrap around without last completed frame wrapping around as well */
+                if (streamingUnitToUnload.m_lastSubmittedCpuFrame - lastCpuFrameCompleted > -halfRange && 
+                    streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted)                                                                               
                 {
-                    //BEG_HAC -- ensure wraparound case triggers appropriately
-                    if (streamingUnitToUnload.m_lastSubmittedCpuFrame - lastCpuFrameCompleted > halfRange)
-                    {
-                        int hack = 0;
-                        ++hack;
-                    }
-                    //END_HAC
-
-                    streamingUnitToUnload.m_submittedToGpuOnceSinceLastLoad = false;
-
-                    WaitForSignalWindows(streamingUnitToUnload.m_stateMutex);
-                    streamingUnitToUnload.m_state = StreamingUnitRuntime::State::kUnloaded;
-                    ReleaseMutex(streamingUnitToUnload.m_stateMutex);
-                    assert(streamingUnitsRenderable.Find(&streamingUnitToUnload) < 0);
 #if NTF_UNIT_TEST_STREAMING_LOG
                     WaitForSignalWindows(s_streamingDebugMutex);
                     FwriteSnprintf(s_streamingDebug,
@@ -588,7 +575,7 @@ static void UnloadStreamingUnitsIfGpuDone(
                         deviceLocalMemoryMutex,
                         false,
                         device);
-                }//if !streamingUnitToUnload.m_submittedToGpuOnceSinceLastLoad || (streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted || (streamingUnitToUnload.m_lastSubmittedCpuFrame - lastCpuFrameCompleted) > halfRange)
+                }//if (streamingUnitToUnload.m_lastSubmittedCpuFrame - lastCpuFrameCompleted > -halfRange && streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted)
                 break;
             }//case StreamingUnitRuntime::kLoaded
             default:
@@ -762,26 +749,23 @@ private:
         s_allowedToIssueStreamingCommands = true;
 #endif//#if NTF_DEBUG
 
-        //unload all loaded streaming units as soon as the Gpu is done with them
+        //unload all loaded streaming units -- Gpu is assumed to be done with them -- eg post-vkDeviceWaitIdle(m_device)
         StreamingUnitsAddToUnload(&m_streamingUnitsRenderable, &m_streamingUnitsRenderable, &m_streamingUnitsToUnload);
         StreamingUnitsAddToUnload(&m_streamingUnitsToAddToRenderable, &m_streamingUnitsRenderable, &m_streamingUnitsToUnload);
         m_streamingUnitsToAddToRenderable.size(0);
 
-        while (m_streamingUnitsToUnload.size())
+        for(auto& streamingUnitToUnloadPtr : m_streamingUnitsToUnload)
         {
-            UnloadStreamingUnitsIfGpuDone(
-                &m_streamingUnitsToUnload,
-                &m_streamingUnitsRenderable,
-                &m_deviceLocalMemoryStreamingUnitsAllocated,
-                m_deviceLocalMemoryStreamingUnits,
-                m_lastCpuFrameCompleted,
-                m_renderingSystemHasRenderedAtLeastOnce,
-                m_deviceLocalMemoryMutex,
+            NTF_REF(streamingUnitToUnloadPtr, streamingUnitToUnload);
+            streamingUnitToUnload.Free(
+                &m_deviceLocalMemoryStreamingUnitsAllocated, 
+                m_deviceLocalMemoryStreamingUnits, 
+                m_deviceLocalMemoryMutex, 
+                false, 
                 m_device);
-            LastFrameGpuCompletedDetermine(&m_drawFrameFinishedFences, &m_lastCpuFrameCompleted, &m_renderingSystemHasRenderedAtLeastOnce, m_device);
         }
+        m_streamingUnitsToUnload.size(0);
 
-		//no need for mutexing below, since asset thread is shut down above
 		assert(m_streamingUnitsToUnload.size() == 0);
         assert(m_streamingUnitsRenderable.size() == 0);
 		assert(m_streamingUnitsToAddToRenderable.size() == 0);
@@ -1217,7 +1201,6 @@ private:
 
                     FillCommandBufferPrimary(
                         &streamingUnit.m_lastSubmittedCpuFrame,
-                        &streamingUnit.m_submittedToGpuOnceSinceLastLoad,
                         m_frameNumberCurrentCpu,
                         commandBufferPrimary,
                         &streamingUnit.m_texturedGeometries,///<@todo: ConstArraySafe
@@ -1229,8 +1212,8 @@ private:
                         m_instance);
 #if NTF_UNIT_TEST_STREAMING_LOG
                     FwriteSnprintf( s_streamingDebug,
-                                    "%s:%i:%s.m_lastSubmittedCpuFrame=%i,%s.m_submittedToGpuOnceSinceLastLoad=%i\n",
-                                    __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_submittedToGpuOnceSinceLastLoad);
+                                    "%s:%i:%s.m_lastSubmittedCpuFrame=%i\n",
+                                    __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
                 }
 
@@ -1277,7 +1260,7 @@ private:
                     signalSemaphores,
                     ConstVectorSafeRef<VkSemaphore>(&imageAvailableSemaphore, 1),
                     ArraySafeRef<VkPipelineStageFlags>(&waitStages, 1),///<@todo: ArraySafeRefConst
-                    m_commandBuffersPrimary[acquiredImageIndex],
+                    commandBufferPrimary,
                     m_graphicsQueue,
                     &m_graphicsQueueMutex,
                     drawFrameFinishedFence.m_fence,
@@ -1342,7 +1325,7 @@ private:
             s_allowedToIssueStreamingCommands = true;
 #endif//#if NTF_DEBUG
             //BEG_#StreamingTest
-            const StreamingUnitRuntime::FrameNumber frameToSwapState = 240;
+            const StreamingUnitRuntime::FrameNumber frameToSwapState = 24;
             static bool s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits;
 
             bool executeUnitTest = false;

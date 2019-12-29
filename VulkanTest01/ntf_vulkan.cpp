@@ -1484,7 +1484,6 @@ void CmdSetCheckpointNV(const VkCommandBuffer& commandBuffer, const CmdSetCheckp
 
 void FillCommandBufferPrimary(
     StreamingUnitRuntime::FrameNumber*const streamingUnitLastFrameSubmittedPtr,
-    bool*const submittedToGpuOnceSinceLastLoadPtr,
     const StreamingUnitRuntime::FrameNumber currentFrameNumber,
     const VkCommandBuffer& commandBufferPrimary,
     const ArraySafeRef<TexturedGeometry> texturedGeometries,
@@ -1496,7 +1495,6 @@ void FillCommandBufferPrimary(
     const VkInstance& instance)
 {
     NTF_REF(streamingUnitLastFrameSubmittedPtr, streamingUnitLastFrameSubmitted);
-    NTF_REF(submittedToGpuOnceSinceLastLoadPtr, submittedToGpuOnceSinceLastLoad);
     assert(objectNum > 0);
 
     CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBindPipeline_kBefore)], instance);
@@ -1545,7 +1543,6 @@ void FillCommandBufferPrimary(
     }
     
     streamingUnitLastFrameSubmitted = currentFrameNumber;//recorded so we know when it's safe to unload streaming unit's assets; draw submission assumed to happen shortly
-    submittedToGpuOnceSinceLastLoad = true;
 }
 VkDeviceSize AlignToNonCoherentAtomSize(VkDeviceSize i)
 {

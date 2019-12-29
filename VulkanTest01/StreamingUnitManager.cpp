@@ -130,7 +130,7 @@ void StreamingCommandsProcess(
 #if NTF_UNIT_TEST_STREAMING_LOG
             WaitForSignalWindows(s_streamingDebugMutex);
             FwriteSnprintf( s_streamingDebug,
-                            "%s:%i:StreamingCommandsProcess():NextItemToDequeueIs()==StreamingCommand::kLoad; %s.m_state=%i\n",
+                            "%s:%i:StreamingCommandsProcess():StreamingCommand::kLoad; %s.m_state=%i\n",
                             __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
             ReleaseMutex(s_streamingDebugMutex);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
@@ -398,7 +398,6 @@ void StreamingCommandsProcess(
             WaitForSignalWindows(streamingUnit.m_stateMutex);
             streamingUnit.m_state = StreamingUnitRuntime::State::kLoaded;
             ReleaseMutex(streamingUnit.m_stateMutex);
-            //ReleaseMutex(streamingUnit.m_stateMutex);///<@todo: probably unnecessary
 #if NTF_UNIT_TEST_STREAMING_LOG
             WaitForSignalWindows(s_streamingDebugMutex);
             FwriteSnprintf(s_streamingDebug, "%s:%i:%s.m_state=kLoaded\n", __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data());

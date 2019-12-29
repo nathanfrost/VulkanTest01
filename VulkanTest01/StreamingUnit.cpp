@@ -165,6 +165,7 @@ void StreamingUnitRuntime::Free(
     const VkDevice& device)
 {
     //printf("StreamingUnitRuntime::Free() enter\n");//#LogStreaming
+
     vkDestroySampler(device, m_textureSampler, GetVulkanAllocationCallbacks());
 
     for (auto& texturedGeometry : m_texturedGeometries)
@@ -209,6 +210,9 @@ void StreamingUnitRuntime::Free(
     MutexRelease(deviceLocalMemoryMutex);
     NTF_LOG_STREAMING("%i:StreamingUnitRuntime::Free:MutexRelease(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
 
+    WaitForSignalWindows(m_stateMutex);
+    m_state = StreamingUnitRuntime::State::kUnloaded;
+    ReleaseMutex(m_stateMutex);
     //printf("StreamingUnitRuntime::Free() exit\n");//#LogStreaming
 }
 
