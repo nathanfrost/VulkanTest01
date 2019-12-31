@@ -182,7 +182,7 @@ static void UnitTest(
         k17_UnloadIndexZeroAndOne,
         k18_LoadIndexZeroThenImmediatelyLoadIndexZero,
         k19_UnloadIndexZero,
-        kNum///<@todo: unload a not-loaded streaming unit
+        kNum
     } s_state;
     NTF_REF(streamingUnit0Ptr, streamingUnit0);
 	NTF_REF(streamingUnit1Ptr, streamingUnit1);
@@ -502,7 +502,6 @@ static void UnloadStreamingUnitsIfGpuDone(
     ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
     ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
     const StreamingUnitRuntime::FrameNumber lastCpuFrameCompleted, 
-    const bool renderingSystemHasRenderedAtLeastOnce, ///<@todo: eliminate completely; ripple effect
     const HANDLE& deviceLocalMemoryMutex, 
     const VkDevice& device)
 {
@@ -541,14 +540,13 @@ static void UnloadStreamingUnitsIfGpuDone(
 
                 //printf("MAIN THREAD: streamingUnit.m_lastSubmittedCpuFrame=%d m_lastCpuFrameCompleted=%d\n", streamingUnit.m_lastSubmittedCpuFrame, m_lastCpuFrameCompleted);
 
-                ///@todo: NTF_STATIC_ASSERT that streamingUnit.m_lastSubmittedCpuFrame is the same type as m_lastCpuFrameCompleted
                 const size_t frameNumberBits = sizeof(lastCpuFrameCompleted) << 3;
                 const StreamingUnitRuntime::FrameNumber halfRange = CastWithAssert<size_t, StreamingUnitRuntime::FrameNumber>(1 << (frameNumberBits - 1));//one half of the range of an unsigned type
 #if NTF_UNIT_TEST_STREAMING_LOG
                 WaitForSignalWindows(s_streamingDebugMutex);
                 FwriteSnprintf(s_streamingDebug,
-                    "%s:%i:renderingSystemHasRenderedAtLeastOnce=%i,%s.m_state=%i,%s.m_lastSubmittedCpuFrame=%u,lastCpuFrameCompleted=%u\n",
-                    __FILE__, __LINE__, renderingSystemHasRenderedAtLeastOnce, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_state, streamingUnitToUnload.m_filenameNoExtension.data(), static_cast<unsigned int>(streamingUnitToUnload.m_lastSubmittedCpuFrame), lastCpuFrameCompleted);
+                    "%s:%i:%s.m_state=%i,%s.m_lastSubmittedCpuFrame=%u,lastCpuFrameCompleted=%u\n",
+                    __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_state, streamingUnitToUnload.m_filenameNoExtension.data(), static_cast<unsigned int>(streamingUnitToUnload.m_lastSubmittedCpuFrame), lastCpuFrameCompleted);
                 ReleaseMutex(s_streamingDebugMutex);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
@@ -1059,11 +1057,9 @@ private:
     static void LastFrameGpuCompletedDetermine(
         ArraySafeRef<DrawFrameFinishedFence> drawFrameFinishedFences,
         StreamingUnitRuntime::FrameNumber*const lastCpuFrameCompletedPtr,
-        bool*const renderingSystemHasRenderedAtLeastOncePtr,
         const VkDevice& device)
     {
         NTF_REF(lastCpuFrameCompletedPtr, lastCpuFrameCompleted);
-        NTF_REF(renderingSystemHasRenderedAtLeastOncePtr, renderingSystemHasRenderedAtLeastOnce);
 
         const StreamingUnitRuntime::FrameNumberSigned biggestPositiveDistanceInitial = 0;
         const StreamingUnitRuntime::FrameNumberSigned biggestNegativeDistanceInitial = StreamingUnitRuntime::kFrameNumberSignedMinimum;
@@ -1110,7 +1106,6 @@ private:
         if (biggestPositiveDistance > biggestPositiveDistanceInitial || biggestNegativeDistance > biggestNegativeDistanceInitial)
         {
             //Gpu processed a new frame
-            renderingSystemHasRenderedAtLeastOnce = true;
             lastCpuFrameCompleted = biggestNegativeDistance > StreamingUnitRuntime::kFrameNumberSignedMinimum ?
                 negativeDistanceFrameNumberCpuSubmitted : positiveDistanceFrameNumberCpuSubmitted;
 
@@ -1261,7 +1256,7 @@ private:
             }//if (streamingUnitsToRenderNum)
 
             //determine last Cpu frame that the Gpu finished with -- needs to be done here, immediately before the fence from the most recently completed Gpu frame is reset (since this logic depends on seeing the signaled state of this fence)
-            LastFrameGpuCompletedDetermine(&m_drawFrameFinishedFences, &m_lastCpuFrameCompleted, &m_renderingSystemHasRenderedAtLeastOnce, m_device);
+            LastFrameGpuCompletedDetermine(&m_drawFrameFinishedFences, &m_lastCpuFrameCompleted, m_device);
 
             if (streamingUnitsToRenderNum)
             {
@@ -1332,7 +1327,6 @@ private:
                 &m_deviceLocalMemoryStreamingUnitsAllocated,
                 m_deviceLocalMemoryStreamingUnits,
                 m_lastCpuFrameCompleted, 
-                m_renderingSystemHasRenderedAtLeastOnce, 
                 m_deviceLocalMemoryMutex, 
                 m_device);
 
@@ -1476,7 +1470,6 @@ private:
 
     StreamingUnitRuntime::FrameNumber m_frameNumberCurrentCpu;
     StreamingUnitRuntime::FrameNumber m_lastCpuFrameCompleted = 0;
-    bool m_renderingSystemHasRenderedAtLeastOnce = false;
 };
 
 int main() 
