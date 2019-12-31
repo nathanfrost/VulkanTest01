@@ -213,6 +213,14 @@ void StreamingUnitRuntime::Free(
     WaitForSignalWindows(m_stateMutex);
     m_state = StreamingUnitRuntime::State::kUnloaded;
     ReleaseMutex(m_stateMutex);
+
+#if NTF_UNIT_TEST_STREAMING_LOG
+    WaitForSignalWindows(s_streamingDebugMutex);
+    FwriteSnprintf( s_streamingDebug,
+                    "%s:%i:StreamingUnitRuntime::Free():streaming unit %s\n",
+                    __FILE__, __LINE__, m_filenameNoExtension.data());
+    ReleaseMutex(s_streamingDebugMutex);
+#endif//#if NTF_UNIT_TEST_STREAMING_LOG
     //printf("StreamingUnitRuntime::Free() exit\n");//#LogStreaming
 }
 

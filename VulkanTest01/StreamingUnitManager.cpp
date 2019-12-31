@@ -398,6 +398,14 @@ void StreamingCommandsProcess(
             WaitForSignalWindows(streamingUnitsAddToRenderableMutex);
             streamingUnitsToAddToRenderable.Push(&streamingUnit);
             ReleaseMutex(streamingUnitsAddToRenderableMutex);
+
+#if NTF_UNIT_TEST_STREAMING_LOG
+            WaitForSignalWindows(s_streamingDebugMutex);
+            FwriteSnprintf(s_streamingDebug,
+                "%s:%i:StreamingCommandsProcess():Completed Gpu load: %s.m_state=%i -- placed on addToRenderable list\n",
+                __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
+            ReleaseMutex(s_streamingDebugMutex);
+#endif//#if NTF_UNIT_TEST_STREAMING_LOG
         }//if (stateWasLoading)
         else
         {
@@ -421,6 +429,12 @@ void AssetLoadingPersistentResourcesDestroy(
 
     assetLoadingPersistentResources.stagingBufferMemoryMapCpuToGpu.Destroy();
     vkDestroySemaphore(device, assetLoadingPersistentResources.transferFinishedSemaphore, GetVulkanAllocationCallbacks());
+
+#if NTF_UNIT_TEST_STREAMING_LOG
+    WaitForSignalWindows(s_streamingDebugMutex);
+    FwriteSnprintf(s_streamingDebug, "%s:%i:AssetLoadingPersistentResourcesDestroy() completed\n", __FILE__, __LINE__);
+    ReleaseMutex(s_streamingDebugMutex);
+#endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
     SignalSemaphoreWindows(threadDone);
 }

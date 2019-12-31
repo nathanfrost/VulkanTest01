@@ -748,9 +748,19 @@ private:
 #endif//#if NTF_DEBUG
 
         //unload all loaded streaming units -- Gpu is assumed to be done with them -- eg post-vkDeviceWaitIdle(m_device)
-        StreamingUnitsAddToUnload(&m_streamingUnitsRenderable, &m_streamingUnitsRenderable, &m_streamingUnitsToUnload);
-        StreamingUnitsAddToUnload(&m_streamingUnitsToAddToRenderable, &m_streamingUnitsRenderable, &m_streamingUnitsToUnload);
+        m_streamingUnitsToUnload.Append(m_streamingUnitsRenderable);
+        m_streamingUnitsToUnload.Append(m_streamingUnitsToAddToRenderable);
+
+#if NTF_UNIT_TEST_STREAMING_LOG
+        WaitForSignalWindows(s_streamingDebugMutex);
+        FwriteSnprintf( s_streamingDebug, 
+                        "%s:%i:Shutdown():m_streamingUnitsToAddToRenderable.size()=%i,m_streamingUnitsRenderable.size()=%i,m_streamingUnitsToUnload.size()=%i\n", 
+                        __FILE__, __LINE__, m_streamingUnitsToAddToRenderable.size(), m_streamingUnitsRenderable.size(), m_streamingUnitsToUnload.size());
+        ReleaseMutex(s_streamingDebugMutex);
+#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+
         m_streamingUnitsToAddToRenderable.size(0);
+        m_streamingUnitsRenderable.size(0);
 
         for(auto& streamingUnitToUnloadPtr : m_streamingUnitsToUnload)
         {
