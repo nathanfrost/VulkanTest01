@@ -27,24 +27,24 @@ class AssetLoadingArguments
 public:
     bool *m_assetLoadingThreadIdle;
     VulkanPagedStackAllocator* m_deviceLocalMemoryPersistent;
+    RTL_CRITICAL_SECTION* m_deviceLocalMemoryCriticalSection;
     VectorSafeRef<VulkanPagedStackAllocator> m_deviceLocalMemoryStreamingUnits;
     ArraySafeRef<bool> m_deviceLocalMemoryStreamingUnitsAllocated;
-	VectorSafeRef<StreamingUnitRuntime*> m_streamingUnitsToAddToLoad;
+    RTL_CRITICAL_SECTION* m_graphicsQueueCriticalSection;
+    VectorSafeRef<StreamingUnitRuntime*> m_streamingUnitsToAddToLoad;
+    RTL_CRITICAL_SECTION* m_streamingUnitsToAddToLoadCriticalSection;
 	VectorSafeRef<StreamingUnitRuntime*> m_streamingUnitsToAddToRenderable;
+    RTL_CRITICAL_SECTION* m_streamingUnitsToAddToRenderableCriticalSection;
     AssetLoadingArgumentsThreadCommand *m_threadCommand;
 
     const VkCommandBuffer* m_commandBufferTransfer;
     const VkCommandBuffer* m_commandBufferTransitionImage;
     const VkDevice* m_device;
-    const HANDLE* m_deviceLocalMemoryMutex;
     const VkQueue* m_graphicsQueue;
-    const HANDLE* m_graphicsQueueMutex;
     const VkInstance* m_instance;
     const VkPhysicalDevice* m_physicalDevice;
     const QueueFamilyIndices* m_queueFamilyIndices;
     const VkRenderPass* m_renderPass;
-	const HANDLE* m_streamingUnitsAddToLoadListMutex;
-	const HANDLE* m_streamingUnitsAddToRenderableMutex;
     const VkExtent2D* m_swapChainExtent;
     const HANDLE* m_threadDone;
     const HANDLE* m_threadWake;
@@ -54,23 +54,23 @@ public:
     {
         assert(m_assetLoadingThreadIdle);
         assert(m_deviceLocalMemoryPersistent);
+        assert(m_deviceLocalMemoryCriticalSection);
 		//assert(m_deviceLocalMemoryStreamingUnits);//alphabetical placeholder since class already auto-asserts
 		//assert(m_deviceLocalMemoryStreamingUnitsAllocated);//alphabetical placeholder since class already auto-asserts
+        assert(m_graphicsQueueCriticalSection);
 		//assert(m_streamingUnitsToAddToLoad);//alphabetical placeholder since class already auto-asserts
+        assert(m_streamingUnitsToAddToLoadCriticalSection);
 		//assert(m_streamingUnitsToAddToRenderable);//alphabetical placeholder since class already auto-asserts
+        assert(m_streamingUnitsToAddToRenderableCriticalSection);
 
         assert(m_commandBufferTransfer);
         assert(m_commandBufferTransitionImage);
         assert(m_device);
-        assert(m_deviceLocalMemoryMutex);
         assert(m_graphicsQueue);
-        assert(m_graphicsQueueMutex);
         assert(m_instance);
         assert(m_physicalDevice);
         assert(m_queueFamilyIndices);
         assert(m_renderPass);
-		assert(m_streamingUnitsAddToLoadListMutex);
-		assert(m_streamingUnitsAddToRenderableMutex);
         assert(m_swapChainExtent);
 		assert(m_threadDone);
 		assert(m_threadWake);

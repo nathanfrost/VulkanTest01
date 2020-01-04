@@ -12,7 +12,7 @@ extern FILE* s_winTimer;
 
 #if NTF_UNIT_TEST_STREAMING_LOG
 extern FILE* s_streamingDebug;
-extern HANDLE s_streamingDebugMutex;
+extern RTL_CRITICAL_SECTION s_streamingDebugCriticalSection;
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
 //LARGE_INTEGER g_queryPerformanceFrequency;
@@ -68,19 +68,20 @@ static void UnitTest_StreamingUnitsLoadIfNotLoaded(
     bool*const advanceToNextUnitTestPtr,
     AssetLoadingArgumentsThreadCommand*const threadCommandPtr,
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,
-    const HANDLE streamingUnitsAddToLoadMutex,
+    RTL_CRITICAL_SECTION*const streamingUnitsAddToLoadCriticalSectionPtr,
     const HANDLE assetLoadingThreadWakeHandle)
 {
     NTF_REF(issuedLoadCommandPtr, issuedLoadCommand);
     NTF_REF(advanceToNextUnitTestPtr, advanceToNextUnitTest);
     NTF_REF(threadCommandPtr, threadCommand);
+    NTF_REF(streamingUnitsAddToLoadCriticalSectionPtr, streamingUnitsAddToLoadCriticalSection);
 
     for (auto& streamingUnitToLoadPtr : streamingUnitsToLoad)
     {
         NTF_REF(streamingUnitToLoadPtr, streamingUnitToLoad);
-        if (streamingUnitToLoad.StateMutexed() == StreamingUnitRuntime::State::kUnloaded)
+        if (streamingUnitToLoad.StateCriticalSection() == StreamingUnitRuntime::State::kUnloaded)
         {
-            StreamingUnitAddToLoadMutexed(&streamingUnitToLoad, streamingUnitsAddToLoad, streamingUnitsAddToLoadMutex);
+            StreamingUnitAddToLoadCriticalSection(&streamingUnitToLoad, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
             AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             issuedLoadCommand = true;
             advanceToNextUnitTest = false;
@@ -93,7 +94,7 @@ static void UnitTest_StreamingUnitLoadIfNotLoaded(
     bool*const advanceToNextUnitTestPtr, 
     AssetLoadingArgumentsThreadCommand*const threadCommandPtr,
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,
-    const HANDLE streamingUnitsAddToLoadMutex,
+    RTL_CRITICAL_SECTION*const streamingUnitsAddToLoadCriticalSectionPtr,
     const HANDLE assetLoadingThreadWakeHandle)
 {
     VectorSafe<StreamingUnitRuntime*, 1> temp;
@@ -104,7 +105,7 @@ static void UnitTest_StreamingUnitLoadIfNotLoaded(
         advanceToNextUnitTestPtr,
         threadCommandPtr, 
         streamingUnitsAddToLoad, 
-        streamingUnitsAddToLoadMutex, 
+        streamingUnitsAddToLoadCriticalSectionPtr, 
         assetLoadingThreadWakeHandle);
 }
 
@@ -120,7 +121,7 @@ static void UnitTest_StreamingUnitsUnloadIfNotUnloaded(
     {
         NTF_REF(streamingUnitToUnloadPtr, streamingUnitToUnload);
 
-        const bool streamingUnitIsUnloaded = streamingUnitToUnload.StateMutexed() == StreamingUnitRuntime::State::kUnloaded;
+        const bool streamingUnitIsUnloaded = streamingUnitToUnload.StateCriticalSection() == StreamingUnitRuntime::State::kUnloaded;
         const bool streamingUnitIsOrWillBeUnloaded = streamingUnitIsUnloaded || streamingUnitsToUnload.Find(&streamingUnitToUnload) >= 0;
         if (!streamingUnitIsOrWillBeUnloaded)
         {
@@ -157,7 +158,7 @@ static void UnitTest(
     AssetLoadingArgumentsThreadCommand*const threadCommandPtr,
     bool*const issuedLoadCommandPtr,
     const bool*const assetLoadingThreadIdlePtr,
-	const HANDLE streamingUnitsAddToLoadMutex,
+    RTL_CRITICAL_SECTION*const streamingUnitsAddToLoadCriticalSectionPtr,
     const HANDLE assetLoadingThreadWakeHandle)
 {
     static enum class UnitTestState:size_t
@@ -188,6 +189,7 @@ static void UnitTest(
 	NTF_REF(streamingUnit1Ptr, streamingUnit1);
 	NTF_REF(streamingUnit2Ptr, streamingUnit2);
     NTF_REF(issuedLoadCommandPtr, issuedLoadCommand);
+    NTF_REF(streamingUnitsAddToLoadCriticalSectionPtr, streamingUnitsAddToLoadCriticalSection);
     NTF_REF(assetLoadingThreadIdlePtr, assetLoadingThreadIdle);
     NTF_REF(threadCommandPtr, threadCommand);
 
@@ -204,7 +206,7 @@ static void UnitTest(
                 &advanceToNextUnitTest,
                 &threadCommand,
                 streamingUnitsAddToLoad,
-                streamingUnitsAddToLoadMutex,
+                &streamingUnitsAddToLoadCriticalSection,
                 assetLoadingThreadWakeHandle);
             break;
         }
@@ -216,7 +218,7 @@ static void UnitTest(
                 &advanceToNextUnitTest,
                 &threadCommand,
                 streamingUnitsAddToLoad,
-                streamingUnitsAddToLoadMutex,
+                &streamingUnitsAddToLoadCriticalSection,
                 assetLoadingThreadWakeHandle);
             break;
         }
@@ -228,7 +230,7 @@ static void UnitTest(
                 &advanceToNextUnitTest,
                 &threadCommand,
                 streamingUnitsAddToLoad,
-                streamingUnitsAddToLoadMutex,
+                &streamingUnitsAddToLoadCriticalSection,
                 assetLoadingThreadWakeHandle);
             break;
         }
@@ -264,7 +266,7 @@ static void UnitTest(
                 &advanceToNextUnitTest,
                 &threadCommand,
                 streamingUnitsAddToLoad,
-                streamingUnitsAddToLoadMutex,
+                &streamingUnitsAddToLoadCriticalSection,
                 assetLoadingThreadWakeHandle);
             break;
         }
@@ -289,7 +291,7 @@ static void UnitTest(
                 &advanceToNextUnitTest,
                 &threadCommand,
                 streamingUnitsAddToLoad,
-                streamingUnitsAddToLoadMutex,
+                &streamingUnitsAddToLoadCriticalSection,
                 assetLoadingThreadWakeHandle);
             break;
         }
@@ -322,7 +324,7 @@ static void UnitTest(
                 &advanceToNextUnitTest,
                 &threadCommand,
                 streamingUnitsAddToLoad,
-                streamingUnitsAddToLoadMutex,
+                &streamingUnitsAddToLoadCriticalSection,
                 assetLoadingThreadWakeHandle);
             break;
         }
@@ -341,7 +343,7 @@ static void UnitTest(
         }
         case UnitTestState::k12_LoadThenUnloadIndexZero:
         {
-            StreamingUnitAddToLoadMutexed(&streamingUnit0, streamingUnitsAddToLoad, streamingUnitsAddToLoadMutex);
+            StreamingUnitAddToLoadCriticalSection(&streamingUnit0, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
             AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
 
             UnitTest_StreamingUnitUnloadIfNotUnloaded(
@@ -358,7 +360,7 @@ static void UnitTest(
         {
             StreamingUnitAddToUnload(&streamingUnit0, streamingUnitsRenderable, &streamingUnitsToUnload);
 
-            StreamingUnitAddToLoadMutexed(&streamingUnit2, streamingUnitsAddToLoad, streamingUnitsAddToLoadMutex);
+            StreamingUnitAddToLoadCriticalSection(&streamingUnit2, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
             AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             advanceToNextUnitTest = true;
             break;
@@ -369,7 +371,7 @@ static void UnitTest(
             streamingUnitsToLoad.Push(&streamingUnit0);
             streamingUnitsToLoad.Push(&streamingUnit0);
 
-            StreamingUnitsAddToLoadMutexed(&streamingUnitsToLoad, streamingUnitsAddToLoad, streamingUnitsAddToLoadMutex);
+            StreamingUnitsAddToLoadCriticalSection(&streamingUnitsToLoad, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
 
             VectorSafe<StreamingUnitRuntime*, 2> streamingUnitsToUnload;
             streamingUnitsToUnload.Push(&streamingUnit0);
@@ -377,9 +379,9 @@ static void UnitTest(
             StreamingUnitsAddToUnload(&streamingUnitsToUnload, streamingUnitsRenderable, &streamingUnitsToUnload);
 
             StreamingUnitAddToUnload(&streamingUnit0, streamingUnitsRenderable, &streamingUnitsToUnload);
-            StreamingUnitAddToLoadMutexed(&streamingUnit0, streamingUnitsAddToLoad, streamingUnitsAddToLoadMutex);
+            StreamingUnitAddToLoadCriticalSection(&streamingUnit0, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
 
-            StreamingUnitAddToLoadMutexed(&streamingUnit0, streamingUnitsAddToLoad, streamingUnitsAddToLoadMutex);
+            StreamingUnitAddToLoadCriticalSection(&streamingUnit0, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
             StreamingUnitAddToUnload(&streamingUnit0, streamingUnitsRenderable, &streamingUnitsToUnload);
 
             AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
@@ -407,7 +409,7 @@ static void UnitTest(
                 &advanceToNextUnitTest,
                 &threadCommand,
                 streamingUnitsAddToLoad,
-                streamingUnitsAddToLoadMutex,
+                &streamingUnitsAddToLoadCriticalSection,
                 assetLoadingThreadWakeHandle);
 
             Sleep(1);//ensure asset loading thread is already handling the first load while receiving another
@@ -418,7 +420,7 @@ static void UnitTest(
                 &advanceToNextUnitTest,
                 &threadCommand,
                 streamingUnitsAddToLoad,
-                streamingUnitsAddToLoadMutex,
+                &streamingUnitsAddToLoadCriticalSection,
                 assetLoadingThreadWakeHandle);
             break;
         }
@@ -441,7 +443,7 @@ static void UnitTest(
             {
                 for (int i = 0; i < 2; ++i)
                 {
-                    StreamingUnitAddToLoadMutexed(&streamingUnit0, streamingUnitsAddToLoad, streamingUnitsAddToLoadMutex);
+                    StreamingUnitAddToLoadCriticalSection(&streamingUnit0, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
                     AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
                     Sleep(1);//ensure asset loading thread is already handling the first load while receiving another
                 }
@@ -468,9 +470,9 @@ static void UnitTest(
     if (advanceToNextUnitTest)
     {
 #if NTF_UNIT_TEST_STREAMING_LOG
-        WaitForSignalWindows(s_streamingDebugMutex);
+        CriticalSectionEnter(&s_streamingDebugCriticalSection);
         FwriteSnprintf(s_streamingDebug, "s_state EXECUTED=%i\n", (int)s_state);
-        ReleaseMutex(s_streamingDebugMutex);
+        CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
         s_state = static_cast<UnitTestState>(static_cast<size_t>(s_state) + 1);
@@ -480,17 +482,17 @@ static void UnitTest(
         }
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-        WaitForSignalWindows(s_streamingDebugMutex);
+        CriticalSectionEnter(&s_streamingDebugCriticalSection);
         FwriteSnprintf(s_streamingDebug, "s_state NEXT=%i\n", (int)s_state);
-        ReleaseMutex(s_streamingDebugMutex);
+        CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
     }
 #if NTF_UNIT_TEST_STREAMING_LOG
     else
     {
-        WaitForSignalWindows(s_streamingDebugMutex);
+        CriticalSectionEnter(&s_streamingDebugCriticalSection);
         FwriteSnprintf(s_streamingDebug, "s_state=%i -- did not advance to next unit test\n", (int)s_state);
-        ReleaseMutex(s_streamingDebugMutex);
+        CriticalSectionLeave(&s_streamingDebugCriticalSection);
     }
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
@@ -502,9 +504,11 @@ static void UnloadStreamingUnitsIfGpuDone(
     ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
     ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
     const StreamingUnitRuntime::FrameNumber lastCpuFrameCompleted, 
-    const HANDLE& deviceLocalMemoryMutex, 
+    RTL_CRITICAL_SECTION*const deviceLocalMemoryCriticalSectionPtr,
     const VkDevice& device)
 {
+    NTF_REF(deviceLocalMemoryCriticalSectionPtr, deviceLocalMemoryCriticalSection);
+
     VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> streamingUnitsToUnloadRemaining;
     streamingUnitsToUnloadRemaining.Append(streamingUnitsToUnload);//assume no streaming units can be unloaded
 
@@ -512,9 +516,9 @@ static void UnloadStreamingUnitsIfGpuDone(
     {
         NTF_REF(streamingUnitToUnloadPtr, streamingUnitToUnload);
 
-        WaitForSignalWindows(streamingUnitToUnload.m_stateMutex);
+        CriticalSectionEnter(&streamingUnitToUnload.m_stateCriticalSection);
         const StreamingUnitRuntime::State streamingUnitToUnloadState = streamingUnitToUnload.m_state;
-        ReleaseMutex(streamingUnitToUnload.m_stateMutex);
+        CriticalSectionLeave(&streamingUnitToUnload.m_stateCriticalSection);
         switch (streamingUnitToUnloadState)
         {
             case StreamingUnitRuntime::State::kUnloaded:
@@ -543,11 +547,11 @@ static void UnloadStreamingUnitsIfGpuDone(
                 const size_t frameNumberBits = sizeof(lastCpuFrameCompleted) << 3;
                 const StreamingUnitRuntime::FrameNumber halfRange = CastWithAssert<size_t, StreamingUnitRuntime::FrameNumber>(1 << (frameNumberBits - 1));//one half of the range of an unsigned type
 #if NTF_UNIT_TEST_STREAMING_LOG
-                WaitForSignalWindows(s_streamingDebugMutex);
+                CriticalSectionEnter(&s_streamingDebugCriticalSection);
                 FwriteSnprintf(s_streamingDebug,
                     "%s:%i:%s.m_state=%i,%s.m_lastSubmittedCpuFrame=%u,lastCpuFrameCompleted=%u\n",
                     __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_state, streamingUnitToUnload.m_filenameNoExtension.data(), static_cast<unsigned int>(streamingUnitToUnload.m_lastSubmittedCpuFrame), lastCpuFrameCompleted);
-                ReleaseMutex(s_streamingDebugMutex);
+                CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
                 /*  Gpu is done with this streaming unit -- eg last submitted frame is in the present or the past, and last submitted cpu frame 
@@ -556,11 +560,11 @@ static void UnloadStreamingUnitsIfGpuDone(
                     streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted)                                                                               
                 {
 #if NTF_UNIT_TEST_STREAMING_LOG
-                    WaitForSignalWindows(s_streamingDebugMutex);
+                    CriticalSectionEnter(&s_streamingDebugCriticalSection);
                     FwriteSnprintf(s_streamingDebug,
                         "%s:%i:%s.m_loaded=kUnloaded\n",
                         __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_filenameNoExtension.data());
-                    ReleaseMutex(s_streamingDebugMutex);
+                    CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
                     streamingUnitsToUnloadRemaining.Remove(&streamingUnitToUnload);
 
@@ -570,7 +574,7 @@ static void UnloadStreamingUnitsIfGpuDone(
                     streamingUnitToUnload.Free(
                         &deviceLocalMemoryStreamingUnitsAllocated,
                         deviceLocalMemoryStreamingUnits,
-                        deviceLocalMemoryMutex,
+                        &deviceLocalMemoryCriticalSection,
                         false,
                         device);
                 }//if (streamingUnitToUnload.m_lastSubmittedCpuFrame - lastCpuFrameCompleted > -halfRange && streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted)
@@ -741,7 +745,7 @@ private:
     {
         m_assetLoadingThreadData.m_threadCommand = AssetLoadingArgumentsThreadCommand::kCleanupAndTerminate;
         SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
-        WaitForSignalWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);//no need to wait on any other mutexes; if this mutex signals, the asset thread is finished and will not block these other mutexes
+        WaitForSignalWindows(m_assetLoadingThreadData.m_handles.doneEventHandle);//no need to wait on any other critical sections; if this handle signals, the asset thread is finished and will not block any critical sections
 
 #if NTF_DEBUG
         s_allowedToIssueStreamingCommands = true;
@@ -752,11 +756,11 @@ private:
         m_streamingUnitsToUnload.Append(m_streamingUnitsToAddToRenderable);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-        WaitForSignalWindows(s_streamingDebugMutex);
+        CriticalSectionEnter(&s_streamingDebugCriticalSection);
         FwriteSnprintf( s_streamingDebug, 
                         "%s:%i:Shutdown():m_streamingUnitsToAddToRenderable.size()=%i,m_streamingUnitsRenderable.size()=%i,m_streamingUnitsToUnload.size()=%i\n", 
                         __FILE__, __LINE__, m_streamingUnitsToAddToRenderable.size(), m_streamingUnitsRenderable.size(), m_streamingUnitsToUnload.size());
-        ReleaseMutex(s_streamingDebugMutex);
+        CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
         m_streamingUnitsToAddToRenderable.size(0);
@@ -768,7 +772,7 @@ private:
             streamingUnitToUnload.Free(
                 &m_deviceLocalMemoryStreamingUnitsAllocated, 
                 m_deviceLocalMemoryStreamingUnits, 
-                m_deviceLocalMemoryMutex, 
+                &m_deviceLocalMemoryCriticalSection, 
                 false, 
                 m_device);
         }
@@ -836,15 +840,15 @@ private:
 
         glfwDestroyWindow(m_window);
 
-        HandleCloseWindows(&m_deviceLocalMemoryMutex);
-        HandleCloseWindows(&m_graphicsQueueMutex);
+        CriticalSectionDelete(&m_deviceLocalMemoryCriticalSection);
+        CriticalSectionDelete(&m_graphicsQueueCriticalSection);
 #if NTF_ASSET_LOADING_MULTITHREADED
         HandleCloseWindows(&m_assetLoadingThreadData.m_handles.threadHandle);
 #endif//#if NTF_ASSET_LOADING_MULTITHREADED
         HandleCloseWindows(&m_assetLoadingThreadData.m_handles.doneEventHandle);
         HandleCloseWindows(&m_assetLoadingThreadData.m_handles.wakeEventHandle);
-		HandleCloseWindows(&m_streamingUnitsAddToLoadMutex);
-		HandleCloseWindows(&m_streamingUnitsAddToRenderableMutex);
+        CriticalSectionDelete(&m_streamingUnitsAddToLoadCriticalSection);
+        CriticalSectionDelete(&m_streamingUnitsAddToRenderableCriticalSection);
 
         glfwTerminate();
     }
@@ -852,10 +856,10 @@ private:
     void VulkanInitialize()
     {
 #if NTF_UNIT_TEST_STREAMING_LOG
-        s_streamingDebugMutex = MutexCreate();
-        WaitForSignalWindows(s_streamingDebugMutex);
+        CriticalSectionCreate(&s_streamingDebugCriticalSection);
+        CriticalSectionEnter(&s_streamingDebugCriticalSection);
         Fopen(&s_streamingDebug, "StreamingDebug.txt", "w+");
-        ReleaseMutex(s_streamingDebugMutex);
+        CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
         
         //QueryPerformanceFrequency(&g_queryPerformanceFrequency);
@@ -882,10 +886,10 @@ private:
 
         NTFVulkanInitialize(m_physicalDevice);
         m_queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
-        m_graphicsQueueMutex = MutexCreate();
-		m_streamingUnitsAddToLoadMutex = MutexCreate();
-		m_streamingUnitsAddToRenderableMutex = MutexCreate();
-        m_deviceLocalMemoryMutex = MutexCreate();
+        CriticalSectionCreate(&m_graphicsQueueCriticalSection);
+		CriticalSectionCreate(&m_streamingUnitsAddToLoadCriticalSection);
+		CriticalSectionCreate(&m_streamingUnitsAddToRenderableCriticalSection);
+        CriticalSectionCreate(&m_deviceLocalMemoryCriticalSection);
         CreateLogicalDevice(
             &m_device, 
             &m_graphicsQueue, 
@@ -951,7 +955,7 @@ private:
             ArraySafeRef<VkPipelineStageFlags>(),
             m_commandBufferTransitionImage,
             m_graphicsQueue,
-            nullptr,//no need to mutex, since currently only the main thread is running and we guard against launching the asset loading thread until this command buffer completes
+            nullptr,//no need to critical section, since currently only the main thread is running and we guard against launching the asset loading thread until this command buffer completes
             initializationDone,
             m_instance);
 
@@ -1000,15 +1004,15 @@ private:
         m_assetLoadingArguments.m_commandBufferTransfer = &m_commandBufferTransfer;
         m_assetLoadingArguments.m_commandBufferTransitionImage = &m_commandBufferTransitionImage;
         m_assetLoadingArguments.m_device = &m_device;
-        m_assetLoadingArguments.m_deviceLocalMemoryMutex = &m_deviceLocalMemoryMutex;
+        m_assetLoadingArguments.m_deviceLocalMemoryCriticalSection = &m_deviceLocalMemoryCriticalSection;
         m_assetLoadingArguments.m_graphicsQueue = &m_graphicsQueue;
-        m_assetLoadingArguments.m_graphicsQueueMutex = &m_graphicsQueueMutex;
+        m_assetLoadingArguments.m_graphicsQueueCriticalSection = &m_graphicsQueueCriticalSection;
         m_assetLoadingArguments.m_instance = &m_instance;
         m_assetLoadingArguments.m_physicalDevice = &m_physicalDevice;
 		m_assetLoadingArguments.m_queueFamilyIndices = &m_queueFamilyIndices;
 		m_assetLoadingArguments.m_renderPass = &m_renderPass;
-		m_assetLoadingArguments.m_streamingUnitsAddToLoadListMutex = &m_streamingUnitsAddToLoadMutex;
-		m_assetLoadingArguments.m_streamingUnitsAddToRenderableMutex = &m_streamingUnitsAddToRenderableMutex;
+		m_assetLoadingArguments.m_streamingUnitsToAddToLoadCriticalSection = &m_streamingUnitsAddToLoadCriticalSection;
+		m_assetLoadingArguments.m_streamingUnitsToAddToRenderableCriticalSection = &m_streamingUnitsAddToRenderableCriticalSection;
         m_assetLoadingArguments.m_swapChainExtent = &m_swapChainExtent;
 		m_assetLoadingArguments.m_threadDone = &m_assetLoadingThreadData.m_handles.doneEventHandle;
 		m_assetLoadingArguments.m_threadWake = &m_assetLoadingThreadData.m_handles.wakeEventHandle;
@@ -1025,11 +1029,11 @@ private:
 
 		//BEG_#StreamingTest
         //load first streaming unit
-		//StreamingUnitAddToLoadMutexed(
+		//StreamingUnitAddToLoadCriticalSection(
 		//	&m_streamingUnits[0], 
 		//	&m_streamingUnitsAddToLoad, 
 		//	&m_streamingUnitsRenderable, 
-		//	m_streamingUnitsAddToLoadListMutex);
+		//	m_streamingUnitsAddToLoadListCriticalSection);
 		//
 		//SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
 		//NTF_LOG_STREAMING("%i:SignalSemaphoreWindows():assetLoadingThreadWakeHandle=%zu\n", GetCurrentThreadId(), (size_t)m_assetLoadingThreadData.m_handles.wakeEventHandle);
@@ -1137,7 +1141,7 @@ private:
             VkFramebuffer swapChainFramebuffer;
 
 			//add newly loaded streaming units to the renderable list
-			WaitForSignalWindows(m_streamingUnitsAddToRenderableMutex);
+            CriticalSectionEnter(&m_streamingUnitsAddToRenderableCriticalSection);
             
 #if NTF_DEBUG
             for (auto& streamingUnitPtrToAdd : m_streamingUnitsToAddToRenderable)
@@ -1154,18 +1158,18 @@ private:
             {
                 NTF_REF(streamingUnitPtr, streamingUnit);
 
-                WaitForSignalWindows(streamingUnit.m_stateMutex);
+                CriticalSectionEnter(&streamingUnit.m_stateCriticalSection);
                 streamingUnit.m_state = StreamingUnitRuntime::State::kLoaded;//must happen here, because now the streaming unit is guaranteed to be rendered at least once (correctly defining its cpu frame submitted number), which will allow it to be unloaded correctly -- all provided the app doesn't shut down first
-                ReleaseMutex(streamingUnit.m_stateMutex);
+                CriticalSectionLeave(&streamingUnit.m_stateCriticalSection);
 #if NTF_UNIT_TEST_STREAMING_LOG
-                WaitForSignalWindows(s_streamingDebugMutex);
+                CriticalSectionEnter(&s_streamingDebugCriticalSection);
                 FwriteSnprintf(s_streamingDebug, "%s:%i:%s.m_state=kLoaded\n", __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data());
-                ReleaseMutex(s_streamingDebugMutex);
+                CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
             }
 
 			m_streamingUnitsToAddToRenderable.size(0);
-			ReleaseMutex(m_streamingUnitsAddToRenderableMutex);
+			CriticalSectionLeave(&m_streamingUnitsAddToRenderableCriticalSection);
 
             //fill primary command buffers with loaded streaming units
             const size_t streamingUnitsToRenderNum = m_streamingUnitsRenderable.size();
@@ -1286,7 +1290,7 @@ private:
                     ArraySafeRef<VkPipelineStageFlags>(&waitStages, 1),///<@todo: ArraySafeRefConst
                     commandBufferPrimary,
                     m_graphicsQueue,
-                    &m_graphicsQueueMutex,
+                    &m_graphicsQueueCriticalSection,
                     drawFrameFinishedFence.m_fence,
                     m_instance);
 
@@ -1311,14 +1315,14 @@ private:
                 const bool unifiedGraphicsAndPresentQueue = m_presentQueue == m_graphicsQueue;
                 if (unifiedGraphicsAndPresentQueue)
                 {
-                    WaitForSignalWindows(m_graphicsQueueMutex);
+                    CriticalSectionEnter(&m_graphicsQueueCriticalSection);
                 }
                 const VkResult result = vkQueuePresentKHR(m_presentQueue, &presentInfo);
                 NTF_LOG_STREAMING("%i:vkQueuePresentKHR(m_presentQueue=%zu,signalSemaphores.size()=%zu; &signalSemaphores[0]=%p)\n", 
                     GetCurrentThreadId(), (size_t)m_presentQueue, signalSemaphores.size(), &signalSemaphores[0]);
                 if (unifiedGraphicsAndPresentQueue)
                 {
-                    ReleaseMutex(m_graphicsQueueMutex);
+                    CriticalSectionLeave(&m_graphicsQueueCriticalSection);
                 }
                 if (result == VK_ERROR_OUT_OF_DATE_KHR/*swap chain can no longer be used for rendering*/ ||
                     result == VK_SUBOPTIMAL_KHR/*swap chain can still present image, but surface properties don't entirely match; for example, during resizing*/)
@@ -1337,7 +1341,7 @@ private:
                 &m_deviceLocalMemoryStreamingUnitsAllocated,
                 m_deviceLocalMemoryStreamingUnits,
                 m_lastCpuFrameCompleted, 
-                m_deviceLocalMemoryMutex, 
+                &m_deviceLocalMemoryCriticalSection, 
                 m_device);
 
 #if !NTF_ASSET_LOADING_MULTITHREADED
@@ -1365,11 +1369,11 @@ private:
                 }
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-                WaitForSignalWindows(s_streamingDebugMutex);
+                CriticalSectionEnter(&s_streamingDebugCriticalSection);
                 FwriteSnprintf(s_streamingDebug,
                     "%s:%i:m_streamingUnitsRenderable.size()=%zu, s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits=%i -> executeUnitTest=%i\n",
                     __FILE__, __LINE__, m_streamingUnitsRenderable.size(), s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits, executeUnitTest);
-                ReleaseMutex(s_streamingDebugMutex);
+                CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
             }
             if (executeUnitTest)
@@ -1385,15 +1389,15 @@ private:
                     &m_assetLoadingThreadData.m_threadCommand,
                     &executedLoadCommand,
                     &m_assetLoadingThreadIdle,
-                    m_streamingUnitsAddToLoadMutex,
+                    &m_streamingUnitsAddToLoadCriticalSection,
                     m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-                WaitForSignalWindows(s_streamingDebugMutex);
+                CriticalSectionEnter(&s_streamingDebugCriticalSection);
                 FwriteSnprintf(s_streamingDebug,
                     "%s:%i:UnitTest() done: m_streamingUnitsRenderable.size()=%zu, s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits=%i, executedLoadCommand=%i\n",
                     __FILE__, __LINE__, m_streamingUnitsRenderable.size(), s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits, executedLoadCommand);
-                ReleaseMutex(s_streamingDebugMutex);
+                CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
                 if (!m_streamingUnitsRenderable.size() && !s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits && executedLoadCommand)
                 {
@@ -1425,7 +1429,7 @@ private:
     VkDevice m_device;//interface to the physical device; must be destroyed before the physical device.  Need not be synchronized until, of course, vkDestroyDevice()
     VkSwapchainKHR m_swapChain;//must be destroyed before the logical device
     VkQueue m_graphicsQueue, m_presentQueue, m_transferQueue;//queues are implicitly cleaned up with the logical device; no need to delete
-    HANDLE m_graphicsQueueMutex;//synchronizes one-and-only graphics queue between asset loading thread (which uses it to load textures) and main thread.  On devices that don't have separate transfer or present queues, this mutex synchronizes these queue accesses as well
+    RTL_CRITICAL_SECTION m_graphicsQueueCriticalSection;//synchronizes one-and-only graphics queue between asset loading thread (which uses it to load textures) and main thread.  On devices that don't have separate transfer or present queues, this mutex synchronizes these queue accesses as well
     VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM> m_deviceExtensions;
     enum { kSwapChainImagesNumMax=8 };
     VectorSafe<VkImage, kSwapChainImagesNumMax> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html
@@ -1447,10 +1451,10 @@ private:
 	VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> m_streamingUnitsToUnload;
 	VectorSafe<StreamingUnitRuntime*, kStreamingUnitsRenderableNum> m_streamingUnitsRenderable;
 
-	HANDLE m_streamingUnitsAddToRenderableMutex;
+    RTL_CRITICAL_SECTION m_streamingUnitsAddToRenderableCriticalSection;
 	VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> m_streamingUnitsToAddToRenderable;
 
-	HANDLE m_streamingUnitsAddToLoadMutex;
+    RTL_CRITICAL_SECTION m_streamingUnitsAddToLoadCriticalSection;
 	VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> m_streamingUnitsToAddToLoad;
 
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
@@ -1465,7 +1469,7 @@ private:
     VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM> m_renderFinishedSemaphore = VectorSafe<VkSemaphore, NTF_FRAMES_IN_FLIGHT_NUM>(NTF_FRAMES_IN_FLIGHT_NUM);///<@todo NTF: refactor use ArraySafe
     ArraySafe<DrawFrameFinishedFence, NTF_FRAMES_IN_FLIGHT_NUM> m_drawFrameFinishedFences;
 
-    HANDLE m_deviceLocalMemoryMutex;
+    RTL_CRITICAL_SECTION m_deviceLocalMemoryCriticalSection;
     VulkanPagedStackAllocator m_deviceLocalMemoryPersistent;
     VectorSafe<VulkanPagedStackAllocator, kStreamingUnitsNum> m_deviceLocalMemoryStreamingUnits = 
         VectorSafe<VulkanPagedStackAllocator, kStreamingUnitsNum>(kStreamingUnitsNum);
@@ -1473,7 +1477,7 @@ private:
 
 	AssetLoadingThreadData m_assetLoadingThreadData;
     AssetLoadingArguments m_assetLoadingArguments;
-    bool m_assetLoadingThreadIdle;///<no mutexing, because only the asset thread writes to it
+    bool m_assetLoadingThreadIdle;///<no critical section, because only the asset thread writes to it
 #if !NTF_ASSET_LOADING_MULTITHREADED
     AssetLoadingPersistentResources m_assetLoadingPersistentResources;
 #endif//#if NTF_ASSET_LOADING_MULTITHREADED

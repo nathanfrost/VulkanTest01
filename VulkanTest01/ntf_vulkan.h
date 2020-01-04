@@ -87,6 +87,10 @@ BOOL HandleCloseWindows(HANDLE*const h);
 void UnsignalSemaphoreWindows(const HANDLE semaphoreHandle);
 void SignalSemaphoreWindows(const HANDLE semaphoreHandle);
 void WaitForSignalWindows(const HANDLE semaphoreOrMutexHandle);
+void CriticalSectionCreate(RTL_CRITICAL_SECTION*const criticalSectionPtr);
+void CriticalSectionEnter(RTL_CRITICAL_SECTION*const criticalSectionPtr);
+void CriticalSectionLeave(RTL_CRITICAL_SECTION*const criticalSectionPtr);
+void CriticalSectionDelete(RTL_CRITICAL_SECTION*const criticalSectionPtr);
 void TransferImageFromCpuToGpu(
     const VkImage& image,
     const uint32_t width,
@@ -136,7 +140,7 @@ VkResult SubmitCommandBuffer(
     ArraySafeRef<VkPipelineStageFlags> stagesWhereEachWaitSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
-    const HANDLE*const queueMutexPtr,
+    RTL_CRITICAL_SECTION*const criticalSectionPtr,
     const VkFence& fenceToSignalWhenCommandBufferDone,
     const VkInstance& instance);
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
@@ -612,7 +616,6 @@ class VulkanPagedStackAllocator
 public:
     VulkanPagedStackAllocator()
     {
-        m_mutex = 0;
 #if NTF_DEBUG
         m_initialized = false;
 #endif//#if NTF_DEBUG
@@ -645,5 +648,5 @@ private:
     VectorSafe<VulkanMemoryHeap, 32> m_vulkanMemoryHeaps;
     VkDevice m_device;
     VkPhysicalDevice m_physicalDevice;
-    HANDLE m_mutex;
+    RTL_CRITICAL_SECTION m_criticalSection;
 };

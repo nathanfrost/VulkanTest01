@@ -65,16 +65,16 @@ public:
     void Free(
         ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated, 
         ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
-        const HANDLE deviceLocalMemoryMutex,
+        RTL_CRITICAL_SECTION*const deviceLocalMemoryCriticalSection,
         const bool deallocateBackToGpu,
         const VkDevice& device);
     void Destroy(const VkDevice& device);
 
     void AssertValid() const;
 
-    HANDLE m_stateMutex;
+    RTL_CRITICAL_SECTION m_stateCriticalSection;
     enum class State:size_t {kUnloaded, kLoading, kLoaded} m_state;
-    State StateMutexed() const;
+    State StateCriticalSection();
 
     ArraySafe<char,128> m_filenameNoExtension;///<@todo NTF: consider creating a string database for this -- OR JUST USE THE GLOBAL STATIC STRINGS
     VkSampler m_textureSampler;
@@ -114,14 +114,14 @@ public:
     VkFence m_transferQueueFinishedFence, m_graphicsQueueFinishedFence;
 };
 
-void StreamingUnitAddToLoadMutexed(
+void StreamingUnitAddToLoadCriticalSection(
 	StreamingUnitRuntime*const streamingUnitToLoadPtr,
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,
-    const HANDLE streamingUnitsAddToLoadMutex);
-void StreamingUnitsAddToLoadMutexed(
+    RTL_CRITICAL_SECTION*const streamingUnitsAddToLoadCriticalSection);
+void StreamingUnitsAddToLoadCriticalSection(
 	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToLoad,
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,///<@todo: attempt to typedef (probably trivial class derivation, since typedef is treated as underling type by compiler?) to make types less ambiguous
-    const HANDLE streamingUnitsAddToLoadMutex);
+    RTL_CRITICAL_SECTION*const streamingUnitsAddToLoadCriticalSection);
 enum class AssetLoadingArgumentsThreadCommand;
 void AssetLoadingThreadExecuteLoad(AssetLoadingArgumentsThreadCommand*const threadCommandPtr, const HANDLE assetLoadingThreadWakeHandle);
 

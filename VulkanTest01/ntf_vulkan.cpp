@@ -148,6 +148,27 @@ void MutexRelease(const HANDLE mutex)
     const BOOL releaseMutexResult = ReleaseMutex(mutex);
     assert(releaseMutexResult == TRUE);
 }
+void CriticalSectionCreate(RTL_CRITICAL_SECTION*const criticalSectionPtr)
+{
+    assert(criticalSectionPtr);
+    InitializeCriticalSectionAndSpinCount(criticalSectionPtr, 0x400);
+}
+void CriticalSectionEnter(RTL_CRITICAL_SECTION*const criticalSectionPtr)
+{
+    assert(criticalSectionPtr);
+    EnterCriticalSection(criticalSectionPtr);
+}
+void CriticalSectionLeave(RTL_CRITICAL_SECTION*const criticalSectionPtr)
+{
+    assert(criticalSectionPtr);
+    LeaveCriticalSection(criticalSectionPtr);
+}
+void CriticalSectionDelete(RTL_CRITICAL_SECTION*const criticalSectionPtr)
+{
+    assert(criticalSectionPtr);
+    DeleteCriticalSection(criticalSectionPtr);
+}
+
 HANDLE ThreadSignalingEventCreate()
 {
     const HANDLE ret = CreateEvent(
@@ -286,7 +307,7 @@ VkResult SubmitCommandBuffer(
     ArraySafeRef<VkPipelineStageFlags> stagesWhereEachWaitSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
-    const HANDLE*const queueMutexPtr,
+    RTL_CRITICAL_SECTION*const queueCriticalSectionPtr,
     const VkFence& fenceToSignalWhenCommandBufferDone,
     const VkInstance& instance)
 {
@@ -302,14 +323,14 @@ VkResult SubmitCommandBuffer(
     submitInfo.pWaitSemaphores = waitSemaphores.GetAddressOfUnderlyingArray();
     submitInfo.pWaitDstStageMask = stagesWhereEachWaitSemaphoreWaits.GetAddressOfUnderlyingArray();
 
-    if (queueMutexPtr)
+    if (queueCriticalSectionPtr)
     {
-        WaitForSignalWindows(*queueMutexPtr);
-        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:Acquired mutex(*queueMutexPtr=%zu)\n", GetCurrentThreadId(), (size_t)*queueMutexPtr);
+        CriticalSectionEnter(queueCriticalSectionPtr);
+        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:Acquired critical section(*queueCriticalSectionPtr=%zu)\n", GetCurrentThreadId(), (size_t)queueCriticalSectionPtr);
     }
     else
     {
-        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:No mutex to acquire\n", GetCurrentThreadId());
+        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:No critical section to acquire\n", GetCurrentThreadId());
     }
 
     NTF_LOG_STREAMING(  "%i:SubmitCommandBuffer:queue=%zu,commandBufferCount=%i;pCommandBuffers[0]=%zx,signalSemaphoreCount=%i;pSignalSemaphores[0]=%zx;waitSemaphoreCount=%i;pWaitSemaphores[0]=%zx, pWaitDstStageMask[0]=%zx, fenceToSignalWhenCommandBufferDone=%zx\n",
@@ -346,14 +367,14 @@ VkResult SubmitCommandBuffer(
     }
     NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
 
-    if (queueMutexPtr)
+    if (queueCriticalSectionPtr)
     {
-        MutexRelease(*queueMutexPtr);
-        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:MutexRelease(*queueMutexPtr=%zu)\n", GetCurrentThreadId(), (size_t)*queueMutexPtr);
+        CriticalSectionLeave(queueCriticalSectionPtr);
+        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:CriticalSectionDelete(*queueCriticalSectionPtr=%zu)\n", GetCurrentThreadId(), (size_t)queueCriticalSectionPtr);
     }
     else
     {
-        //printf("No mutex to release\n");//#LogStreaming
+        //printf("No critical section to release\n");//#LogStreaming
     }
 
     return queueSubmitResult;
@@ -2643,9 +2664,8 @@ void CreateImageViews(
 
 void VulkanPagedStackAllocator::Initialize(const VkDevice& device,const VkPhysicalDevice& physicalDevice)
 {
-    assert(m_mutex == NULL);
-    m_mutex = MutexCreate();
-    WaitForSignalWindows(m_mutex);
+    CriticalSectionCreate(&m_criticalSection);
+    CriticalSectionEnter(&m_criticalSection);
 
 #if NTF_DEBUG
     assert(!m_initialized);
@@ -2663,12 +2683,12 @@ void VulkanPagedStackAllocator::Initialize(const VkDevice& device,const VkPhysic
         m_vulkanMemoryHeaps[memoryTypeIndex].Initialize(Cast_size_t_uint32_t(memoryTypeIndex), 128 * 1024 * 1024);
     }
 
-    MutexRelease(m_mutex);
+    CriticalSectionLeave(&m_criticalSection);
 }
 
 void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
 {
-    WaitForSignalWindows(m_mutex);
+    CriticalSectionEnter(&m_criticalSection);
 #if NTF_DEBUG
     assert(m_initialized);
     m_initialized = false;
@@ -2679,18 +2699,18 @@ void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
         heap.Destroy(m_device);
     }
 
-    MutexRelease(m_mutex);
-    HandleCloseWindows(&m_mutex);
+    CriticalSectionLeave(&m_criticalSection);
+    CriticalSectionDelete(&m_criticalSection);
 }
 
 void VulkanPagedStackAllocator::FreeAllPages(const bool deallocateBackToGpu, const VkDevice& device)
 {
-    WaitForSignalWindows(m_mutex);
+    CriticalSectionEnter(&m_criticalSection);
     for (auto& vulkanMemoryHeap : m_vulkanMemoryHeaps)
     {
         vulkanMemoryHeap.FreeAllPages(deallocateBackToGpu, device);
     }
-    MutexRelease(m_mutex);
+    CriticalSectionLeave(&m_criticalSection);
 }
 
 ///@todo: unit test
@@ -2706,8 +2726,8 @@ bool VulkanPagedStackAllocator::PushAlloc(
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
-    WaitForSignalWindows(m_mutex);
-    NTF_LOG_STREAMING("%i:VulkanPagedStackAllocator::PushAlloc:WaitForSignalWindows(m_mutex=%zu)\n", GetCurrentThreadId(), (size_t)m_mutex);
+    CriticalSectionEnter(&m_criticalSection);
+    NTF_LOG_STREAMING("%i:VulkanPagedStackAllocator::PushAlloc:WaitForSignalWindows(m_criticalSection=%zu)\n", GetCurrentThreadId(), (size_t)&m_criticalSection);
     assert(m_initialized);
 
     assert(memoryOffsetPtr);
@@ -2733,8 +2753,8 @@ bool VulkanPagedStackAllocator::PushAlloc(
         physicalDevice);
     assert(allocResult);
 
-    MutexRelease(m_mutex);
-    NTF_LOG_STREAMING("%i:VulkanPagedStackAllocator::PushAlloc:MutexRelease(m_mutex=%zu)\n", GetCurrentThreadId(), (size_t)m_mutex);
+    CriticalSectionLeave(&m_criticalSection);
+    NTF_LOG_STREAMING("%i:VulkanPagedStackAllocator::PushAlloc:CriticalSectionDelete(m_criticalSection=%zu)\n", GetCurrentThreadId(), (size_t)&m_criticalSection);
     return allocResult;
 }
 
@@ -2881,7 +2901,7 @@ bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMaxBytes, const uin
     allocInfo.memoryTypeIndex = memoryTypeIndex;
     allocInfo.pNext = nullptr;
 
-    //on a Windows 10 laptop (Intel UHD 620 with unified memory -- that is, the same pool for both CPU and GPU memory) for the x86 non-Debug build, I sometimes get VK_ERROR_OUT_OF_DEVICE_MEMORY 1-5 times when requesting (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) memory.  Changing timing with Sleep(10) seems to fix it, as does this polling code.  All calls to vkAllocateMemory are mutexed, and allocations seem to never occur at a very similar timing.  My theory is that Windows is too fragmented to succeed on the allocation, and then quickly defragments itself and then succeeds
+    //on a Windows 10 laptop (Intel UHD 620 with unified memory -- that is, the same pool for both CPU and GPU memory) for the x86 non-Debug build, I sometimes get VK_ERROR_OUT_OF_DEVICE_MEMORY 1-5 times when requesting (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) memory.  Changing timing with Sleep(10) seems to fix it, as does this polling code.  All calls to vkAllocateMemory are critical section'd, and allocations seem to never occur at a very similar timing.  My theory is that Windows is too fragmented to succeed on the allocation, and then quickly defragments itself and then succeeds
     VkResult allocateMemoryResult;
     do
     {

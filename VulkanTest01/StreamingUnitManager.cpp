@@ -3,7 +3,7 @@
 
 #if NTF_UNIT_TEST_STREAMING_LOG
 FILE* s_streamingDebug;
-HANDLE s_streamingDebugMutex;
+RTL_CRITICAL_SECTION s_streamingDebugCriticalSection;
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
 //extern LARGE_INTEGER g_queryPerformanceFrequency;
@@ -68,15 +68,15 @@ void StreamingCommandsProcess(
     NTF_REF(threadArguments.m_commandBufferTransfer, commandBufferTransfer);
     NTF_REF(threadArguments.m_commandBufferTransitionImage, commandBufferTransitionImage);
     NTF_REF(threadArguments.m_device, device);
-    NTF_REF(threadArguments.m_deviceLocalMemoryMutex, deviceLocalMemoryMutex);
+    NTF_REF(threadArguments.m_deviceLocalMemoryCriticalSection, deviceLocalMemoryCriticalSection);
     NTF_REF(threadArguments.m_graphicsQueue, graphicsQueue);
-    NTF_REF(threadArguments.m_graphicsQueueMutex, graphicsQueueMutex);
+    NTF_REF(threadArguments.m_graphicsQueueCriticalSection, graphicsQueueCriticalSection);
     NTF_REF(threadArguments.m_instance, instance);
     NTF_REF(threadArguments.m_physicalDevice, physicalDevice);
     NTF_REF(threadArguments.m_queueFamilyIndices, queueFamilyIndices);
 	NTF_REF(threadArguments.m_renderPass, renderPass);
-	NTF_REF(threadArguments.m_streamingUnitsAddToLoadListMutex, streamingUnitsAddToLoadMutex);
-	NTF_REF(threadArguments.m_streamingUnitsAddToRenderableMutex, streamingUnitsAddToRenderableMutex);
+	NTF_REF(threadArguments.m_streamingUnitsToAddToLoadCriticalSection, streamingUnitsAddToLoadCriticalSection);
+	NTF_REF(threadArguments.m_streamingUnitsToAddToRenderableCriticalSection, streamingUnitsAddToRenderableCriticalSection);
 	NTF_REF(threadArguments.m_swapChainExtent, swapChainExtent);
     NTF_REF(threadArguments.m_transferQueue, transferQueue);
 
@@ -96,43 +96,43 @@ void StreamingCommandsProcess(
 
     const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
     assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.transferFamily == queueFamilyIndices.graphicsFamily));
-    const HANDLE*const transferQueueMutex = unifiedGraphicsAndTransferQueue ? &graphicsQueueMutex : nullptr;//if we have a single queue for graphics and transfer rather than two separate queues, then we must be mutex that one queue
+    RTL_CRITICAL_SECTION*const transferQueueCriticalSection = unifiedGraphicsAndTransferQueue ? &graphicsQueueCriticalSection : nullptr;//if we have a single queue for graphics and transfer rather than two separate queues, then we must criticalSection that one queue
 
     VkPipelineStageFlags transferFinishedPipelineStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
     VectorSafe<VkBuffer, 32> stagingBuffersGpu;
 
 	VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> streamingUnitsToLoad;
 
-	WaitForSignalWindows(streamingUnitsAddToLoadMutex);
+    CriticalSectionEnter(&streamingUnitsAddToLoadCriticalSection);
 	streamingUnitsToLoad.Copy(streamingUnitsToAddToLoad);
 	streamingUnitsToAddToLoad.size(0);
-	ReleaseMutex(streamingUnitsAddToLoadMutex);
+	CriticalSectionLeave(&streamingUnitsAddToLoadCriticalSection);
    
 #if NTF_UNIT_TEST_STREAMING_LOG
-    WaitForSignalWindows(s_streamingDebugMutex);
+    CriticalSectionEnter(&s_streamingDebugCriticalSection);
     FwriteSnprintf( s_streamingDebug, 
                     "%s:%i:StreamingCommandsProcess():streamingUnitsToLoad.size()=%zu\n", 
                     __FILE__, __LINE__, streamingUnitsToLoad.size());
-    ReleaseMutex(s_streamingDebugMutex);
+    CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
     for (auto& streamingUnitToLoadPtr: streamingUnitsToLoad)
     {
         NTF_REF(streamingUnitToLoadPtr, streamingUnit);
         //printf("streamingUnit:%s\n", streamingUnit.m_filenameNoExtension.data());//#LogStreaming
 
-        WaitForSignalWindows(streamingUnit.m_stateMutex);
+        CriticalSectionEnter(&streamingUnit.m_stateCriticalSection);
         const bool stateWasLoading = streamingUnit.m_state == StreamingUnitRuntime::State::kLoading;
         assert(stateWasLoading);
         if (stateWasLoading)
         {
-            ReleaseMutex(streamingUnit.m_stateMutex);
+            CriticalSectionLeave(&streamingUnit.m_stateCriticalSection);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-            WaitForSignalWindows(s_streamingDebugMutex);
+            CriticalSectionEnter(&s_streamingDebugCriticalSection);
             FwriteSnprintf( s_streamingDebug,
                             "%s:%i:StreamingCommandsProcess():StreamingCommand::kLoad; %s.m_state=%i\n",
                             __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
-            ReleaseMutex(s_streamingDebugMutex);
+            CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
             assert(stagingBuffersGpu.size() == 0);
@@ -144,8 +144,8 @@ void StreamingCommandsProcess(
             }
 
             //allocate a memory allocator to the streaming unit
-            WaitForSignalWindows(deviceLocalMemoryMutex);
-            NTF_LOG_STREAMING("%i:StreamingUnitsLoadAllQueued:WaitForSignalWindows(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
+            CriticalSectionEnter(&deviceLocalMemoryCriticalSection);
+            NTF_LOG_STREAMING("%i:StreamingUnitsLoadAllQueued:WaitForSignalWindows(deviceLocalMemoryCriticalSection=%zu)\n", GetCurrentThreadId(), (size_t)&deviceLocalMemoryCriticalSection);
             const size_t deviceLocalMemoryStreamingUnitsSize = deviceLocalMemoryStreamingUnits.size();
             size_t deviceLocalMemoryStreamingUnitIndex = 0;
             for (; deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize; ++deviceLocalMemoryStreamingUnitIndex)
@@ -159,7 +159,7 @@ void StreamingCommandsProcess(
                 }
             }
             assert(deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize);
-            MutexRelease(deviceLocalMemoryMutex);
+            CriticalSectionLeave(&deviceLocalMemoryCriticalSection);
 
             const VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             CreateDescriptorPool(&streamingUnit.m_descriptorPool, descriptorType, device, TODO_REFACTOR_NUM);
@@ -197,7 +197,7 @@ void StreamingCommandsProcess(
             Fread(streamingUnitFile, &texturedGeometryNum, sizeof(texturedGeometryNum), 1);
             //END_GENERALIZE_READER_WRITER
             stagingBufferGpuOffsetToAllocatedBlock = 0;
-            NTF_REF(streamingUnit.m_deviceLocalMemory, deviceLocalMemory);//does not need to be mutexed, because allocation and freeing of GPU deviceLocalMemory is mutexed, and a streaming unit cannot get unloaded if it isn't loaded first, like here
+            NTF_REF(streamingUnit.m_deviceLocalMemory, deviceLocalMemory);//does not need to be criticalSection'd, because allocation and freeing of GPU deviceLocalMemory is criticalSection'd, and a streaming unit cannot get unloaded if it isn't loaded first, like here
             for (size_t texturedGeometryIndex = 0; texturedGeometryIndex < texturedGeometryNum; ++texturedGeometryIndex)
             {
                 //load texture
@@ -328,7 +328,7 @@ void StreamingCommandsProcess(
                 ArraySafeRef<VkPipelineStageFlags>(),
                 commandBufferTransfer,
                 transferQueue,
-                transferQueueMutex,
+                transferQueueCriticalSection,
                 streamingUnit.m_transferQueueFinishedFence,
                 instance);
 
@@ -341,7 +341,7 @@ void StreamingCommandsProcess(
                     ArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),///<@todo: ArraySafeRefConst
                     commandBufferTransitionImage,
                     graphicsQueue,
-                    &graphicsQueueMutex,
+                    &graphicsQueueCriticalSection,
                     streamingUnit.m_graphicsQueueFinishedFence,
                     instance);
             }
@@ -395,21 +395,21 @@ void StreamingCommandsProcess(
             }
 
             //streaming unit is now loaded so tag it renderable -- but don't set state to loaded until it is guaranteed to be rendered at least once (provided the app doesn't shut down first)
-            WaitForSignalWindows(streamingUnitsAddToRenderableMutex);
+            CriticalSectionEnter(&streamingUnitsAddToRenderableCriticalSection);
             streamingUnitsToAddToRenderable.Push(&streamingUnit);
-            ReleaseMutex(streamingUnitsAddToRenderableMutex);
+            CriticalSectionLeave(&streamingUnitsAddToRenderableCriticalSection);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-            WaitForSignalWindows(s_streamingDebugMutex);
+            CriticalSectionEnter(&s_streamingDebugCriticalSection);
             FwriteSnprintf(s_streamingDebug,
                 "%s:%i:StreamingCommandsProcess():Completed Gpu load: %s.m_state=%i -- placed on addToRenderable list\n",
                 __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
-            ReleaseMutex(s_streamingDebugMutex);
+            CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
         }//if (stateWasLoading)
         else
         {
-            ReleaseMutex(streamingUnit.m_stateMutex);
+            CriticalSectionLeave(&streamingUnit.m_stateCriticalSection);
         }
     }//for (auto& streamingUnitToLoadPtr: streamingUnitsToLoad)
     streamingUnitsToLoad.size(0);//all should be processed
@@ -431,9 +431,9 @@ void AssetLoadingPersistentResourcesDestroy(
     vkDestroySemaphore(device, assetLoadingPersistentResources.transferFinishedSemaphore, GetVulkanAllocationCallbacks());
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-    WaitForSignalWindows(s_streamingDebugMutex);
+    CriticalSectionEnter(&s_streamingDebugCriticalSection);
     FwriteSnprintf(s_streamingDebug, "%s:%i:AssetLoadingPersistentResourcesDestroy() completed\n", __FILE__, __LINE__);
-    ReleaseMutex(s_streamingDebugMutex);
+    CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
     SignalSemaphoreWindows(threadDone);
@@ -460,17 +460,17 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         //WaitOnAddress(&signalMemory, &undesiredValue, sizeof(AssetLoadingArguments::SignalMemoryType), INFINITE);//#SynchronizationWindows8+Only
         
 #if NTF_UNIT_TEST_STREAMING_LOG
-        WaitForSignalWindows(s_streamingDebugMutex);
+        CriticalSectionEnter(&s_streamingDebugCriticalSection);
         FwriteSnprintf(s_streamingDebug, "%s:%i:AssetLoadingThread() about to call WaitForSignalWindows(threadWake)\n", __FILE__, __LINE__);
-        ReleaseMutex(s_streamingDebugMutex);
+        CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
         assetLoadingThreadIdle = true;
         WaitForSignalWindows(threadWake);
         assetLoadingThreadIdle = false;
 #if NTF_UNIT_TEST_STREAMING_LOG
-        WaitForSignalWindows(s_streamingDebugMutex);
+        CriticalSectionEnter(&s_streamingDebugCriticalSection);
         FwriteSnprintf(s_streamingDebug, "%s:%i:AssetLoadingThread() returned from WaitForSignalWindows(threadWake)\n", __FILE__, __LINE__);
-        ReleaseMutex(s_streamingDebugMutex);
+        CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
         NTF_LOG_STREAMING("%i:AssetLoadingThread():threadWake\n", GetCurrentThreadId());

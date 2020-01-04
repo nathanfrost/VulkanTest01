@@ -3,33 +3,37 @@
 #include"StreamingUnitManager.h"
 
 extern FILE*s_streamingDebug;
-extern HANDLE s_streamingDebugMutex;
+extern RTL_CRITICAL_SECTION s_streamingDebugCriticalSection;
 #if NTF_DEBUG
 extern bool s_allowedToIssueStreamingCommands;
 #endif//#if NTF_DEBUG
 
-void StreamingUnitAddToLoadMutexed(
+void StreamingUnitAddToLoadCriticalSection(
 	StreamingUnitRuntime*const streamingUnitToLoadPtr, 
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,
-    const HANDLE streamingUnitsAddToLoadMutex)
+    RTL_CRITICAL_SECTION*const streamingUnitsAddToLoadCriticalSectionPtr)
 {
     assert(s_allowedToIssueStreamingCommands);
 	NTF_REF(streamingUnitToLoadPtr, streamingUnitToLoad);
+    NTF_REF(streamingUnitsAddToLoadCriticalSectionPtr, streamingUnitsAddToLoadCriticalSection);
+
 	VectorSafe<StreamingUnitRuntime*, 1> temp;
 	temp.Push(&streamingUnitToLoad);
-	StreamingUnitsAddToLoadMutexed(&temp, streamingUnitsAddToLoad, streamingUnitsAddToLoadMutex);
+	StreamingUnitsAddToLoadCriticalSection(&temp, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
 }
-void StreamingUnitsAddToLoadMutexed(
+void StreamingUnitsAddToLoadCriticalSection(
 	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToLoad,///<not ConstVectorSafeRef because I want to force the passer to use '&', since semantically want to emphasize that the streaming units contained in the vector will be modified, even if the vector itself will not
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,
-	const HANDLE streamingUnitsAddToLoadMutex)
+    RTL_CRITICAL_SECTION*const streamingUnitsAddToLoadCriticalSectionPtr)
 {
     assert(s_allowedToIssueStreamingCommands);
+    NTF_REF(streamingUnitsAddToLoadCriticalSectionPtr, streamingUnitsAddToLoadCriticalSection);
+
 	for (auto& streamingUnitToLoadPtr : streamingUnitsToLoad)
 	{
 		NTF_REF(streamingUnitToLoadPtr, streamingUnitToLoad);
 
-        WaitForSignalWindows(streamingUnitToLoad.m_stateMutex);
+        CriticalSectionEnter(&streamingUnitToLoad.m_stateCriticalSection);
         const bool wasUnloadedState = streamingUnitToLoad.m_state == StreamingUnitRuntime::State::kUnloaded;
 #if !NTF_UNIT_TEST_STREAMING
         assert(wasUnloadedState);
@@ -37,16 +41,16 @@ void StreamingUnitsAddToLoadMutexed(
         if (wasUnloadedState)
         {
             streamingUnitToLoad.m_state = StreamingUnitRuntime::State::kLoading;
-            MutexRelease(streamingUnitToLoad.m_stateMutex);
-            //printf("MAIN THREAD: StreamingUnitsAddToLoadMutexed(%s)\n", streamingUnitToLoad.m_filenameNoExtension.data());
+            CriticalSectionLeave(&streamingUnitToLoad.m_stateCriticalSection);
+            //printf("MAIN THREAD: StreamingUnitsAddToLoadCriticalSection(%s)\n", streamingUnitToLoad.m_filenameNoExtension.data());
 
-            WaitForSignalWindows(streamingUnitsAddToLoadMutex);
+            CriticalSectionEnter(&streamingUnitsAddToLoadCriticalSection);
             streamingUnitsAddToLoad.PushIfUnique(&streamingUnitToLoad);
-            MutexRelease(streamingUnitsAddToLoadMutex);
+            CriticalSectionLeave(&streamingUnitsAddToLoadCriticalSection);
         }
         else
         {
-            MutexRelease(streamingUnitToLoad.m_stateMutex);
+            CriticalSectionLeave(&streamingUnitToLoad.m_stateCriticalSection);
         }
 	}
 }
@@ -56,17 +60,17 @@ void AssetLoadingThreadExecuteLoad(AssetLoadingArgumentsThreadCommand*const thre
     *threadCommandPtr = AssetLoadingArgumentsThreadCommand::kProcessStreamingUnits;
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-    WaitForSignalWindows(s_streamingDebugMutex);
+    CriticalSectionEnter(&s_streamingDebugCriticalSection);
     FwriteSnprintf(s_streamingDebug, "%s:%i:about to call AssetLoadingThreadExecuteLoad()::SignalSemaphoreWindows(assetLoadingThreadWakeHandle)\n", __FILE__, __LINE__);
-    ReleaseMutex(s_streamingDebugMutex);
+    CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
     SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-    WaitForSignalWindows(s_streamingDebugMutex);
+    CriticalSectionEnter(&s_streamingDebugCriticalSection);
     FwriteSnprintf(s_streamingDebug, "%s:%i:returned from AssetLoadingThreadExecuteLoad()::SignalSemaphoreWindows(assetLoadingThreadWakeHandle)\n", __FILE__, __LINE__);
-    ReleaseMutex(s_streamingDebugMutex);
+    CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 }
 void StreamingUnitAddToUnload(
@@ -96,7 +100,7 @@ void StreamingUnitsAddToUnload(
 	{
 		NTF_REF(streamingUnitToAddToUnloadListPtr, streamingUnitToUnload);
 
-        WaitForSignalWindows(streamingUnitToUnload.m_stateMutex);
+        CriticalSectionEnter(&streamingUnitToUnload.m_stateCriticalSection);
         const bool streamingUnitCurrentlyLoaded = streamingUnitToUnload.m_state == StreamingUnitRuntime::State::kLoaded;
 #if !NTF_UNIT_TEST_STREAMING
         assert(streamingUnitCurrentlyLoaded);
@@ -106,21 +110,21 @@ void StreamingUnitsAddToUnload(
             streamingUnitsRenderable.Remove(&streamingUnitToUnload);
             streamingUnitsToUnload.PushIfUnique(&streamingUnitToUnload);
         }
-        MutexRelease(streamingUnitToUnload.m_stateMutex);
+        CriticalSectionLeave(&streamingUnitToUnload.m_stateCriticalSection);
         //printf("MAIN THREAD: StreamingUnitsAddToUnload(%s)\n", streamingUnitToUnload.m_filenameNoExtension.data());
 	}
 #if NTF_UNIT_TEST_STREAMING_LOG
-    WaitForSignalWindows(s_streamingDebugMutex);
+    CriticalSectionEnter(&s_streamingDebugCriticalSection);
     FwriteSnprintf(s_streamingDebug, "%s:%i:StreamingUnitsAddToUnload():streamingUnitsAddToUnload.size()=%zu\n", __FILE__, __LINE__, streamingUnitsToUnload.size());
-    ReleaseMutex(s_streamingDebugMutex);
+    CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 }
 
-StreamingUnitRuntime::State StreamingUnitRuntime::StateMutexed() const
+StreamingUnitRuntime::State StreamingUnitRuntime::StateCriticalSection()
 {
-    WaitForSignalWindows(m_stateMutex);
-    State ret = m_state;
-    ReleaseMutex(m_stateMutex);
+    CriticalSectionEnter(&m_stateCriticalSection);
+    const State ret = m_state;
+    CriticalSectionLeave(&m_stateCriticalSection);
 
     return ret;
 };
@@ -149,21 +153,23 @@ StreamingUnitRuntime::StreamingUnitRuntime()
 ///Initialize()/Destroy() concern themselves solely with constructs which we don't want to risk fragmenting by creating and destroying
 void StreamingUnitRuntime::Initialize(const VkDevice& device)
 {
-	m_stateMutex = MutexCreate();
+	CriticalSectionCreate(&m_stateCriticalSection);
     const VkFenceCreateFlagBits fenceCreateFlagBits = static_cast<VkFenceCreateFlagBits>(0);
 
     FenceCreate(&m_transferQueueFinishedFence, fenceCreateFlagBits, device);
     FenceCreate(&m_graphicsQueueFinishedFence, fenceCreateFlagBits, device);
 }
 
-///concerns itself solely with Vulkan constructs that we memory-manage, not OS constructs like mutexes
+///concerns itself solely with Vulkan constructs that we memory-manage, not OS constructs like critical sections
 void StreamingUnitRuntime::Free(
     ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
     ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
-    const HANDLE deviceLocalMemoryMutex,
+    RTL_CRITICAL_SECTION*const deviceLocalMemoryCriticalSectionPtr,
     const bool deallocateBackToGpu,
     const VkDevice& device)
 {
+    NTF_REF(deviceLocalMemoryCriticalSectionPtr, deviceLocalMemoryCriticalSection);
+
     //printf("StreamingUnitRuntime::Free() enter\n");//#LogStreaming
 
     vkDestroySampler(device, m_textureSampler, GetVulkanAllocationCallbacks());
@@ -190,9 +196,9 @@ void StreamingUnitRuntime::Free(
     FenceReset(m_graphicsQueueFinishedFence, device);
 
     //release allocator back to pool
-    WaitForSignalWindows(deviceLocalMemoryMutex);
+    CriticalSectionEnter(&deviceLocalMemoryCriticalSection);
     assert(m_deviceLocalMemory);
-    NTF_LOG_STREAMING("%i:StreamingUnitRuntime::Free:WaitForSignalWindows(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
+    NTF_LOG_STREAMING("%i:StreamingUnitRuntime::Free:WaitForSignalWindows(deviceLocalMemoryCriticalSection=%zu)\n", GetCurrentThreadId(), (size_t)&deviceLocalMemoryCriticalSection);
     size_t deviceLocalMemoryStreamingUnitsIndex = 0;
     for (auto& deviceLocalMemoryStreamingUnit : deviceLocalMemoryStreamingUnits)
     {
@@ -207,19 +213,19 @@ void StreamingUnitRuntime::Free(
         ++deviceLocalMemoryStreamingUnitsIndex;
     }
     assert(!m_deviceLocalMemory);
-    MutexRelease(deviceLocalMemoryMutex);
-    NTF_LOG_STREAMING("%i:StreamingUnitRuntime::Free:MutexRelease(deviceLocalMemoryMutex=%zu)\n", GetCurrentThreadId(), (size_t)deviceLocalMemoryMutex);
+    CriticalSectionLeave(&deviceLocalMemoryCriticalSection);
+    NTF_LOG_STREAMING("%i:StreamingUnitRuntime::Free:CriticalSectionLeave(deviceLocalMemoryCriticalSection=%zu)\n", GetCurrentThreadId(), (size_t)&deviceLocalMemoryCriticalSection);
 
-    WaitForSignalWindows(m_stateMutex);
+    CriticalSectionEnter(&m_stateCriticalSection);
     m_state = StreamingUnitRuntime::State::kUnloaded;
-    ReleaseMutex(m_stateMutex);
+    CriticalSectionLeave(&m_stateCriticalSection);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-    WaitForSignalWindows(s_streamingDebugMutex);
+    CriticalSectionEnter(&s_streamingDebugCriticalSection);
     FwriteSnprintf( s_streamingDebug,
                     "%s:%i:StreamingUnitRuntime::Free():streaming unit %s\n",
                     __FILE__, __LINE__, m_filenameNoExtension.data());
-    ReleaseMutex(s_streamingDebugMutex);
+    CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
     //printf("StreamingUnitRuntime::Free() exit\n");//#LogStreaming
 }
@@ -227,8 +233,7 @@ void StreamingUnitRuntime::Free(
 ///Initialize()/Destroy() concern themselves solely with constructs we don't want to risk fragmenting by creating and destroying)
 void StreamingUnitRuntime::Destroy(const VkDevice& device)
 {
-	WaitForSignalWindows(m_stateMutex);
-	HandleCloseWindows(&m_stateMutex);//assume no ReleaseMutex() needed before closing; not sure this is actually true
+    CriticalSectionDelete(&m_stateCriticalSection);//assume no CriticalSectionLeave() is needed; undefined behavior otherwise!
 
     vkDestroyFence(device, m_transferQueueFinishedFence, GetVulkanAllocationCallbacks());
     vkDestroyFence(device, m_graphicsQueueFinishedFence, GetVulkanAllocationCallbacks());
