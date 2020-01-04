@@ -19,7 +19,7 @@ void StreamingUnitAddToLoadCriticalSection(
 
 	VectorSafe<StreamingUnitRuntime*, 1> temp;
 	temp.Push(&streamingUnitToLoad);
-	StreamingUnitsAddToLoadCriticalSection(&temp, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
+	StreamingUnitsAddToLoadCriticalSection(&temp, &streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
 }
 void StreamingUnitsAddToLoadCriticalSection(
 	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToLoad,///<not ConstVectorSafeRef because I want to force the passer to use '&', since semantically want to emphasize that the streaming units contained in the vector will be modified, even if the vector itself will not
@@ -163,8 +163,8 @@ void StreamingUnitRuntime::Initialize(const VkDevice& device)
 ///concerns itself solely with Vulkan constructs that we memory-manage, not OS constructs like critical sections
 void StreamingUnitRuntime::Free(
     ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
-    ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
     RTL_CRITICAL_SECTION*const deviceLocalMemoryCriticalSectionPtr,
+    ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
     const bool deallocateBackToGpu,
     const VkDevice& device)
 {

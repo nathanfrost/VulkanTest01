@@ -135,12 +135,12 @@ void CopyBufferToImage(
     const VkDevice& device,
     const VkInstance instance);
 VkResult SubmitCommandBuffer(
+    RTL_CRITICAL_SECTION*const criticalSectionPtr,
     ConstVectorSafeRef<VkSemaphore> signalSemaphores,
     ConstVectorSafeRef<VkSemaphore> waitSemaphores,
     ArraySafeRef<VkPipelineStageFlags> stagesWhereEachWaitSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
-    RTL_CRITICAL_SECTION*const criticalSectionPtr,
     const VkFence& fenceToSignalWhenCommandBufferDone,
     const VkInstance& instance);
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);

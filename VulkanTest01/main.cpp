@@ -81,7 +81,7 @@ static void UnitTest_StreamingUnitsLoadIfNotLoaded(
         NTF_REF(streamingUnitToLoadPtr, streamingUnitToLoad);
         if (streamingUnitToLoad.StateCriticalSection() == StreamingUnitRuntime::State::kUnloaded)
         {
-            StreamingUnitAddToLoadCriticalSection(&streamingUnitToLoad, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
+            StreamingUnitAddToLoadCriticalSection(&streamingUnitToLoad, &streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
             AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             issuedLoadCommand = true;
             advanceToNextUnitTest = false;
@@ -157,8 +157,8 @@ static void UnitTest(
 	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToUnload,
     AssetLoadingArgumentsThreadCommand*const threadCommandPtr,
     bool*const issuedLoadCommandPtr,
-    const bool*const assetLoadingThreadIdlePtr,
     RTL_CRITICAL_SECTION*const streamingUnitsAddToLoadCriticalSectionPtr,
+    const bool*const assetLoadingThreadIdlePtr,
     const HANDLE assetLoadingThreadWakeHandle)
 {
     static enum class UnitTestState:size_t
@@ -343,7 +343,7 @@ static void UnitTest(
         }
         case UnitTestState::k12_LoadThenUnloadIndexZero:
         {
-            StreamingUnitAddToLoadCriticalSection(&streamingUnit0, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
+            StreamingUnitAddToLoadCriticalSection(&streamingUnit0, &streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
             AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
 
             UnitTest_StreamingUnitUnloadIfNotUnloaded(
@@ -360,7 +360,7 @@ static void UnitTest(
         {
             StreamingUnitAddToUnload(&streamingUnit0, streamingUnitsRenderable, &streamingUnitsToUnload);
 
-            StreamingUnitAddToLoadCriticalSection(&streamingUnit2, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
+            StreamingUnitAddToLoadCriticalSection(&streamingUnit2, &streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
             AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
             advanceToNextUnitTest = true;
             break;
@@ -379,9 +379,9 @@ static void UnitTest(
             StreamingUnitsAddToUnload(&streamingUnitsToUnload, streamingUnitsRenderable, &streamingUnitsToUnload);
 
             StreamingUnitAddToUnload(&streamingUnit0, streamingUnitsRenderable, &streamingUnitsToUnload);
-            StreamingUnitAddToLoadCriticalSection(&streamingUnit0, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
+            StreamingUnitAddToLoadCriticalSection(&streamingUnit0, &streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
 
-            StreamingUnitAddToLoadCriticalSection(&streamingUnit0, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
+            StreamingUnitAddToLoadCriticalSection(&streamingUnit0, &streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
             StreamingUnitAddToUnload(&streamingUnit0, streamingUnitsRenderable, &streamingUnitsToUnload);
 
             AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
@@ -443,7 +443,7 @@ static void UnitTest(
             {
                 for (int i = 0; i < 2; ++i)
                 {
-                    StreamingUnitAddToLoadCriticalSection(&streamingUnit0, streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
+                    StreamingUnitAddToLoadCriticalSection(&streamingUnit0, &streamingUnitsAddToLoad, &streamingUnitsAddToLoadCriticalSection);
                     AssetLoadingThreadExecuteLoad(&threadCommand, assetLoadingThreadWakeHandle);
                     Sleep(1);//ensure asset loading thread is already handling the first load while receiving another
                 }
@@ -502,9 +502,9 @@ static void UnloadStreamingUnitsIfGpuDone(
     VectorSafeRef<StreamingUnitRuntime *> streamingUnitsToUnload, 
     VectorSafeRef<StreamingUnitRuntime *> streamingUnitsRenderable, 
     ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
+    RTL_CRITICAL_SECTION*const deviceLocalMemoryCriticalSectionPtr,
     ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
     const StreamingUnitRuntime::FrameNumber lastCpuFrameCompleted, 
-    RTL_CRITICAL_SECTION*const deviceLocalMemoryCriticalSectionPtr,
     const VkDevice& device)
 {
     NTF_REF(deviceLocalMemoryCriticalSectionPtr, deviceLocalMemoryCriticalSection);
@@ -573,8 +573,8 @@ static void UnloadStreamingUnitsIfGpuDone(
                     //printf("MAIN THREAD: streamingUnitToUnload.Free('%s')\n", streamingUnitToUnload.m_filenameNoExtension.data());
                     streamingUnitToUnload.Free(
                         &deviceLocalMemoryStreamingUnitsAllocated,
-                        deviceLocalMemoryStreamingUnits,
                         &deviceLocalMemoryCriticalSection,
+                        deviceLocalMemoryStreamingUnits,
                         false,
                         device);
                 }//if (streamingUnitToUnload.m_lastSubmittedCpuFrame - lastCpuFrameCompleted > -halfRange && streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted)
@@ -771,8 +771,8 @@ private:
             NTF_REF(streamingUnitToUnloadPtr, streamingUnitToUnload);
             streamingUnitToUnload.Free(
                 &m_deviceLocalMemoryStreamingUnitsAllocated, 
+                &m_deviceLocalMemoryCriticalSection,
                 m_deviceLocalMemoryStreamingUnits, 
-                &m_deviceLocalMemoryCriticalSection, 
                 false, 
                 m_device);
         }
@@ -950,12 +950,12 @@ private:
             m_instance);
         EndCommandBuffer(m_commandBufferTransitionImage);
         SubmitCommandBuffer(
+            nullptr,//no need to critical section, since currently only the main thread is running and we guard against launching the asset loading thread until this command buffer completes
             ConstVectorSafeRef<VkSemaphore>(),
             ConstVectorSafeRef<VkSemaphore>(),
             ArraySafeRef<VkPipelineStageFlags>(),
             m_commandBufferTransitionImage,
             m_graphicsQueue,
-            nullptr,//no need to critical section, since currently only the main thread is running and we guard against launching the asset loading thread until this command buffer completes
             initializationDone,
             m_instance);
 
@@ -1285,12 +1285,12 @@ private:
                 //        (size_t)drawFrameFinishedFence.m_fence, vkGetFenceStatus(m_device, drawFrameFinishedFence.m_fence));
                 //END_HAC
                 SubmitCommandBuffer(
+                    &m_graphicsQueueCriticalSection,
                     signalSemaphores,
                     ConstVectorSafeRef<VkSemaphore>(&imageAvailableSemaphore, 1),
                     ArraySafeRef<VkPipelineStageFlags>(&waitStages, 1),///<@todo: ArraySafeRefConst
                     commandBufferPrimary,
                     m_graphicsQueue,
-                    &m_graphicsQueueCriticalSection,
                     drawFrameFinishedFence.m_fence,
                     m_instance);
 
@@ -1339,9 +1339,9 @@ private:
                 &m_streamingUnitsToUnload, 
                 &m_streamingUnitsRenderable, 
                 &m_deviceLocalMemoryStreamingUnitsAllocated,
+                &m_deviceLocalMemoryCriticalSection,
                 m_deviceLocalMemoryStreamingUnits,
                 m_lastCpuFrameCompleted, 
-                &m_deviceLocalMemoryCriticalSection, 
                 m_device);
 
 #if !NTF_ASSET_LOADING_MULTITHREADED
@@ -1388,8 +1388,8 @@ private:
                     &m_streamingUnitsToUnload,
                     &m_assetLoadingThreadData.m_threadCommand,
                     &executedLoadCommand,
-                    &m_assetLoadingThreadIdle,
                     &m_streamingUnitsAddToLoadCriticalSection,
+                    &m_assetLoadingThreadIdle,
                     m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
 #if NTF_UNIT_TEST_STREAMING_LOG

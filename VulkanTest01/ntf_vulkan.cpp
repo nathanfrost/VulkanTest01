@@ -302,12 +302,12 @@ void ImageMemoryBarrier(
 }
 
 VkResult SubmitCommandBuffer(
+    RTL_CRITICAL_SECTION*const queueCriticalSectionPtr,
     ConstVectorSafeRef<VkSemaphore> signalSemaphores,
     ConstVectorSafeRef<VkSemaphore> waitSemaphores,
     ArraySafeRef<VkPipelineStageFlags> stagesWhereEachWaitSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
-    RTL_CRITICAL_SECTION*const queueCriticalSectionPtr,
     const VkFence& fenceToSignalWhenCommandBufferDone,
     const VkInstance& instance)
 {
