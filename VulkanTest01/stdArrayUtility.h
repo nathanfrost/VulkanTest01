@@ -30,20 +30,31 @@ inline void Fclose(FILE*const f)
 }
 
 ///@todo: unit test
+#define NTF_FWRITE_SNPRINTF_PREFACE             \
+    assert(file);                               \
+    assert(formatString);                       \
+    assert(strlen(formatString) > 0);           \
+                                                \
+    ArraySafe<char, kElementsMax> string;       \
+    va_list args;                               \
+    va_start(args, formatString);               \
+    string.Snprintf_va_list(formatString, args);\
+    va_end(args);
 template<size_t kElementsMax=512>
 void FwriteSnprintf(FILE*const file, const char*const formatString, ...)
 {
-    assert(file);
-    assert(formatString);
-    assert(strlen(formatString) > 0);
-
-    ArraySafe<char, kElementsMax> string;
-    va_list args;
-    va_start(args, formatString);
-    string.Snprintf_va_list(formatString, args);
-    va_end(args);
-
+    NTF_FWRITE_SNPRINTF_PREFACE;
     string.Fwrite(file, strlen(string.begin()));
+}
+template<size_t kElementsMax = 512>
+void FwriteSnprintf(FILE*const file, RTL_CRITICAL_SECTION*const criticalSectionPtr, const char*const formatString, ...)
+{
+    assert(criticalSectionPtr);
+    NTF_FWRITE_SNPRINTF_PREFACE;
+
+    CriticalSectionEnter(criticalSectionPtr);
+    string.Fwrite(file, strlen(string.begin()));
+    CriticalSectionLeave(criticalSectionPtr);
 }
 
 /*  users of this translation unit should directly use this function only for non-array elements; array elements should reside in an array 

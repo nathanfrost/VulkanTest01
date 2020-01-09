@@ -470,9 +470,7 @@ static void UnitTest(
     if (advanceToNextUnitTest)
     {
 #if NTF_UNIT_TEST_STREAMING_LOG
-        CriticalSectionEnter(&s_streamingDebugCriticalSection);
-        FwriteSnprintf(s_streamingDebug, "s_state EXECUTED=%i\n", (int)s_state);
-        CriticalSectionLeave(&s_streamingDebugCriticalSection);
+        FwriteSnprintf(s_streamingDebug, &s_streamingDebugCriticalSection, "s_state EXECUTED=%i\n", (int)s_state);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
         s_state = static_cast<UnitTestState>(static_cast<size_t>(s_state) + 1);
@@ -482,17 +480,13 @@ static void UnitTest(
         }
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-        CriticalSectionEnter(&s_streamingDebugCriticalSection);
-        FwriteSnprintf(s_streamingDebug, "s_state NEXT=%i\n", (int)s_state);
-        CriticalSectionLeave(&s_streamingDebugCriticalSection);
+        FwriteSnprintf(s_streamingDebug, &s_streamingDebugCriticalSection, "s_state NEXT=%i\n", (int)s_state);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
     }
 #if NTF_UNIT_TEST_STREAMING_LOG
     else
     {
-        CriticalSectionEnter(&s_streamingDebugCriticalSection);
-        FwriteSnprintf(s_streamingDebug, "s_state=%i -- did not advance to next unit test\n", (int)s_state);
-        CriticalSectionLeave(&s_streamingDebugCriticalSection);
+        FwriteSnprintf(s_streamingDebug, &s_streamingDebugCriticalSection, "s_state=%i -- did not advance to next unit test\n", (int)s_state);
     }
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
@@ -547,11 +541,10 @@ static void UnloadStreamingUnitsIfGpuDone(
                 const size_t frameNumberBits = sizeof(lastCpuFrameCompleted) << 3;
                 const StreamingUnitRuntime::FrameNumber halfRange = CastWithAssert<size_t, StreamingUnitRuntime::FrameNumber>(1 << (frameNumberBits - 1));//one half of the range of an unsigned type
 #if NTF_UNIT_TEST_STREAMING_LOG
-                CriticalSectionEnter(&s_streamingDebugCriticalSection);
-                FwriteSnprintf(s_streamingDebug,
-                    "%s:%i:%s.m_state=%i,%s.m_lastSubmittedCpuFrame=%u,lastCpuFrameCompleted=%u\n",
-                    __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_state, streamingUnitToUnload.m_filenameNoExtension.data(), static_cast<unsigned int>(streamingUnitToUnload.m_lastSubmittedCpuFrame), lastCpuFrameCompleted);
-                CriticalSectionLeave(&s_streamingDebugCriticalSection);
+                FwriteSnprintf( s_streamingDebug,
+                                &s_streamingDebugCriticalSection,
+                                "%s:%i:%s.m_state=%i,%s.m_lastSubmittedCpuFrame=%u,lastCpuFrameCompleted=%u\n",
+                                __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_state, streamingUnitToUnload.m_filenameNoExtension.data(), static_cast<unsigned int>(streamingUnitToUnload.m_lastSubmittedCpuFrame), lastCpuFrameCompleted);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
                 /*  Gpu is done with this streaming unit -- eg last submitted frame is in the present or the past, and last submitted cpu frame 
@@ -560,11 +553,10 @@ static void UnloadStreamingUnitsIfGpuDone(
                     streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted)                                                                               
                 {
 #if NTF_UNIT_TEST_STREAMING_LOG
-                    CriticalSectionEnter(&s_streamingDebugCriticalSection);
-                    FwriteSnprintf(s_streamingDebug,
-                        "%s:%i:%s.m_loaded=kUnloaded\n",
-                        __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_filenameNoExtension.data());
-                    CriticalSectionLeave(&s_streamingDebugCriticalSection);
+                    FwriteSnprintf( s_streamingDebug,
+                                    &s_streamingDebugCriticalSection,
+                                    "%s:%i:%s.m_loaded=kUnloaded\n",
+                                    __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_filenameNoExtension.data());
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
                     streamingUnitsToUnloadRemaining.Remove(&streamingUnitToUnload);
 
@@ -756,11 +748,10 @@ private:
         m_streamingUnitsToUnload.Append(m_streamingUnitsToAddToRenderable);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-        CriticalSectionEnter(&s_streamingDebugCriticalSection);
         FwriteSnprintf( s_streamingDebug, 
+                        &s_streamingDebugCriticalSection,
                         "%s:%i:Shutdown():m_streamingUnitsToAddToRenderable.size()=%i,m_streamingUnitsRenderable.size()=%i,m_streamingUnitsToUnload.size()=%i\n", 
                         __FILE__, __LINE__, m_streamingUnitsToAddToRenderable.size(), m_streamingUnitsRenderable.size(), m_streamingUnitsToUnload.size());
-        CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
         m_streamingUnitsToAddToRenderable.size(0);
@@ -1162,9 +1153,10 @@ private:
                 streamingUnit.m_state = StreamingUnitRuntime::State::kLoaded;//must happen here, because now the streaming unit is guaranteed to be rendered at least once (correctly defining its cpu frame submitted number), which will allow it to be unloaded correctly -- all provided the app doesn't shut down first
                 CriticalSectionLeave(&streamingUnit.m_stateCriticalSection);
 #if NTF_UNIT_TEST_STREAMING_LOG
-                CriticalSectionEnter(&s_streamingDebugCriticalSection);
-                FwriteSnprintf(s_streamingDebug, "%s:%i:%s.m_state=kLoaded\n", __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data());
-                CriticalSectionLeave(&s_streamingDebugCriticalSection);
+                FwriteSnprintf( s_streamingDebug, 
+                                &s_streamingDebugCriticalSection, 
+                                "%s:%i:%s.m_state=kLoaded\n", 
+                                __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data());
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
             }
 
@@ -1223,9 +1215,10 @@ private:
                         m_device);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-                    FwriteSnprintf(s_streamingDebug,
-                        "%s:%i:About to call FillCommandBufferPrimary():%s.m_lastSubmittedCpuFrame=%i\n",
-                        __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame);
+                    FwriteSnprintf( s_streamingDebug,
+                                    &s_streamingDebugCriticalSection,
+                                    "%s:%i:About to call FillCommandBufferPrimary():%s.m_lastSubmittedCpuFrame=%i\n",
+                                    __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
                     FillCommandBufferPrimary(
                         &streamingUnit.m_lastSubmittedCpuFrame,
@@ -1240,6 +1233,7 @@ private:
                         m_instance);
 #if NTF_UNIT_TEST_STREAMING_LOG
                     FwriteSnprintf( s_streamingDebug,
+                                    &s_streamingDebugCriticalSection,
                                     "%s:%i:Completed FillCommandBufferPrimary():%s.m_lastSubmittedCpuFrame=%i\n",
                                     __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
@@ -1369,11 +1363,10 @@ private:
                 }
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-                CriticalSectionEnter(&s_streamingDebugCriticalSection);
-                FwriteSnprintf(s_streamingDebug,
-                    "%s:%i:m_streamingUnitsRenderable.size()=%zu, s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits=%i -> executeUnitTest=%i\n",
-                    __FILE__, __LINE__, m_streamingUnitsRenderable.size(), s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits, executeUnitTest);
-                CriticalSectionLeave(&s_streamingDebugCriticalSection);
+                FwriteSnprintf( s_streamingDebug,
+                                &s_streamingDebugCriticalSection,
+                                "%s:%i:m_streamingUnitsRenderable.size()=%zu, s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits=%i -> executeUnitTest=%i\n",
+                                __FILE__, __LINE__, m_streamingUnitsRenderable.size(), s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits, executeUnitTest);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
             }
             if (executeUnitTest)
@@ -1393,11 +1386,10 @@ private:
                     m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-                CriticalSectionEnter(&s_streamingDebugCriticalSection);
-                FwriteSnprintf(s_streamingDebug,
-                    "%s:%i:UnitTest() done: m_streamingUnitsRenderable.size()=%zu, s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits=%i, executedLoadCommand=%i\n",
-                    __FILE__, __LINE__, m_streamingUnitsRenderable.size(), s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits, executedLoadCommand);
-                CriticalSectionLeave(&s_streamingDebugCriticalSection);
+                FwriteSnprintf( s_streamingDebug,
+                                &s_streamingDebugCriticalSection,
+                                "%s:%i:UnitTest() done: m_streamingUnitsRenderable.size()=%zu, s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits=%i, executedLoadCommand=%i\n",
+                                __FILE__, __LINE__, m_streamingUnitsRenderable.size(), s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits, executedLoadCommand);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
                 if (!m_streamingUnitsRenderable.size() && !s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits && executedLoadCommand)
                 {

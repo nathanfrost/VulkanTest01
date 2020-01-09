@@ -109,11 +109,10 @@ void StreamingCommandsProcess(
 	CriticalSectionLeave(&streamingUnitsAddToLoadCriticalSection);
    
 #if NTF_UNIT_TEST_STREAMING_LOG
-    CriticalSectionEnter(&s_streamingDebugCriticalSection);
     FwriteSnprintf( s_streamingDebug, 
+                    &s_streamingDebugCriticalSection,
                     "%s:%i:StreamingCommandsProcess():streamingUnitsToLoad.size()=%zu\n", 
                     __FILE__, __LINE__, streamingUnitsToLoad.size());
-    CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
     for (auto& streamingUnitToLoadPtr: streamingUnitsToLoad)
     {
@@ -128,11 +127,10 @@ void StreamingCommandsProcess(
             CriticalSectionLeave(&streamingUnit.m_stateCriticalSection);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-            CriticalSectionEnter(&s_streamingDebugCriticalSection);
             FwriteSnprintf( s_streamingDebug,
+                            &s_streamingDebugCriticalSection,
                             "%s:%i:StreamingCommandsProcess():StreamingCommand::kLoad; %s.m_state=%i\n",
                             __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
-            CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
             assert(stagingBuffersGpu.size() == 0);
@@ -400,11 +398,10 @@ void StreamingCommandsProcess(
             CriticalSectionLeave(&streamingUnitsAddToRenderableCriticalSection);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-            CriticalSectionEnter(&s_streamingDebugCriticalSection);
-            FwriteSnprintf(s_streamingDebug,
-                "%s:%i:StreamingCommandsProcess():Completed Gpu load: %s.m_state=%i -- placed on addToRenderable list\n",
-                __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
-            CriticalSectionLeave(&s_streamingDebugCriticalSection);
+            FwriteSnprintf( s_streamingDebug,
+                            &s_streamingDebugCriticalSection,
+                            "%s:%i:StreamingCommandsProcess():Completed Gpu load: %s.m_state=%i -- placed on addToRenderable list\n",
+                            __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
         }//if (stateWasLoading)
         else
@@ -431,9 +428,10 @@ void AssetLoadingPersistentResourcesDestroy(
     vkDestroySemaphore(device, assetLoadingPersistentResources.transferFinishedSemaphore, GetVulkanAllocationCallbacks());
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-    CriticalSectionEnter(&s_streamingDebugCriticalSection);
-    FwriteSnprintf(s_streamingDebug, "%s:%i:AssetLoadingPersistentResourcesDestroy() completed\n", __FILE__, __LINE__);
-    CriticalSectionLeave(&s_streamingDebugCriticalSection);
+    FwriteSnprintf( s_streamingDebug, 
+                    &s_streamingDebugCriticalSection, 
+                    "%s:%i:AssetLoadingPersistentResourcesDestroy() completed\n", 
+                    __FILE__, __LINE__);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
     SignalSemaphoreWindows(threadDone);
@@ -460,17 +458,19 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         //WaitOnAddress(&signalMemory, &undesiredValue, sizeof(AssetLoadingArguments::SignalMemoryType), INFINITE);//#SynchronizationWindows8+Only
         
 #if NTF_UNIT_TEST_STREAMING_LOG
-        CriticalSectionEnter(&s_streamingDebugCriticalSection);
-        FwriteSnprintf(s_streamingDebug, "%s:%i:AssetLoadingThread() about to call WaitForSignalWindows(threadWake)\n", __FILE__, __LINE__);
-        CriticalSectionLeave(&s_streamingDebugCriticalSection);
+        FwriteSnprintf( s_streamingDebug, 
+                        &s_streamingDebugCriticalSection, 
+                        "%s:%i:AssetLoadingThread() about to call WaitForSignalWindows(threadWake)\n", 
+                        __FILE__, __LINE__);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
         assetLoadingThreadIdle = true;
         WaitForSignalWindows(threadWake);
         assetLoadingThreadIdle = false;
 #if NTF_UNIT_TEST_STREAMING_LOG
-        CriticalSectionEnter(&s_streamingDebugCriticalSection);
-        FwriteSnprintf(s_streamingDebug, "%s:%i:AssetLoadingThread() returned from WaitForSignalWindows(threadWake)\n", __FILE__, __LINE__);
-        CriticalSectionLeave(&s_streamingDebugCriticalSection);
+        FwriteSnprintf( s_streamingDebug, 
+                        &s_streamingDebugCriticalSection, 
+                        "%s:%i:AssetLoadingThread() returned from WaitForSignalWindows(threadWake)\n", 
+                        __FILE__, __LINE__);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
         NTF_LOG_STREAMING("%i:AssetLoadingThread():threadWake\n", GetCurrentThreadId());

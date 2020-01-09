@@ -60,17 +60,19 @@ void AssetLoadingThreadExecuteLoad(AssetLoadingArgumentsThreadCommand*const thre
     *threadCommandPtr = AssetLoadingArgumentsThreadCommand::kProcessStreamingUnits;
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-    CriticalSectionEnter(&s_streamingDebugCriticalSection);
-    FwriteSnprintf(s_streamingDebug, "%s:%i:about to call AssetLoadingThreadExecuteLoad()::SignalSemaphoreWindows(assetLoadingThreadWakeHandle)\n", __FILE__, __LINE__);
-    CriticalSectionLeave(&s_streamingDebugCriticalSection);
+    FwriteSnprintf( s_streamingDebug, 
+                    &s_streamingDebugCriticalSection, 
+                    "%s:%i:about to call AssetLoadingThreadExecuteLoad()::SignalSemaphoreWindows(assetLoadingThreadWakeHandle)\n", 
+                    __FILE__, __LINE__);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
     SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-    CriticalSectionEnter(&s_streamingDebugCriticalSection);
-    FwriteSnprintf(s_streamingDebug, "%s:%i:returned from AssetLoadingThreadExecuteLoad()::SignalSemaphoreWindows(assetLoadingThreadWakeHandle)\n", __FILE__, __LINE__);
-    CriticalSectionLeave(&s_streamingDebugCriticalSection);
+    FwriteSnprintf( s_streamingDebug, 
+                    &s_streamingDebugCriticalSection, 
+                    "%s:%i:returned from AssetLoadingThreadExecuteLoad()::SignalSemaphoreWindows(assetLoadingThreadWakeHandle)\n", 
+                    __FILE__, __LINE__);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 }
 void StreamingUnitAddToUnload(
@@ -114,9 +116,10 @@ void StreamingUnitsAddToUnload(
         //printf("MAIN THREAD: StreamingUnitsAddToUnload(%s)\n", streamingUnitToUnload.m_filenameNoExtension.data());
 	}
 #if NTF_UNIT_TEST_STREAMING_LOG
-    CriticalSectionEnter(&s_streamingDebugCriticalSection);
-    FwriteSnprintf(s_streamingDebug, "%s:%i:StreamingUnitsAddToUnload():streamingUnitsAddToUnload.size()=%zu\n", __FILE__, __LINE__, streamingUnitsToUnload.size());
-    CriticalSectionLeave(&s_streamingDebugCriticalSection);
+    FwriteSnprintf( s_streamingDebug, 
+                    &s_streamingDebugCriticalSection, 
+                    "%s:%i:StreamingUnitsAddToUnload():streamingUnitsAddToUnload.size()=%zu\n", 
+                    __FILE__, __LINE__, streamingUnitsToUnload.size());
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 }
 
@@ -221,11 +224,10 @@ void StreamingUnitRuntime::Free(
     CriticalSectionLeave(&m_stateCriticalSection);
 
 #if NTF_UNIT_TEST_STREAMING_LOG
-    CriticalSectionEnter(&s_streamingDebugCriticalSection);
     FwriteSnprintf( s_streamingDebug,
+                    &s_streamingDebugCriticalSection,
                     "%s:%i:StreamingUnitRuntime::Free():streaming unit %s\n",
                     __FILE__, __LINE__, m_filenameNoExtension.data());
-    CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
     //printf("StreamingUnitRuntime::Free() exit\n");//#LogStreaming
 }
