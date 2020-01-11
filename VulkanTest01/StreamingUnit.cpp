@@ -42,7 +42,6 @@ void StreamingUnitsAddToLoadCriticalSection(
         {
             streamingUnitToLoad.m_state = StreamingUnitRuntime::State::kLoading;
             CriticalSectionLeave(&streamingUnitToLoad.m_stateCriticalSection);
-            //printf("MAIN THREAD: StreamingUnitsAddToLoadCriticalSection(%s)\n", streamingUnitToLoad.m_filenameNoExtension.data());
 
             CriticalSectionEnter(&streamingUnitsAddToLoadCriticalSection);
             streamingUnitsAddToLoad.PushIfUnique(&streamingUnitToLoad);
@@ -113,7 +112,6 @@ void StreamingUnitsAddToUnload(
             streamingUnitsToUnload.PushIfUnique(&streamingUnitToUnload);
         }
         CriticalSectionLeave(&streamingUnitToUnload.m_stateCriticalSection);
-        //printf("MAIN THREAD: StreamingUnitsAddToUnload(%s)\n", streamingUnitToUnload.m_filenameNoExtension.data());
 	}
 #if NTF_UNIT_TEST_STREAMING_LOG
     FwriteSnprintf( s_streamingDebug, 
@@ -173,8 +171,6 @@ void StreamingUnitRuntime::Free(
 {
     NTF_REF(deviceLocalMemoryCriticalSectionPtr, deviceLocalMemoryCriticalSection);
 
-    //printf("StreamingUnitRuntime::Free() enter\n");//#LogStreaming
-
     vkDestroySampler(device, m_textureSampler, GetVulkanAllocationCallbacks());
 
     for (auto& texturedGeometry : m_texturedGeometries)
@@ -201,7 +197,6 @@ void StreamingUnitRuntime::Free(
     //release allocator back to pool
     CriticalSectionEnter(&deviceLocalMemoryCriticalSection);
     assert(m_deviceLocalMemory);
-    NTF_LOG_STREAMING("%i:StreamingUnitRuntime::Free:WaitForSignalWindows(deviceLocalMemoryCriticalSection=%zu)\n", GetCurrentThreadId(), (size_t)&deviceLocalMemoryCriticalSection);
     size_t deviceLocalMemoryStreamingUnitsIndex = 0;
     for (auto& deviceLocalMemoryStreamingUnit : deviceLocalMemoryStreamingUnits)
     {
@@ -217,7 +212,6 @@ void StreamingUnitRuntime::Free(
     }
     assert(!m_deviceLocalMemory);
     CriticalSectionLeave(&deviceLocalMemoryCriticalSection);
-    NTF_LOG_STREAMING("%i:StreamingUnitRuntime::Free:CriticalSectionLeave(deviceLocalMemoryCriticalSection=%zu)\n", GetCurrentThreadId(), (size_t)&deviceLocalMemoryCriticalSection);
 
     CriticalSectionEnter(&m_stateCriticalSection);
     m_state = StreamingUnitRuntime::State::kUnloaded;
@@ -229,7 +223,6 @@ void StreamingUnitRuntime::Free(
                     "%s:%i:StreamingUnitRuntime::Free():streaming unit %s\n",
                     __FILE__, __LINE__, m_filenameNoExtension.data());
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
-    //printf("StreamingUnitRuntime::Free() exit\n");//#LogStreaming
 }
 
 ///Initialize()/Destroy() concern themselves solely with constructs we don't want to risk fragmenting by creating and destroying)

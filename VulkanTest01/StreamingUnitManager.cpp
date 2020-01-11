@@ -117,7 +117,6 @@ void StreamingCommandsProcess(
     for (auto& streamingUnitToLoadPtr: streamingUnitsToLoad)
     {
         NTF_REF(streamingUnitToLoadPtr, streamingUnit);
-        //printf("streamingUnit:%s\n", streamingUnit.m_filenameNoExtension.data());//#LogStreaming
 
         CriticalSectionEnter(&streamingUnit.m_stateCriticalSection);
         const bool stateWasLoading = streamingUnit.m_state == StreamingUnitRuntime::State::kLoading;
@@ -143,7 +142,6 @@ void StreamingCommandsProcess(
 
             //allocate a memory allocator to the streaming unit
             CriticalSectionEnter(&deviceLocalMemoryCriticalSection);
-            NTF_LOG_STREAMING("%i:StreamingUnitsLoadAllQueued:WaitForSignalWindows(deviceLocalMemoryCriticalSection=%zu)\n", GetCurrentThreadId(), (size_t)&deviceLocalMemoryCriticalSection);
             const size_t deviceLocalMemoryStreamingUnitsSize = deviceLocalMemoryStreamingUnits.size();
             size_t deviceLocalMemoryStreamingUnitIndex = 0;
             for (; deviceLocalMemoryStreamingUnitIndex < deviceLocalMemoryStreamingUnitsSize; ++deviceLocalMemoryStreamingUnitIndex)
@@ -370,11 +368,9 @@ void StreamingCommandsProcess(
             //clean up staging buffers if they were in use but have completed their transfers
             {
                 FenceWaitUntilSignalled(streamingUnit.m_transferQueueFinishedFence, device);
-                NTF_LOG_STREAMING("%i:FenceWaitUntilSignalled(streamingUnit.m_transferQueueFinishedFence=%zu)\n", GetCurrentThreadId(), (size_t)streamingUnit.m_transferQueueFinishedFence);
                 if (!unifiedGraphicsAndTransferQueue)
                 {
                     FenceWaitUntilSignalled(streamingUnit.m_graphicsQueueFinishedFence, device);
-                    NTF_LOG_STREAMING("%i:FenceWaitUntilSignalled(streamingUnit.m_graphicsQueueFinishedFence=%zu)\n", GetCurrentThreadId(), (size_t)streamingUnit.m_graphicsQueueFinishedFence);
                 }
 
                 //clean up staging memory
@@ -472,8 +468,6 @@ DWORD WINAPI AssetLoadingThread(void* arg)
                         "%s:%i:AssetLoadingThread() returned from WaitForSignalWindows(threadWake)\n", 
                         __FILE__, __LINE__);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
-
-        NTF_LOG_STREAMING("%i:AssetLoadingThread():threadWake\n", GetCurrentThreadId());
 
         if (threadCommand == AssetLoadingArgumentsThreadCommand::kCleanupAndTerminate)
         {

@@ -326,15 +326,8 @@ VkResult SubmitCommandBuffer(
     if (queueCriticalSectionPtr)
     {
         CriticalSectionEnter(queueCriticalSectionPtr);
-        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:Acquired critical section(*queueCriticalSectionPtr=%zu)\n", GetCurrentThreadId(), (size_t)queueCriticalSectionPtr);
-    }
-    else
-    {
-        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:No critical section to acquire\n", GetCurrentThreadId());
     }
 
-    NTF_LOG_STREAMING(  "%i:SubmitCommandBuffer:queue=%zu,commandBufferCount=%i;pCommandBuffers[0]=%zx,signalSemaphoreCount=%i;pSignalSemaphores[0]=%zx;waitSemaphoreCount=%i;pWaitSemaphores[0]=%zx, pWaitDstStageMask[0]=%zx, fenceToSignalWhenCommandBufferDone=%zx\n",
-                        GetCurrentThreadId(), (size_t)queue, submitInfo.commandBufferCount, (size_t)submitInfo.pCommandBuffers[0], submitInfo.signalSemaphoreCount, submitInfo.signalSemaphoreCount ? (size_t)submitInfo.pSignalSemaphores[0] : 0, submitInfo.waitSemaphoreCount, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitSemaphores[0] : 0, submitInfo.waitSemaphoreCount ? (size_t)submitInfo.pWaitDstStageMask[0] : 0, (size_t)fenceToSignalWhenCommandBufferDone);
     const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, fenceToSignalWhenCommandBufferDone);
     if (queueSubmitResult == VK_ERROR_DEVICE_LOST)
     {
@@ -370,11 +363,6 @@ VkResult SubmitCommandBuffer(
     if (queueCriticalSectionPtr)
     {
         CriticalSectionLeave(queueCriticalSectionPtr);
-        NTF_LOG_STREAMING("%i:SubmitCommandBuffer:CriticalSectionDelete(*queueCriticalSectionPtr=%zu)\n", GetCurrentThreadId(), (size_t)queueCriticalSectionPtr);
-    }
-    else
-    {
-        //printf("No critical section to release\n");//#LogStreaming
     }
 
     return queueSubmitResult;
@@ -2727,7 +2715,6 @@ bool VulkanPagedStackAllocator::PushAlloc(
     const VkPhysicalDevice& physicalDevice)
 {
     CriticalSectionEnter(&m_criticalSection);
-    NTF_LOG_STREAMING("%i:VulkanPagedStackAllocator::PushAlloc:WaitForSignalWindows(m_criticalSection=%zu)\n", GetCurrentThreadId(), (size_t)&m_criticalSection);
     assert(m_initialized);
 
     assert(memoryOffsetPtr);
@@ -2754,7 +2741,6 @@ bool VulkanPagedStackAllocator::PushAlloc(
     assert(allocResult);
 
     CriticalSectionLeave(&m_criticalSection);
-    NTF_LOG_STREAMING("%i:VulkanPagedStackAllocator::PushAlloc:CriticalSectionDelete(m_criticalSection=%zu)\n", GetCurrentThreadId(), (size_t)&m_criticalSection);
     return allocResult;
 }
 

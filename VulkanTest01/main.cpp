@@ -532,12 +532,6 @@ static void UnloadStreamingUnitsIfGpuDone(
                 streamingUnitsRenderable.Remove(&streamingUnitToUnload);//if an unload command is issued shortly (but not immediately) after load command, then when the unload command gets processed the streaming unit will be on the renderable list, and will need to be removed so that draw calls can stop being issued and the streaming unit can be unloaded
                 assert(streamingUnitsRenderable.Find(&streamingUnitToUnload) < 0);
 
-                //LARGE_INTEGER perfCount;
-                //QueryPerformanceCounter(&perfCount);
-                //printf("MAIN THREAD: streamingUnit.m_lastSubmittedCpuFrame=%d m_lastCpuFrameCompleted=%d time=%f\n", streamingUnit.m_lastSubmittedCpuFrame, m_lastCpuFrameCompleted, static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-
-                //printf("MAIN THREAD: streamingUnit.m_lastSubmittedCpuFrame=%d m_lastCpuFrameCompleted=%d\n", streamingUnit.m_lastSubmittedCpuFrame, m_lastCpuFrameCompleted);
-
                 const size_t frameNumberBits = sizeof(lastCpuFrameCompleted) << 3;
                 const StreamingUnitRuntime::FrameNumber halfRange = CastWithAssert<size_t, StreamingUnitRuntime::FrameNumber>(1 << (frameNumberBits - 1));//one half of the range of an unsigned type
 #if NTF_UNIT_TEST_STREAMING_LOG
@@ -555,14 +549,10 @@ static void UnloadStreamingUnitsIfGpuDone(
 #if NTF_UNIT_TEST_STREAMING_LOG
                     FwriteSnprintf( s_streamingDebug,
                                     &s_streamingDebugCriticalSection,
-                                    "%s:%i:%s.m_loaded=kUnloaded\n",
-                                    __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_filenameNoExtension.data());
+                                    "%s:%i:%s={m_loaded=kUnloaded,m_lastSubmittedCpuFrame=%i,m_lastCpuFrameCompleted=%i}\n",
+                                    __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_lastSubmittedCpuFrame, lastCpuFrameCompleted);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
                     streamingUnitsToUnloadRemaining.Remove(&streamingUnitToUnload);
-
-                    NTF_LOG_STREAMING("Thread %i:streamingUnitToUnload=%p->m_lastSubmittedCpuFrame=%i<=m_lastCpuFrameCompleted=%i -- unload\n", GetCurrentThreadId(), &streamingUnitToUnload, streamingUnitToUnload.m_lastSubmittedCpuFrame, lastCpuFrameCompleted);
-                    //printf("MAIN THREAD: streamingUnitToUnload.Free(); time=%f\n", static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-                    //printf("MAIN THREAD: streamingUnitToUnload.Free('%s')\n", streamingUnitToUnload.m_filenameNoExtension.data());
                     streamingUnitToUnload.Free(
                         &deviceLocalMemoryStreamingUnitsAllocated,
                         &deviceLocalMemoryCriticalSection,
@@ -1027,7 +1017,6 @@ private:
 		//	m_streamingUnitsAddToLoadListCriticalSection);
 		//
 		//SignalSemaphoreWindows(m_assetLoadingThreadData.m_handles.wakeEventHandle);
-		//NTF_LOG_STREAMING("%i:SignalSemaphoreWindows():assetLoadingThreadWakeHandle=%zu\n", GetCurrentThreadId(), (size_t)m_assetLoadingThreadData.m_handles.wakeEventHandle);
 		//END_#StreamingTest
 
         //finish initialization before launching asset loading thread
@@ -1074,19 +1063,10 @@ private:
         {
             auto& drawFrameFinishedFenceToCheck = drawFrameFinishedFences[i];
             const StreamingUnitRuntime::FrameNumber frameNumberCpuSubmitted = drawFrameFinishedFenceToCheck.m_frameNumberCpuSubmitted;
-
-            //printf("MAIN THREAD: m_drawFrameFinishedFences[%i]: m_frameNumberCpuSubmitted=%d -- drawFrameFinishedFenceToCheck.m_frameNumberCpuRecordedCompleted=%i \n",
-            //    i, frameNumberCpuSubmitted, drawFrameFinishedFenceToCheck.m_frameNumberCpuRecordedCompleted);
-
             if (!drawFrameFinishedFenceToCheck.m_frameNumberCpuCompletedByGpu &&
                 vkGetFenceStatus(device, drawFrameFinishedFenceToCheck.m_fence) == VK_SUCCESS)//Gpu has reported a new frame completed since last Cpu checked
             {
                 drawFrameFinishedFenceToCheck.m_frameNumberCpuCompletedByGpu = true;//we are about to process this frame number as completed
-                //BEG_HAC
-                //printf("drawFrameFinishedFence.m_fence=%zu, drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted=%i, drawFrameFinishedFence.m_frameNumberCpuSubmitted=%i",
-                //    (size_t)(drawFrameFinishedFence.m_fence), drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted, drawFrameFinishedFence.m_frameNumberCpuSubmitted);
-                //END_HAC
-
                 const StreamingUnitRuntime::FrameNumberSigned distance = frameNumberCpuSubmitted - lastCpuFrameCompleted;
                 if (distance < 0)
                 {
@@ -1112,9 +1092,7 @@ private:
         {
             //Gpu processed a new frame
             lastCpuFrameCompleted = biggestNegativeDistance > StreamingUnitRuntime::kFrameNumberSignedMinimum ?
-                negativeDistanceFrameNumberCpuSubmitted : positiveDistanceFrameNumberCpuSubmitted;
-
-            //printf("MAIN THREAD: streamingUnit.m_lastCpuFrameCompleted=%d\n", m_lastCpuFrameCompleted);
+                                    negativeDistanceFrameNumberCpuSubmitted : positiveDistanceFrameNumberCpuSubmitted;
         }
     }
     void MainLoop(GLFWwindow* window)
@@ -1200,8 +1178,6 @@ private:
                 for (auto& streamingUnitPtr : m_streamingUnitsRenderable)
                 {
                     NTF_REF(streamingUnitPtr, streamingUnit);
-                    //printf("FillCommandBufferPrimary(%s)\n", streamingUnit.m_filenameNoExtension.data());//#LogStreaming
-
                     assert(streamingUnit.m_state == StreamingUnitRuntime::State::kLoaded);
 
                     UpdateUniformBuffer(
@@ -1250,11 +1226,6 @@ private:
                     WIN_TIMER_DEF_START(waitForFences);
                     FenceWaitUntilSignalled(drawFrameFinishedFence.m_fence, m_device);
                     WIN_TIMER_STOP(waitForFences);
-                    NTF_LOG_STREAMING("%i:FenceWaitUntilSignalled(drawFrameFinishedFence.m_fence=%zu)\n", GetCurrentThreadId(), (size_t)drawFrameFinishedFence.m_fence);
-                    //const int maxLen = 256;
-                    //char buf[maxLen];
-                    //snprintf(&buf[0], maxLen, "waitForFences:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(waitForFences));
-                    //fwrite(&buf[0], sizeof(buf[0]), strlen(&buf[0]), s_winTimer);
                 }
 #if NTF_WIN_TIMER
                 WIN_TIMER_STOP(s_frameTimer);
@@ -1274,10 +1245,6 @@ private:
                 //available yet. Each entry in the waitStages array corresponds to the semaphore with the same index in pWaitSemaphores
                 VectorSafe<VkSemaphore, 4> signalSemaphores({ m_renderFinishedSemaphore[m_frameResourceIndex] });
                 VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-                //BEG_HAC
-                //printf( "vkGetFenceStatus(m_device, drawFrameFinishedFence.m_fence=%zx)=%i\n", 
-                //        (size_t)drawFrameFinishedFence.m_fence, vkGetFenceStatus(m_device, drawFrameFinishedFence.m_fence));
-                //END_HAC
                 SubmitCommandBuffer(
                     &m_graphicsQueueCriticalSection,
                     signalSemaphores,
@@ -1290,10 +1257,6 @@ private:
 
                 drawFrameFinishedFence.m_frameNumberCpuSubmitted = m_frameNumberCurrentCpu;//so we know when it's safe to unload streaming unit's assets
                 drawFrameFinishedFence.m_frameNumberCpuCompletedByGpu = false;//this frame has not been completed by the Gpu until this fence signals
-                //BEG_HAC
-                //printf("drawFrameFinishedFence.m_fence=%zu, drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted=%i, drawFrameFinishedFence.m_frameNumberCpuSubmitted=%i", 
-                //    (size_t)(drawFrameFinishedFence.m_fence), drawFrameFinishedFence.m_frameNumberCpuRecordedCompleted, drawFrameFinishedFence.m_frameNumberCpuSubmitted);
-                //END_HAC
 
                 VkPresentInfoKHR presentInfo = {};
                 presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -1312,8 +1275,6 @@ private:
                     CriticalSectionEnter(&m_graphicsQueueCriticalSection);
                 }
                 const VkResult result = vkQueuePresentKHR(m_presentQueue, &presentInfo);
-                NTF_LOG_STREAMING("%i:vkQueuePresentKHR(m_presentQueue=%zu,signalSemaphores.size()=%zu; &signalSemaphores[0]=%p)\n", 
-                    GetCurrentThreadId(), (size_t)m_presentQueue, signalSemaphores.size(), &signalSemaphores[0]);
                 if (unifiedGraphicsAndPresentQueue)
                 {
                     CriticalSectionLeave(&m_graphicsQueueCriticalSection);
