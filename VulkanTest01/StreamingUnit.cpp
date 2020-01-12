@@ -2,8 +2,6 @@
 #include"ntf_vulkan.h"
 #include"StreamingUnitManager.h"
 
-extern FILE*s_streamingDebug;
-extern RTL_CRITICAL_SECTION s_streamingDebugCriticalSection;
 #if NTF_DEBUG
 extern bool s_allowedToIssueStreamingCommands;
 #endif//#if NTF_DEBUG
@@ -58,21 +56,13 @@ void AssetLoadingThreadExecuteLoad(AssetLoadingArgumentsThreadCommand*const thre
     assert(s_allowedToIssueStreamingCommands);
     *threadCommandPtr = AssetLoadingArgumentsThreadCommand::kProcessStreamingUnits;
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-    FwriteSnprintf( s_streamingDebug, 
-                    &s_streamingDebugCriticalSection, 
-                    "%s:%i:about to call AssetLoadingThreadExecuteLoad()::SignalSemaphoreWindows(assetLoadingThreadWakeHandle)\n", 
-                    __FILE__, __LINE__);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+    NTF_LOG_STREAMING(  "%s:%i:about to call AssetLoadingThreadExecuteLoad()::SignalSemaphoreWindows(assetLoadingThreadWakeHandle)\n", 
+                        __FILE__, __LINE__);
 
     SignalSemaphoreWindows(assetLoadingThreadWakeHandle);
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-    FwriteSnprintf( s_streamingDebug, 
-                    &s_streamingDebugCriticalSection, 
-                    "%s:%i:returned from AssetLoadingThreadExecuteLoad()::SignalSemaphoreWindows(assetLoadingThreadWakeHandle)\n", 
-                    __FILE__, __LINE__);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+    NTF_LOG_STREAMING(  "%s:%i:returned from AssetLoadingThreadExecuteLoad()::SignalSemaphoreWindows(assetLoadingThreadWakeHandle)\n",
+                        __FILE__, __LINE__);
 }
 void StreamingUnitAddToUnload(
 	StreamingUnitRuntime*const streamingUnitToUnloadPtr,
@@ -113,12 +103,8 @@ void StreamingUnitsAddToUnload(
         }
         CriticalSectionLeave(&streamingUnitToUnload.m_stateCriticalSection);
 	}
-#if NTF_UNIT_TEST_STREAMING_LOG
-    FwriteSnprintf( s_streamingDebug, 
-                    &s_streamingDebugCriticalSection, 
-                    "%s:%i:StreamingUnitsAddToUnload():streamingUnitsAddToUnload.size()=%zu\n", 
-                    __FILE__, __LINE__, streamingUnitsToUnload.size());
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+    NTF_LOG_STREAMING(  "%s:%i:StreamingUnitsAddToUnload():streamingUnitsAddToUnload.size()=%zu\n", 
+                        __FILE__, __LINE__, streamingUnitsToUnload.size());
 }
 
 StreamingUnitRuntime::State StreamingUnitRuntime::StateCriticalSection()
@@ -217,12 +203,8 @@ void StreamingUnitRuntime::Free(
     m_state = StreamingUnitRuntime::State::kUnloaded;
     CriticalSectionLeave(&m_stateCriticalSection);
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-    FwriteSnprintf( s_streamingDebug,
-                    &s_streamingDebugCriticalSection,
-                    "%s:%i:StreamingUnitRuntime::Free():streaming unit %s\n",
-                    __FILE__, __LINE__, m_filenameNoExtension.data());
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+    NTF_LOG_STREAMING(  "%s:%i:StreamingUnitRuntime::Free():streaming unit %s\n",
+                        __FILE__, __LINE__, m_filenameNoExtension.data());
 }
 
 ///Initialize()/Destroy() concern themselves solely with constructs we don't want to risk fragmenting by creating and destroying)

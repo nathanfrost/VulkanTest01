@@ -4,10 +4,16 @@
 
 ///@todo: update to latest code; this is currently broken
 #define NTF_ASSET_LOADING_MULTITHREADED 1
+
 #define NTF_UNIT_TEST_STREAMING_LOG 0
+
 
 #if NTF_UNIT_TEST_STREAMING_LOG
 extern FILE* s_streamingDebug;
+extern RTL_CRITICAL_SECTION s_streamingDebugCriticalSection;
+#define NTF_LOG_STREAMING(...) FwriteSnprintf(s_streamingDebug, &s_streamingDebugCriticalSection, __VA_ARGS__)
+#else
+#define NTF_LOG_STREAMING(...)
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
 enum { kStreamingUnitsNum = 6, kStreamingUnitsRenderableNum = 3, kStreamingUnitCommandsNum = kStreamingUnitsRenderableNum * 4 };

@@ -108,12 +108,8 @@ void StreamingCommandsProcess(
 	streamingUnitsToAddToLoad.size(0);
 	CriticalSectionLeave(&streamingUnitsAddToLoadCriticalSection);
    
-#if NTF_UNIT_TEST_STREAMING_LOG
-    FwriteSnprintf( s_streamingDebug, 
-                    &s_streamingDebugCriticalSection,
-                    "%s:%i:StreamingCommandsProcess():streamingUnitsToLoad.size()=%zu\n", 
-                    __FILE__, __LINE__, streamingUnitsToLoad.size());
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+    NTF_LOG_STREAMING(  "%s:%i:StreamingCommandsProcess():streamingUnitsToLoad.size()=%zu\n",
+                        __FILE__, __LINE__, streamingUnitsToLoad.size());
     for (auto& streamingUnitToLoadPtr: streamingUnitsToLoad)
     {
         NTF_REF(streamingUnitToLoadPtr, streamingUnit);
@@ -125,12 +121,8 @@ void StreamingCommandsProcess(
         {
             CriticalSectionLeave(&streamingUnit.m_stateCriticalSection);
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-            FwriteSnprintf( s_streamingDebug,
-                            &s_streamingDebugCriticalSection,
-                            "%s:%i:StreamingCommandsProcess():StreamingCommand::kLoad; %s.m_state=%i\n",
-                            __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+            NTF_LOG_STREAMING(  "%s:%i:StreamingCommandsProcess():StreamingCommand::kLoad; %s.m_state=%i\n",
+                                __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
 
             assert(stagingBuffersGpu.size() == 0);
             assert(stagingBufferMemoryMapCpuToGpu.IsEmptyAndAllocated());
@@ -393,12 +385,8 @@ void StreamingCommandsProcess(
             streamingUnitsToAddToRenderable.Push(&streamingUnit);
             CriticalSectionLeave(&streamingUnitsAddToRenderableCriticalSection);
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-            FwriteSnprintf( s_streamingDebug,
-                            &s_streamingDebugCriticalSection,
-                            "%s:%i:StreamingCommandsProcess():Completed Gpu load: %s.m_state=%i -- placed on addToRenderable list\n",
-                            __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+            NTF_LOG_STREAMING(  "%s:%i:StreamingCommandsProcess():Completed Gpu load: %s.m_state=%i -- placed on addToRenderable list\n",
+                                __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
         }//if (stateWasLoading)
         else
         {
@@ -423,12 +411,8 @@ void AssetLoadingPersistentResourcesDestroy(
     assetLoadingPersistentResources.stagingBufferMemoryMapCpuToGpu.Destroy();
     vkDestroySemaphore(device, assetLoadingPersistentResources.transferFinishedSemaphore, GetVulkanAllocationCallbacks());
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-    FwriteSnprintf( s_streamingDebug, 
-                    &s_streamingDebugCriticalSection, 
-                    "%s:%i:AssetLoadingPersistentResourcesDestroy() completed\n", 
-                    __FILE__, __LINE__);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+    NTF_LOG_STREAMING(  "%s:%i:AssetLoadingPersistentResourcesDestroy() completed\n", 
+                        __FILE__, __LINE__);
 
     SignalSemaphoreWindows(threadDone);
 }
@@ -453,21 +437,13 @@ DWORD WINAPI AssetLoadingThread(void* arg)
         //#Wait
         //WaitOnAddress(&signalMemory, &undesiredValue, sizeof(AssetLoadingArguments::SignalMemoryType), INFINITE);//#SynchronizationWindows8+Only
         
-#if NTF_UNIT_TEST_STREAMING_LOG
-        FwriteSnprintf( s_streamingDebug, 
-                        &s_streamingDebugCriticalSection, 
-                        "%s:%i:AssetLoadingThread() about to call WaitForSignalWindows(threadWake)\n", 
-                        __FILE__, __LINE__);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+        NTF_LOG_STREAMING(  "%s:%i:AssetLoadingThread() about to call WaitForSignalWindows(threadWake)\n",
+                            __FILE__, __LINE__);
         assetLoadingThreadIdle = true;
         WaitForSignalWindows(threadWake);
         assetLoadingThreadIdle = false;
-#if NTF_UNIT_TEST_STREAMING_LOG
-        FwriteSnprintf( s_streamingDebug, 
-                        &s_streamingDebugCriticalSection, 
-                        "%s:%i:AssetLoadingThread() returned from WaitForSignalWindows(threadWake)\n", 
-                        __FILE__, __LINE__);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+        NTF_LOG_STREAMING(  "%s:%i:AssetLoadingThread() returned from WaitForSignalWindows(threadWake)\n", 
+                            __FILE__, __LINE__);
 
         if (threadCommand == AssetLoadingArgumentsThreadCommand::kCleanupAndTerminate)
         {

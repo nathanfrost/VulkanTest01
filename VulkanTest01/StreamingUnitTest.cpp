@@ -408,9 +408,7 @@ static void StreamingUnitTestAdvanceState(
 
     if (advanceToNextUnitTest)
     {
-#if NTF_UNIT_TEST_STREAMING_LOG
-        FwriteSnprintf(s_streamingDebug, &s_streamingDebugCriticalSection, "s_state EXECUTED=%i\n", (int)s_state);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+        NTF_LOG_STREAMING("s_state EXECUTED=%i\n", (int)s_state);
 
         s_state = static_cast<UnitTestState>(static_cast<size_t>(s_state) + 1);
         if (s_state >= UnitTestState::kNum)
@@ -418,14 +416,12 @@ static void StreamingUnitTestAdvanceState(
             s_state = UnitTestState::k0_LoadIndexZero;
         }
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-        FwriteSnprintf(s_streamingDebug, &s_streamingDebugCriticalSection, "s_state NEXT=%i\n", (int)s_state);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+        NTF_LOG_STREAMING("s_state NEXT=%i\n", (int)s_state);
     }
 #if NTF_UNIT_TEST_STREAMING_LOG
     else
     {
-        FwriteSnprintf(s_streamingDebug, &s_streamingDebugCriticalSection, "s_state=%i -- did not advance to next unit test\n", (int)s_state);
+        NTF_LOG_STREAMING("s_state=%i -- did not advance to next unit test\n", (int)s_state);
     }
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
@@ -468,12 +464,8 @@ void StreamingUnitTestTick(
             executeUnitTest = true;
         }
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-        FwriteSnprintf(s_streamingDebug,
-            &s_streamingDebugCriticalSection,
-            "%s:%i:streamingUnitsRenderable.size()=%zu, s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits=%i -> executeUnitTest=%i\n",
-            __FILE__, __LINE__, streamingUnitsRenderable.size(), s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits, executeUnitTest);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+        NTF_LOG_STREAMING(  "%s:%i:streamingUnitsRenderable.size()=%zu, s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits=%i -> executeUnitTest=%i\n",
+                            __FILE__, __LINE__, streamingUnitsRenderable.size(), s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits, executeUnitTest);
     }
     if (executeUnitTest)
     {
@@ -491,12 +483,8 @@ void StreamingUnitTestTick(
             &assetLoadingThreadIdle,
             assetLoadingThreadWakeHandle);
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-        FwriteSnprintf(s_streamingDebug,
-            &s_streamingDebugCriticalSection,
-            "%s:%i:UnitTest() done: streamingUnitsRenderable.size()=%zu, s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits=%i, executedLoadCommand=%i\n",
-            __FILE__, __LINE__, streamingUnitsRenderable.size(), s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits, executedLoadCommand);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+        NTF_LOG_STREAMING(  "%s:%i:UnitTest() done: streamingUnitsRenderable.size()=%zu, s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits=%i, executedLoadCommand=%i\n",
+                            __FILE__, __LINE__, streamingUnitsRenderable.size(), s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits, executedLoadCommand);
         if (!streamingUnitsRenderable.size() && !s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits && executedLoadCommand)
         {
             s_lastUnitTestExecuteIssuedLoadWithNoRenderableStreamingUnits = true;

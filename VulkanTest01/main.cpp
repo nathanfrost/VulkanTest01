@@ -11,11 +11,6 @@ bool s_allowedToIssueStreamingCommands=false;
 extern FILE* s_winTimer;
 #endif//NTF_WIN_TIMER
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-extern FILE* s_streamingDebug;
-extern RTL_CRITICAL_SECTION s_streamingDebugCriticalSection;
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
-
 //LARGE_INTEGER g_queryPerformanceFrequency;
 
 VectorSafe<uint8_t, 8192 * 8192 * 4> s_pixelBufferScratch;
@@ -104,24 +99,17 @@ static void UnloadStreamingUnitsIfGpuDone(
 
                 const size_t frameNumberBits = sizeof(lastCpuFrameCompleted) << 3;
                 const StreamingUnitRuntime::FrameNumber halfRange = CastWithAssert<size_t, StreamingUnitRuntime::FrameNumber>(1 << (frameNumberBits - 1));//one half of the range of an unsigned type
-#if NTF_UNIT_TEST_STREAMING_LOG
-                FwriteSnprintf( s_streamingDebug,
-                                &s_streamingDebugCriticalSection,
-                                "%s:%i:%s.m_state=%i,%s.m_lastSubmittedCpuFrame=%u,lastCpuFrameCompleted=%u\n",
-                                __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_state, streamingUnitToUnload.m_filenameNoExtension.data(), static_cast<unsigned int>(streamingUnitToUnload.m_lastSubmittedCpuFrame), lastCpuFrameCompleted);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+
+                NTF_LOG_STREAMING(  "%s:%i:%s.m_state=%i,%s.m_lastSubmittedCpuFrame=%u,lastCpuFrameCompleted=%u\n",
+                                    __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_state, streamingUnitToUnload.m_filenameNoExtension.data(), static_cast<unsigned int>(streamingUnitToUnload.m_lastSubmittedCpuFrame), lastCpuFrameCompleted);
 
                 /*  Gpu is done with this streaming unit -- eg last submitted frame is in the present or the past, and last submitted cpu frame 
                     did not wrap around without last completed frame wrapping around as well */
                 if (streamingUnitToUnload.m_lastSubmittedCpuFrame - lastCpuFrameCompleted > -halfRange && 
                     streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted)                                                                               
                 {
-#if NTF_UNIT_TEST_STREAMING_LOG
-                    FwriteSnprintf( s_streamingDebug,
-                                    &s_streamingDebugCriticalSection,
-                                    "%s:%i:%s={m_loaded=kUnloaded,m_lastSubmittedCpuFrame=%i,m_lastCpuFrameCompleted=%i}\n",
-                                    __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_lastSubmittedCpuFrame, lastCpuFrameCompleted);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+                    NTF_LOG_STREAMING(  "%s:%i:%s={m_loaded=kUnloaded,m_lastSubmittedCpuFrame=%i,m_lastCpuFrameCompleted=%i}\n",
+                                        __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_lastSubmittedCpuFrame, lastCpuFrameCompleted);
                     streamingUnitsToUnloadRemaining.Remove(&streamingUnitToUnload);
                     streamingUnitToUnload.Free(
                         &deviceLocalMemoryStreamingUnitsAllocated,
@@ -307,12 +295,8 @@ private:
         m_streamingUnitsToUnload.Append(m_streamingUnitsRenderable);
         m_streamingUnitsToUnload.Append(m_streamingUnitsToAddToRenderable);
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-        FwriteSnprintf( s_streamingDebug, 
-                        &s_streamingDebugCriticalSection,
-                        "%s:%i:Shutdown():m_streamingUnitsToAddToRenderable.size()=%i,m_streamingUnitsRenderable.size()=%i,m_streamingUnitsToUnload.size()=%i\n", 
-                        __FILE__, __LINE__, m_streamingUnitsToAddToRenderable.size(), m_streamingUnitsRenderable.size(), m_streamingUnitsToUnload.size());
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+        NTF_LOG_STREAMING(  "%s:%i:Shutdown():m_streamingUnitsToAddToRenderable.size()=%i,m_streamingUnitsRenderable.size()=%i,m_streamingUnitsToUnload.size()=%i\n", 
+                            __FILE__, __LINE__, m_streamingUnitsToAddToRenderable.size(), m_streamingUnitsRenderable.size(), m_streamingUnitsToUnload.size());
 
         m_streamingUnitsToAddToRenderable.size(0);
         m_streamingUnitsRenderable.size(0);
@@ -700,12 +684,8 @@ private:
                 CriticalSectionEnter(&streamingUnit.m_stateCriticalSection);
                 streamingUnit.m_state = StreamingUnitRuntime::State::kLoaded;//must happen here, because now the streaming unit is guaranteed to be rendered at least once (correctly defining its cpu frame submitted number), which will allow it to be unloaded correctly -- all provided the app doesn't shut down first
                 CriticalSectionLeave(&streamingUnit.m_stateCriticalSection);
-#if NTF_UNIT_TEST_STREAMING_LOG
-                FwriteSnprintf( s_streamingDebug, 
-                                &s_streamingDebugCriticalSection, 
-                                "%s:%i:%s.m_state=kLoaded\n", 
-                                __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data());
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+                NTF_LOG_STREAMING(  "%s:%i:%s.m_state=kLoaded\n",
+                                    __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data());
             }
 
 			m_streamingUnitsToAddToRenderable.size(0);
@@ -760,12 +740,8 @@ private:
                         m_swapChainExtent,
                         m_device);
 
-#if NTF_UNIT_TEST_STREAMING_LOG
-                    FwriteSnprintf( s_streamingDebug,
-                                    &s_streamingDebugCriticalSection,
-                                    "%s:%i:About to call FillCommandBufferPrimary():%s.m_lastSubmittedCpuFrame=%i\n",
-                                    __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+                    NTF_LOG_STREAMING(  "%s:%i:About to call FillCommandBufferPrimary():%s.m_lastSubmittedCpuFrame=%i\n",
+                                        __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame);
                     FillCommandBufferPrimary(
                         &streamingUnit.m_lastSubmittedCpuFrame,
                         m_frameNumberCurrentCpu,
@@ -777,12 +753,8 @@ private:
                         streamingUnit.m_pipelineLayout,
                         streamingUnit.m_graphicsPipeline,
                         m_instance);
-#if NTF_UNIT_TEST_STREAMING_LOG
-                    FwriteSnprintf( s_streamingDebug,
-                                    &s_streamingDebugCriticalSection,
-                                    "%s:%i:Completed FillCommandBufferPrimary():%s.m_lastSubmittedCpuFrame=%i\n",
-                                    __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame);
-#endif//#if NTF_UNIT_TEST_STREAMING_LOG
+                    NTF_LOG_STREAMING(  "%s:%i:Completed FillCommandBufferPrimary():%s.m_lastSubmittedCpuFrame=%i\n",
+                                        __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame);
                 }
 
                 CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdEndRenderPass_kAfter)], m_instance);
