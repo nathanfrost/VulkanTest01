@@ -333,6 +333,7 @@
     <ClCompile Include="StreamingCookAndRuntime.cpp" />
     <ClCompile Include="StreamingUnit.cpp" />
     <ClCompile Include="StreamingUnitManager.cpp" />
+    <ClCompile Include="StreamingUnitTest.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="MemoryUtil.h" />
@@ -344,6 +345,7 @@
     <ClInclude Include="StreamingCookAndRuntime.h" />
     <ClInclude Include="StreamingUnit.h" />
     <ClInclude Include="StreamingUnitManager.h" />
+    <ClInclude Include="StreamingUnitTest.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
