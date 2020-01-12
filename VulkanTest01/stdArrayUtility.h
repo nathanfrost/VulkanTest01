@@ -220,6 +220,7 @@ public:
     ///@todo: unit tests
     bool PushIfUnique(const T& item)
     {
+        AssertValid();
         if (Find(item) >= 0)
         {
             return false;
@@ -283,6 +284,7 @@ public:
     ///@todo: unit tests
     void Append(const ConstVectorSafeRef<T>& vectorSafeOther)
     {
+        AssertValid();
         const size_type vectorSafeOtherSize = vectorSafeOther.size();
         const size_type thisOriginalSize = size();
         size(thisOriginalSize + vectorSafeOtherSize);
@@ -349,6 +351,7 @@ public:
 	}
 	void RemoveItemAtIndex(const size_type indexToRemove)
 	{
+        AssertValid();
 		const size_type lastValidIndex = GetLastValidIndex();
 		if (indexToRemove != lastValidIndex)
 		{
@@ -359,6 +362,7 @@ public:
     ///@todo: unit tests
     bool Remove(const T& item)
     {
+        AssertValid();
         const int itemIndex = Find(item);
         if (itemIndex >= 0)
         {
@@ -671,6 +675,7 @@ public:
 
     void Fwrite(FILE*const f, const size_t elementsNum)
     {
+        AssertValid();
         assert(f);
         assert(elementsNum > 0);
 #if NTF_ARRAY_SAFE_DEBUG
