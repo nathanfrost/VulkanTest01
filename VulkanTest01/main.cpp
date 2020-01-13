@@ -528,7 +528,7 @@ private:
         m_assetLoadingArguments.m_assetLoadingThreadIdle = &m_assetLoadingThreadIdle;
         m_assetLoadingArguments.m_deviceLocalMemoryPersistent = &m_deviceLocalMemoryPersistent;
         m_assetLoadingArguments.m_deviceLocalMemoryStreamingUnits = &m_deviceLocalMemoryStreamingUnits;
-        m_assetLoadingArguments.m_deviceLocalMemoryStreamingUnitsAllocated = &m_deviceLocalMemoryStreamingUnitsAllocated;///<@todo: try to write an operator==() for ArraySafe/VectorSafe so you can assert on forgetting to set it
+        m_assetLoadingArguments.m_deviceLocalMemoryStreamingUnitsAllocated = &m_deviceLocalMemoryStreamingUnitsAllocated;
 		m_assetLoadingArguments.m_streamingUnitsToAddToLoad = &m_streamingUnitsToAddToLoad;
 		m_assetLoadingArguments.m_streamingUnitsToAddToRenderable = &m_streamingUnitsToAddToRenderable;
 		m_assetLoadingArguments.m_threadCommand = &m_assetLoadingThreadData.m_threadCommand;

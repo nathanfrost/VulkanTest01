@@ -1738,7 +1738,7 @@ void CreateDescriptorSet(
         auto& imageInfo = imageInfos[textureIndex];
         imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         imageInfo.imageView = textureImageViews[textureIndex];
-        imageInfo.sampler = VK_NULL_HANDLE;///<@todo: should I use the combined sampler/image imageLayout?
+        imageInfo.sampler = VK_NULL_HANDLE;///<combined sampler/image imageLayout is said to perform better on some architectures for some situations
     }
 
     const size_t kDescriptorWritesNum = 3;
@@ -2167,7 +2167,7 @@ void FenceReset(const VkFence& fence, const VkDevice& device)
     vkResetFences(device, 1, &fence);
 }
 
-///@todo: use push constants instead, since it's more efficient
+///@todo: investigate using push constants instead; see if it's more efficient
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
     const glm::vec3 cameraTranslation,
@@ -2338,7 +2338,7 @@ VkDebugReportCallbackEXT SetupDebugCallback(const VkInstance& instance)
     createInfo.pfnCallback = DebugCallback;
 
     VkDebugReportCallbackEXT callback;
-    const VkResult createDebugReportCallbackEXTResult = CreateDebugReportCallbackEXT(instance, &createInfo, GetVulkanAllocationCallbacks(), &callback);//@todo NTF: this callback spits out the error messages to the command window, which vanishes upon application exit.  Should really throw up a dialog or something far more noticeable and less ignorable
+    const VkResult createDebugReportCallbackEXTResult = CreateDebugReportCallbackEXT(instance, &createInfo, GetVulkanAllocationCallbacks(), &callback);
     NTF_VK_ASSERT_SUCCESS(createDebugReportCallbackEXTResult);
     return callback;
 }

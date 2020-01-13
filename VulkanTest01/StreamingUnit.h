@@ -69,7 +69,7 @@ public:
     enum class State:size_t {kUnloaded, kLoading, kLoaded} m_state;
     State StateCriticalSection();
 
-    ArraySafe<char,128> m_filenameNoExtension;///<@todo NTF: consider creating a string database for this -- OR JUST USE THE GLOBAL STATIC STRINGS
+    ArraySafe<char,128> m_filenameNoExtension;///<@todo NTF: replace with pointers to the global static strings
     VkSampler m_textureSampler;
 #define TODO_REFACTOR_NUM 2//is NTF_OBJECTS_NUM -- todo: generalize #StreamingMemoryBasicModel
     ArraySafe<TexturedGeometry, TODO_REFACTOR_NUM> m_texturedGeometries;
@@ -113,7 +113,7 @@ void StreamingUnitAddToLoadCriticalSection(
     RTL_CRITICAL_SECTION*const streamingUnitsAddToLoadCriticalSection);
 void StreamingUnitsAddToLoadCriticalSection(
 	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToLoad,
-    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,///<@todo: attempt to typedef (probably trivial class derivation, since typedef is treated as underling type by compiler?) to make types less ambiguous
+    VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToLoad,
     RTL_CRITICAL_SECTION*const streamingUnitsAddToLoadCriticalSection);
 enum class AssetLoadingArgumentsThreadCommand;
 void AssetLoadingThreadExecuteLoad(AssetLoadingArgumentsThreadCommand*const threadCommandPtr, const HANDLE assetLoadingThreadWakeHandle);

@@ -38,7 +38,6 @@ private:
     bool m_allocated;
 };
 
-///@todo: consider refactoring VulkanMemoryHeap to a generalized linked list of StackNTF's (call it "StackPageList"), and then refactor this class to use StackPageList
 template<class SizeT>
 class StackCpu
 {
