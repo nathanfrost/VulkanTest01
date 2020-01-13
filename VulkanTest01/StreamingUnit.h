@@ -90,7 +90,7 @@ public:
     ArraySafeRef<uint8_t> m_uniformBufferCpuMemory;
 
     VkDeviceSize m_uniformBufferSizeAligned;//single uniform buffer that contains all uniform information for this streaming unit
-    size_t m_uniformBufferSizeUnaligned;///<@todo: only exists to generate the same value but aligned
+    size_t m_uniformBufferSizeUnaligned;///<currently only exists to generate the same value but aligned -January 12, 2020
 
     VkPipelineLayout m_pipelineLayout;
     VkPipeline m_graphicsPipeline;

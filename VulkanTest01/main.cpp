@@ -471,6 +471,7 @@ private:
 
         VkFence initializationDone;
         FenceCreate(&initializationDone, static_cast<VkFenceCreateFlagBits>(0), m_device);
+        BeginCommandBuffer(m_commandBufferTransitionImage, m_device);
         CreateDepthResources(
             &m_depthImage,
             &m_depthImageView,

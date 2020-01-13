@@ -1937,7 +1937,6 @@ void CreateDepthResources(
 
     CreateImageView(&depthImageView, device, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
 
-    BeginCommandBuffer(commandBuffer, device);///<@todo: take this out and place before the function
     ImageMemoryBarrier(
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,//  | HasStencilComponent(format)) ? VK_IMAGE_ASPECT_STENCIL_BIT : 0
@@ -2577,7 +2576,7 @@ void CreateSwapChain(
     createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;//ignore alpha, since this is a final render target and we won't be blending it with other render targets
     createInfo.presentMode = presentMode;
     createInfo.clipped = VK_TRUE;//don't render pixels obscured by another window in front of our render target
-    createInfo.oldSwapchain = VK_NULL_HANDLE;//assume we only need one swap chain (although it's possible for swap chains to get invalidated and need to be recreated by events like resizing the window)  TODO: understand more
+    createInfo.oldSwapchain = VK_NULL_HANDLE;//if recreating the swapchain, then pass the old swapchain here to avoid exiting and entering full-screen exclusive mode, which may otherwise cause unwanted visual updates to the display
 
     const VkResult createSwapchainKHRResult = vkCreateSwapchainKHR(device, &createInfo, GetVulkanAllocationCallbacks(), &swapChain);
     NTF_VK_ASSERT_SUCCESS(createSwapchainKHRResult);
