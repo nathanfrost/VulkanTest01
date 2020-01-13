@@ -132,9 +132,6 @@ static void UnloadStreamingUnitsIfGpuDone(
     streamingUnitsToUnload.Append(streamingUnitsToUnloadRemaining);
 }
 
-
-///@todo: figure out which libraries I'm linking that trigger LNK4098 (seems like some libraries are linking /MD and /MDd and others are linking /MT and /MTd for C-runtime) -- for now, pass /IGNORE:4098 to the linker
-
 class VulkanRendererNTF 
 {
 public:

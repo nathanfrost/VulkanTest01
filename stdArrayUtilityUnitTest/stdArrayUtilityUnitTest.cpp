@@ -300,7 +300,9 @@ int main()
     assert(test.Size() == 0);
 
     AddFirstThreeElements(&test);
+#if NTF_DEBUG
     int lastQueuedItem, nextItemToDequeue;
+#endif//#if NTF_DEBUG
     assert(test.PeekLastQueuedItem(&lastQueuedItem));
     assert(lastQueuedItem == 2);
     assert(test.PeekNextItemToDequeue(&nextItemToDequeue));
