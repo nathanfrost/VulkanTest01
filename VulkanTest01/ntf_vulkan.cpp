@@ -316,10 +316,10 @@ VkResult SubmitCommandBuffer(
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    submitInfo.signalSemaphoreCount = Cast_size_t_uint32_t(signalSemaphores.size());
+    submitInfo.signalSemaphoreCount = CastWithAssert<size_t, uint32_t>(signalSemaphores.size());
     submitInfo.pSignalSemaphores = signalSemaphores.GetAddressOfUnderlyingArray();
 
-    submitInfo.waitSemaphoreCount = Cast_size_t_uint32_t(waitSemaphores.size());
+    submitInfo.waitSemaphoreCount = CastWithAssert<size_t, uint32_t>(waitSemaphores.size());
     submitInfo.pWaitSemaphores = waitSemaphores.GetAddressOfUnderlyingArray();
     submitInfo.pWaitDstStageMask = stagesWhereEachWaitSemaphoreWaits.GetAddressOfUnderlyingArray();
 
@@ -1445,7 +1445,7 @@ void AllocateCommandBuffers(
 //        commandBufferThreadArguments.indexBuffer = indexBuffer;
 //        commandBufferThreadArguments.indicesNum = indicesSize;
 //
-//        objectIndex[threadIndex] = Cast_size_t_uint32_t(threadIndex);
+//        objectIndex[threadIndex] = CastWithAssert<size_t,uint32_t>(threadIndex);
 //        commandBufferThreadArguments.objectIndex = &objectIndex[threadIndex];
 //
 //        commandBufferThreadArguments.pipelineLayout = pipelineLayout;
@@ -1540,7 +1540,7 @@ void FillCommandBufferPrimary(
 
         for (uint32_t drawCallIndex = 0; drawCallIndex < drawCallsPerObjectNum; ++drawCallIndex)
         {
-            const uint32_t pushConstantValue = Cast_size_t_uint32_t(objectIndex*drawCallsPerObjectNum + drawCallIndex);
+            const uint32_t pushConstantValue = CastWithAssert<size_t, uint32_t>(objectIndex*drawCallsPerObjectNum + drawCallIndex);
             CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdPushConstants_kBefore)], instance);
             vkCmdPushConstants(commandBufferPrimary, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PushConstantBindIndexType), &pushConstantValue);
             CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdPushConstants_kAfter)], instance);
@@ -1767,7 +1767,7 @@ void CreateDescriptorSet(
         bindingIndex, 
         0, 
         VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 
-        Cast_size_t_uint32_t(texturesNum), 
+        CastWithAssert<size_t, uint32_t>(texturesNum),
         nullptr, 
         nullptr, 
         imageInfos.data(), 
@@ -1962,7 +1962,7 @@ VkFormat FindSupportedFormat(
     for (const VkFormat& format : candidates)
     {
         VkFormatProperties props;
-        vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);///<@todo: query this once on initialization and place in a global variable so validation layer api dump isn't so cluttered
+        vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);///<@todo: consider implementing a mode where this is queried once on initialization and placed in a global variable so validation layer api dump isn't so cluttered -- this caching would of course fail if a physical device changed its format properties
 
         if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features)
         {
@@ -2623,7 +2623,7 @@ void CleanupSwapChain(
 
     //return command buffers to the pool from whence they came
     const size_t secondaryCommandBufferPerThread = 1;
-    FreeCommandBuffers(&commandBuffersPrimary, Cast_size_t_uint32_t(commandBuffersPrimary.size()), device, commandPoolPrimary);
+    FreeCommandBuffers(&commandBuffersPrimary, CastWithAssert<size_t, uint32_t>(commandBuffersPrimary.size()), device, commandPoolPrimary);
 
     vkDestroyRenderPass(device, renderPass, GetVulkanAllocationCallbacks());
 
@@ -2668,7 +2668,7 @@ void VulkanPagedStackAllocator::Initialize(const VkDevice& device,const VkPhysic
     m_vulkanMemoryHeaps.size(memProperties.memoryTypeCount);
     for (size_t memoryTypeIndex = 0; memoryTypeIndex < memProperties.memoryTypeCount; ++memoryTypeIndex)
     {
-        m_vulkanMemoryHeaps[memoryTypeIndex].Initialize(Cast_size_t_uint32_t(memoryTypeIndex), 128 * 1024 * 1024);
+        m_vulkanMemoryHeaps[memoryTypeIndex].Initialize(CastWithAssert<size_t, uint32_t>(memoryTypeIndex), 128 * 1024 * 1024);
     }
 
     CriticalSectionLeave(&m_criticalSection);

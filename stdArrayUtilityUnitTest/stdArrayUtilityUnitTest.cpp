@@ -3,6 +3,8 @@
 #include"../VulkanTest01/stdArrayUtility.h"
 #include"../VulkanTest01/QueueCircular.h"
 
+///@todo: allow failed asserts to continue -- eg allow unit tests to succeed BECAUSE they trigger asserts, verifying that the asserts are working as intended
+
 //don't complain about scanf being unsafe
 #pragma warning(disable : 4996)
 
@@ -402,6 +404,11 @@ int main()
 
     test.Clear();
     //END_#QueueCircular
+
+    //BEG_#CastWithAssert
+    const uint32_t success = CastWithAssert<uint64_t, uint32_t>(((size_t)(1) << 32) - 1);
+    //const uint32_t fail = CastWithAssert<uint64_t, uint32_t>((size_t)(1) << 32);
+    //END_#CastWithAssert
 
     //done!
     printf("Unit test SUCCESS!\n");

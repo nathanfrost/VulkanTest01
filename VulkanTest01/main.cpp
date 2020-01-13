@@ -405,7 +405,7 @@ private:
 
         m_instance = CreateInstance(s_validationLayers);
         m_callback = SetupDebugCallback(m_instance);
-        CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it can actually influence the physical device selection: TODO: learn more about this influence
+        CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it influences physical device selection
         PickPhysicalDevice(&m_physicalDevice, m_surface, m_deviceExtensions, m_instance);
 
         //if this is an Nvidia card, use diagnostic checkpoints in case of VK_ERROR_DEVICE_LOST
@@ -510,7 +510,7 @@ private:
 
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         
-        const uint32_t swapChainFramebuffersSize = Cast_size_t_uint32_t(m_swapChainFramebuffers.size());
+        const uint32_t swapChainFramebuffersSize = CastWithAssert<size_t,uint32_t>(m_swapChainFramebuffers.size());
         m_commandPoolsSecondary.size(swapChainFramebuffersSize);
         for (auto& commandPoolSecondaryArray : m_commandPoolsSecondary)
         {
