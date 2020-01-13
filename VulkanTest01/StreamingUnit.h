@@ -71,7 +71,7 @@ public:
 
     ArraySafe<char,128> m_filenameNoExtension;///<@todo NTF: consider creating a string database for this -- OR JUST USE THE GLOBAL STATIC STRINGS
     VkSampler m_textureSampler;
-#define TODO_REFACTOR_NUM 2//is NTF_OBJECTS_NUM -- todo: generalize #StreamingMemory
+#define TODO_REFACTOR_NUM 2//is NTF_OBJECTS_NUM -- todo: generalize #StreamingMemoryBasicModel
     ArraySafe<TexturedGeometry, TODO_REFACTOR_NUM> m_texturedGeometries;
     ArraySafe<VkImageView, TODO_REFACTOR_NUM> m_textureImageViews;
 

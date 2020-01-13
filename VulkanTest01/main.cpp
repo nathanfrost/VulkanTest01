@@ -139,11 +139,11 @@ class VulkanRendererNTF
 {
 public:
 
-//BEG_#StreamingMemory
+//BEG_#StreamingMemoryBasicModel
 #define NTF_OBJECTS_NUM 2//number of unique models
 #define NTF_DRAWS_PER_OBJECT_NUM 2
 #define NTF_DRAW_CALLS_TOTAL (NTF_OBJECTS_NUM*NTF_DRAWS_PER_OBJECT_NUM)
-//END_#StreamingMemory
+//END_#StreamingMemoryBasicModel
 
     VulkanRendererNTF()
     {
@@ -505,7 +505,7 @@ private:
         for (auto& streamingUnit : m_streamingUnits)
         {
             streamingUnit.Initialize(m_device);
-            streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemory
+            streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemoryBasicModel
         }
         m_streamingUnits[0].m_filenameNoExtension.Snprintf(g_streamingUnitName_UnitTest0);
         m_streamingUnits[1].m_filenameNoExtension.Snprintf(g_streamingUnitName_UnitTest1);

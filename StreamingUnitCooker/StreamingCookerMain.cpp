@@ -242,8 +242,8 @@ int main()
 
     StreamingUnitCooker streamingUnitCooker;
     //,  /*"textures/HumanFighter_01_Diff.tga"*/ /*"textures/container_clean_diffuse01.jpeg"*//*"textures/appleD.jpg"*/,
-    //const char*const m_modelPath[TODO_REFACTOR_NUM] = { /*"models/Orange.obj"*/, /*"models/Container_OBJ.obj",*/ /*"models/apple textured obj.obj"*/ };//#StreamingMemory
-    //const float m_uniformScale[TODO_REFACTOR_NUM] = { /*0.5f,*//*,.0025f*//*.01f,*/ /*1.f*/ };//#StreamingMemory
+    //const char*const m_modelPath[TODO_REFACTOR_NUM] = { /*"models/Orange.obj"*/, /*"models/Container_OBJ.obj",*/ /*"models/apple textured obj.obj"*/ };//#StreamingMemoryBasicModel
+    //const float m_uniformScale[TODO_REFACTOR_NUM] = { /*0.5f,*//*,.0025f*//*.01f,*/ /*1.f*/ };//#StreamingMemoryBasicModel
 
     streamingUnitCooker.FileNameOutputSet(g_streamingUnitName_UnitTest0);
 
