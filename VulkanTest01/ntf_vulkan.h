@@ -519,7 +519,12 @@ void CmdSetCheckpointNV(const VkCommandBuffer& commandBuffer, const CmdSetCheckp
 class VulkanMemoryHeapPage
 {
 public:
-    ///@todo: all explicit default C++ functions except default constructor
+    VulkanMemoryHeapPage() = default;
+    VulkanMemoryHeapPage(const VulkanMemoryHeapPage& other) = default;
+    VulkanMemoryHeapPage& operator=(const VulkanMemoryHeapPage& other) = default;
+    VulkanMemoryHeapPage(VulkanMemoryHeapPage&& other) = default;
+    VulkanMemoryHeapPage& operator=(VulkanMemoryHeapPage&& other) = default;
+    ~VulkanMemoryHeapPage() = default;
 
     bool Allocate(const VkDeviceSize memoryMaxBytes, const uint32_t memoryTypeIndex, const VkDevice& device);
     inline void Free(const VkDevice& device)
@@ -563,14 +568,19 @@ private:
 class VulkanMemoryHeap
 {
 public:
-    VulkanMemoryHeap()
+    explicit VulkanMemoryHeap()
     {
 #if NTF_DEBUG
         m_initialized = false;
 #endif//#if NTF_DEBUG
     };
     void Initialize(const uint32_t memoryTypeIndex, const VkDeviceSize memoryHeapPageSizeBytes);
-    ///@todo: all explicit default C++ functions
+    VulkanMemoryHeap(const VulkanMemoryHeap& other) = default;
+    VulkanMemoryHeap& operator=(const VulkanMemoryHeap& other) = default;
+    VulkanMemoryHeap(VulkanMemoryHeap&& other) = default;
+    VulkanMemoryHeap& operator=(VulkanMemoryHeap&& other) = default;
+    ~VulkanMemoryHeap() = default;
+
 
     void Destroy(const VkDevice device);
 
@@ -608,13 +618,17 @@ private:
 class VulkanPagedStackAllocator
 {
 public:
-    VulkanPagedStackAllocator()
+    explicit VulkanPagedStackAllocator()
     {
 #if NTF_DEBUG
         m_initialized = false;
 #endif//#if NTF_DEBUG
     }
-    ///@todo: all explicit default C++ functions
+    VulkanPagedStackAllocator(const VulkanPagedStackAllocator& other) = default;
+    VulkanPagedStackAllocator& operator=(const VulkanPagedStackAllocator& other) = default;
+    VulkanPagedStackAllocator(VulkanPagedStackAllocator&& other) = default;
+    VulkanPagedStackAllocator& operator=(VulkanPagedStackAllocator&& other) = default;
+    ~VulkanPagedStackAllocator() = default;
 
     void Initialize(const VkDevice& device, const VkPhysicalDevice& physicalDevice);
     void Destroy(const VkDevice& device);

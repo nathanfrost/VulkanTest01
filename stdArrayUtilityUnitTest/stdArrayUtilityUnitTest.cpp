@@ -406,7 +406,8 @@ int main()
     //END_#QueueCircular
 
     //BEG_#CastWithAssert
-    const uint32_t success = CastWithAssert<uint64_t, uint32_t>(((size_t)(1) << 32) - 1);
+    const uint32_t failOnx86_successOnx64 = CastWithAssert<uint64_t, uint32_t>(((size_t)(1) << 31) - 1);
+    //const uint32_t failOnx86_successOnx64 = CastWithAssert<uint64_t, uint32_t>(((size_t)(1) << 32) - 1);
     //const uint32_t fail = CastWithAssert<uint64_t, uint32_t>((size_t)(1) << 32);
     //END_#CastWithAssert
 

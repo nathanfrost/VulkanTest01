@@ -9,11 +9,15 @@ class StackNTF
 {
 public:
 
-    ///@todo: all explicit default C++ functions except default constructor
-    inline StackNTF()
+    explicit inline StackNTF()
     {
         m_allocated = false;
     }
+    StackNTF(const StackNTF& other) = default;
+    StackNTF& operator=(const StackNTF& other) = default;
+    StackNTF(StackNTF&& other) = default;
+    StackNTF& operator=(StackNTF&& other) = default;
+    ~StackNTF() = default;
 
     void Allocate(const SizeT memoryMaxBytes);
     inline void ClearSuballocations() { assert(m_allocated); m_firstByteFree = 0; }
@@ -42,16 +46,21 @@ template<class SizeT>
 class StackCpu
 {
 public:
-    StackCpu()
+    explicit StackCpu()
     {
 #if NTF_DEBUG
         m_initialized = false;
 #endif//#if NTF_DEBUG
     };
-    void Initialize(uint8_t*const p, const SizeT sizeBytes);
-    ///@todo: all explicit default C++ functions
+    StackCpu(const StackCpu& other) = default;
+    StackCpu& operator=(const StackCpu& other) = default;
+    StackCpu(StackCpu&& other) = default;
+    StackCpu& operator=(StackCpu&& other) = default;
+    ~StackCpu() = default;
 
+    void Initialize(uint8_t*const p, const SizeT sizeBytes);
     void Destroy();
+
     inline void Clear() { m_stack.ClearSuballocations(); }
 
     bool PushAlloc(ArraySafeRef<uint8_t>*const memoryRetPtr, SizeT*const memoryOffsetPtr, const SizeT alignment, const SizeT sizeBytes);
