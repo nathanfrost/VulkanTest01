@@ -159,6 +159,7 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);NTF_ARRAY_SAFE_DEBUG</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -179,6 +180,8 @@
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);NTF_ARRAY_SAFE_DEBUG</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
       <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <SDLCheck>true</SDLCheck>
+      <PrecompiledHeaderFile />
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -186,8 +189,7 @@
       <AdditionalDependencies>vulkan-1.lib;glfw3.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib;$(NTF_LIBS_DIR)\glfw-3.2.1.bin.WIN64\lib-vc2015;</AdditionalLibraryDirectories>
       <TreatLinkerWarningAsErrors>true</TreatLinkerWarningAsErrors>
-      <AdditionalOptions>
-      </AdditionalOptions>
+      <AdditionalOptions>/NODEFAULTLIB:MSVCRT </AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -201,6 +203,7 @@
       <PreprocessorDefinitions>WIN32;_CONSOLE;%(PreprocessorDefinitions);NTF_ARRAY_SAFE_DEBUG</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -225,6 +228,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <SDLCheck>false</SDLCheck>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -249,6 +253,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;NTF_WIN_TIMER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <TreatWarningAsError>true</TreatWarningAsError>
+      <SDLCheck>false</SDLCheck>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -273,6 +278,7 @@
       <PreprocessorDefinitions>_CONSOLE;%(PreprocessorDefinitions);NTF_ARRAY_SAFE_DEBUG</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
       <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <SDLCheck>true</SDLCheck>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -297,6 +303,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
       <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <SDLCheck>false</SDLCheck>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -321,6 +328,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;NTF_WIN_TIMER;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <TreatWarningAsError>true</TreatWarningAsError>
       <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <SDLCheck>false</SDLCheck>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

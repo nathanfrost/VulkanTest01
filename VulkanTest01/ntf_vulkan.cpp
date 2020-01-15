@@ -1872,20 +1872,6 @@ void CreateAndCopyToGpuBuffer(
     CopyBuffer(stagingBufferGpu, gpuBuffer, bufferSize, commandBuffer, instance);
 }
 
-void EndSingleTimeCommandsStall(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device)
-{
-    EndCommandBuffer(commandBuffer);
-
-    VkSubmitInfo submitInfo = {};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-    submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
-
-    const VkResult queueSubmitResult = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);///<@todo: reduce duplication with SubmitCommandBuffer()
-    NTF_VK_ASSERT_SUCCESS(queueSubmitResult);
-    vkQueueWaitIdle(queue);//could use a fence, which would allow you to schedule multiple transfers simultaneously and wait for all of them complete, instead of executing one at a time
-}
-
 void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queueFamilyIndex, const VkDevice& device, const VkPhysicalDevice& physicalDevice)
 {
     assert(commandPoolPtr);

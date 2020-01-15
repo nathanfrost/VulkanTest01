@@ -173,7 +173,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
+      <SDLCheck>false</SDLCheck>
       <TreatWarningAsError>true</TreatWarningAsError>
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions); NDEBUG</PreprocessorDefinitions>
     </ClCompile>
@@ -189,7 +189,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
+      <SDLCheck>false</SDLCheck>
       <TreatWarningAsError>true</TreatWarningAsError>
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions); NDEBUG</PreprocessorDefinitions>
     </ClCompile>
@@ -223,7 +223,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
+      <SDLCheck>false</SDLCheck>
       <TreatWarningAsError>true</TreatWarningAsError>
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions); NDEBUG</PreprocessorDefinitions>
     </ClCompile>
@@ -239,7 +239,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
-      <SDLCheck>true</SDLCheck>
+      <SDLCheck>false</SDLCheck>
       <TreatWarningAsError>true</TreatWarningAsError>
       <PreprocessorDefinitions>_MBCS;%(PreprocessorDefinitions); NDEBUG</PreprocessorDefinitions>
     </ClCompile>

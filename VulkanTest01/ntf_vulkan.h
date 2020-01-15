@@ -412,7 +412,6 @@ void CreateAndCopyToGpuBuffer(
     const VkInstance instance);
 
 void EndCommandBuffer(const VkCommandBuffer& commandBuffer);
-void EndSingleTimeCommandsStall(const VkCommandBuffer& commandBuffer, const VkQueue& queue, const VkDevice& device);
 void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queueFamilyIndex, const VkDevice& device, const VkPhysicalDevice& physicalDevice);
 void CreateDepthResources(
     VkImage*const depthImagePtr,
