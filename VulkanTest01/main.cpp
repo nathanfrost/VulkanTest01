@@ -554,7 +554,6 @@ private:
         m_assetLoadingArguments.AssertValid();
 
 #if NTF_ASSET_LOADING_MULTITHREADED
-        ///@todo: THREAD_MODE_BACKGROUND_BEGIN or THREAD_PRIORITY_BELOW_NORMAL and SetThreadPriority
         m_assetLoadingThreadData.m_handles.threadHandle = CreateThreadWindows(AssetLoadingThread, &m_assetLoadingArguments);
 #else
         AssetLoadingThreadPersistentResourcesCreate(&m_assetLoadingPersistentResources, &m_deviceLocalMemoryPersistent, m_physicalDevice, m_device);

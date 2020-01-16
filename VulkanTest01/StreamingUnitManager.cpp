@@ -418,6 +418,11 @@ void AssetLoadingPersistentResourcesDestroy(
 }
 DWORD WINAPI AssetLoadingThread(void* arg)
 {
+    //asset loading thread has one lower priority than all other threads (main and worker threads); prefer smooth framerate over speedy asset loading
+    //"The system assigns time slices in a round-robin fashion to all threads with the highest priority.  If none of these threads are ready to run, the system assigns time slices in a round-robin fashion to all threads with the next highest priority. If a higher-priority thread becomes available to run, the system ceases to execute the lower-priority thread (without allowing it to finish using its time slice) and assigns a full time slice to the higher-priority thread." -- https://docs.microsoft.com/en-us/windows/win32/procthread/scheduling-priorities?redirectedfrom=MSDN
+    const BOOL setThreadPriorityResult = SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+    assert(setThreadPriorityResult);
+
     auto& threadArguments = *reinterpret_cast<AssetLoadingArguments*>(arg);
     threadArguments.AssertValid();
 
