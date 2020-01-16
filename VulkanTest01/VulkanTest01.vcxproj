@@ -167,8 +167,7 @@
       <AdditionalLibraryDirectories>$(VULKAN_SDK)\Lib32;$(NTF_LIBS_DIR)\glfw-3.2.1.bin.WIN32\lib-vc2015;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <TreatLinkerWarningAsErrors>true</TreatLinkerWarningAsErrors>
-      <AdditionalOptions>
-      </AdditionalOptions>
+      <AdditionalOptions>/NODEFAULTLIB:MSVCRT </AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
