@@ -505,9 +505,9 @@ private:
             streamingUnit.Initialize(m_device);
             streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemoryBasicModel
         }
-        m_streamingUnits[0].m_filenameNoExtension.Snprintf(g_streamingUnitName_UnitTest0);
-        m_streamingUnits[1].m_filenameNoExtension.Snprintf(g_streamingUnitName_UnitTest1);
-        m_streamingUnits[2].m_filenameNoExtension.Snprintf(g_streamingUnitName_UnitTest2);
+        m_streamingUnits[0].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest0), strlen(g_streamingUnitName_UnitTest0));
+        m_streamingUnits[1].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest1), strlen(g_streamingUnitName_UnitTest1));
+        m_streamingUnits[2].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest2), strlen(g_streamingUnitName_UnitTest2));
 
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         

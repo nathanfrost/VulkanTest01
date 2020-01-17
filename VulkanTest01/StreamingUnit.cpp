@@ -218,5 +218,5 @@ void StreamingUnitRuntime::Destroy(const VkDevice& device)
 
 void StreamingUnitRuntime::AssertValid() const
 {
-    assert(m_filenameNoExtension.Strnlen() > 0);
+    assert(strlen(m_filenameNoExtension.data()) > 0);
 }
