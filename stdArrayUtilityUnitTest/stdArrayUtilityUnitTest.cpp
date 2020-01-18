@@ -3,7 +3,7 @@
 #include"../VulkanTest01/stdArrayUtility.h"
 #include"../VulkanTest01/QueueCircular.h"
 
-///@todo: allow failed asserts to continue -- eg allow unit tests to succeed BECAUSE they trigger asserts, verifying that the asserts are working as intended
+///@todo: allow failed asserts to continue -- eg allow unit tests to succeed BECAUSE they trigger asserts, verifying that the asserts are working as intended.  Replace raw assert's with a macro that can be defined to exit(-1) in non-debug builds
 
 //don't complain about scanf being unsafe
 #pragma warning(disable : 4996)
@@ -105,15 +105,15 @@ int main()
 {
     //BEG_#VectorSafe
     enum { kElementsMax = 16 };
-    VectorSafe<int,kElementsMax> vectorSafe;
-    
+    VectorSafe<int, kElementsMax> vectorSafe;
+
     const size_t actualSize = 12;
     vectorSafe.size(actualSize);
-    if (vectorSafe.SizeCurrentInBytes() != actualSize*sizeof(int))
+    if (vectorSafe.SizeCurrentInBytes() != actualSize * sizeof(int))
     {
         ExitOnFail(__LINE__);
     }
-    if (vectorSafe.SizeMaxInBytes() != kElementsMax*sizeof(int))
+    if (vectorSafe.SizeMaxInBytes() != kElementsMax * sizeof(int))
     {
         ExitOnFail(__LINE__);
     }
@@ -195,7 +195,7 @@ int main()
     {
         ExitOnFail(__LINE__);
     }
-    if(vectorSafeEmpty.SizeCurrentInBytes() != 0)
+    if (vectorSafeEmpty.SizeCurrentInBytes() != 0)
     {
         ExitOnFail(__LINE__);
     }
@@ -244,7 +244,7 @@ int main()
         ExitOnFail(__LINE__);
     }
 
-    VectorSafe<int, kElementsMax> vectorSafeInitializerList({0, 1, 2 });
+    VectorSafe<int, kElementsMax> vectorSafeInitializerList({ 0, 1, 2 });
     for (int i = 0; i < 3; ++i)
     {
         if (vectorSafeInitializerList[i] != i)
@@ -254,7 +254,7 @@ int main()
     }
 
     const int kDuplicateTestMaxNum = 7;
-    VectorSafe<int, kElementsMax> vectorSafeDuplicateTest({0,4,3,1,1,1,2,5,6,6,kDuplicateTestMaxNum,5,5});
+    VectorSafe<int, kElementsMax> vectorSafeDuplicateTest({ 0,4,3,1,1,1,2,5,6,6,kDuplicateTestMaxNum,5,5 });
     SortAndRemoveDuplicatesFromVectorSafe(&vectorSafeDuplicateTest);
     if (vectorSafeDuplicateTest.size() != kDuplicateTestMaxNum + 1)
     {
@@ -270,28 +270,28 @@ int main()
 
     ConstMethodTesting(vectorSafe, actualSize, lastValidValue);
 
-	VectorSafe<int, kElementsMax> vectorSafeRemove({ 0,1,2,3,4 });
-	size_t vectorSafeRemoveSize = vectorSafeRemove.size();
-	--vectorSafeRemoveSize;
-	vectorSafeRemove.Remove(1);
-	assert(vectorSafeRemove.size() == vectorSafeRemoveSize);
-	assert(vectorSafeRemove[0] == 0);
-	assert(vectorSafeRemove[1] == 4);
-	assert(vectorSafeRemove[2] == 2);
-	assert(vectorSafeRemove[3] == 3);
+    VectorSafe<int, kElementsMax> vectorSafeRemove({ 0,1,2,3,4 });
+    size_t vectorSafeRemoveSize = vectorSafeRemove.size();
+    --vectorSafeRemoveSize;
+    vectorSafeRemove.Remove(1);
+    assert(vectorSafeRemove.size() == vectorSafeRemoveSize);
+    assert(vectorSafeRemove[0] == 0);
+    assert(vectorSafeRemove[1] == 4);
+    assert(vectorSafeRemove[2] == 2);
+    assert(vectorSafeRemove[3] == 3);
 
-	--vectorSafeRemoveSize;
-	vectorSafeRemove.RemoveItemAtIndex(vectorSafeRemove.GetLastValidIndex());
-	assert(vectorSafeRemove.size() == vectorSafeRemoveSize);
-	assert(vectorSafeRemove[0] == 0);
-	assert(vectorSafeRemove[1] == 4);
-	assert(vectorSafeRemove[2] == 2);
+    --vectorSafeRemoveSize;
+    vectorSafeRemove.RemoveItemAtIndex(vectorSafeRemove.GetLastValidIndex());
+    assert(vectorSafeRemove.size() == vectorSafeRemoveSize);
+    assert(vectorSafeRemove[0] == 0);
+    assert(vectorSafeRemove[1] == 4);
+    assert(vectorSafeRemove[2] == 2);
 
-	--vectorSafeRemoveSize;
-	vectorSafeRemove.Remove(0);
-	assert(vectorSafeRemove.size() == vectorSafeRemoveSize);
-	assert(vectorSafeRemove[0] == 2);
-	assert(vectorSafeRemove[1] == 4);
+    --vectorSafeRemoveSize;
+    vectorSafeRemove.Remove(0);
+    assert(vectorSafeRemove.size() == vectorSafeRemoveSize);
+    assert(vectorSafeRemove[0] == 2);
+    assert(vectorSafeRemove[1] == 4);
     //END_#VectorSafe
 
 
