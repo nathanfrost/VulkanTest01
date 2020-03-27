@@ -87,13 +87,14 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);NTF_ARRAY_SAFE_DEBUG</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions);STD_UTILITY_DEBUG</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN32_INCLUDE);$(VULKAN_SDK)\Include;../VulkanTest01/;</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalOptions>/NODEFAULTLIB:MSVCRT %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -102,13 +103,14 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);NTF_ARRAY_SAFE_DEBUG</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions);STD_UTILITY_DEBUG</PreprocessorDefinitions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(NTF_GLM_INCLUDE);$(NTF_GLFW_WIN64_INCLUDE);$(VULKAN_SDK)\Include;../VulkanTest01/</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalOptions>/NODEFAULTLIB:MSVCRT %(AdditionalOptions)</AdditionalOptions>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -152,11 +154,13 @@
   <ItemGroup>
     <ClCompile Include="..\VulkanTest01\StackNTF.cpp" />
     <ClCompile Include="..\VulkanTest01\StreamingCookAndRuntime.cpp" />
+    <ClCompile Include="..\VulkanTest01\WindowsUtil.cpp" />
     <ClCompile Include="StreamingCookerMain.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\VulkanTest01\StackNTF.h" />
     <ClInclude Include="..\VulkanTest01\StreamingCookAndRuntime.h" />
+    <ClInclude Include="..\VulkanTest01\WindowsUtil.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

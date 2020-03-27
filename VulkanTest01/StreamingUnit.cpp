@@ -1,6 +1,8 @@
 #include"StreamingUnit.h"
+
 #include"ntf_vulkan.h"
 #include"StreamingUnitManager.h"
+#include"WindowsUtil.h"
 
 #if NTF_DEBUG
 extern bool s_allowedToIssueStreamingCommands;
@@ -151,7 +153,7 @@ void StreamingUnitRuntime::Initialize(const VkDevice& device)
 void StreamingUnitRuntime::Free(
     ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
     RTL_CRITICAL_SECTION*const deviceLocalMemoryCriticalSectionPtr,
-    ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+    const ConstVectorSafeRef<VulkanPagedStackAllocator>& deviceLocalMemoryStreamingUnits,
     const bool deallocateBackToGpu,
     const VkDevice& device)
 {
@@ -218,5 +220,5 @@ void StreamingUnitRuntime::Destroy(const VkDevice& device)
 
 void StreamingUnitRuntime::AssertValid() const
 {
-    assert(m_filenameNoExtension.Strnlen() > 0);
+    assert(strlen(m_filenameNoExtension.data()) > 0);
 }

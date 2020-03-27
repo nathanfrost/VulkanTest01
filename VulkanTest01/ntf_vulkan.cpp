@@ -1,6 +1,7 @@
 ﻿#include"ntf_vulkan.h"
 #include"ntf_vulkan_utility.h"
 #include"StreamingCookAndRuntime.h"
+#include"WindowsUtil.h"
 
 //extern LARGE_INTEGER g_queryPerformanceFrequency;
 
@@ -133,80 +134,6 @@ static void RespectNonCoherentAtomAlignment(VkDeviceSize*const alignmentPtr, con
     assert(size == AlignToNonCoherentAtomSize(size));//we assert here, rather than enforcing this, because a typical usage pattern is to vkCreateBuffer(bufferSize) -- which requires the buffer size -- and use the returned VkBuffer to determine alignment requirements (that are independent of the nonCoherentAtomSize alignment requirements).  Therefore, the already-allocated VkBuffer's size must already respect nonCoherentAtomSize, but the alignment can be fixed up to respect nonCoherentAtomSize prior to binding the VkBuffer to an actual Gpu memory offset
 }
 
-HANDLE MutexCreate()
-{
-    const HANDLE mutexHandle = CreateMutex(
-        NULL,              // default security attributes
-        FALSE,             // initially not owned
-        NULL);             // unnamed mutex
-    assert(mutexHandle);
-    return mutexHandle;
-}
-void MutexRelease(const HANDLE mutex)
-{
-    assert(mutex);
-    const BOOL releaseMutexResult = ReleaseMutex(mutex);
-    assert(releaseMutexResult == TRUE);
-}
-void CriticalSectionCreate(RTL_CRITICAL_SECTION*const criticalSectionPtr)
-{
-    assert(criticalSectionPtr);
-    InitializeCriticalSectionAndSpinCount(criticalSectionPtr, 0x400);
-}
-void CriticalSectionEnter(RTL_CRITICAL_SECTION*const criticalSectionPtr)
-{
-    assert(criticalSectionPtr);
-    EnterCriticalSection(criticalSectionPtr);
-}
-void CriticalSectionLeave(RTL_CRITICAL_SECTION*const criticalSectionPtr)
-{
-    assert(criticalSectionPtr);
-    LeaveCriticalSection(criticalSectionPtr);
-}
-void CriticalSectionDelete(RTL_CRITICAL_SECTION*const criticalSectionPtr)
-{
-    assert(criticalSectionPtr);
-    DeleteCriticalSection(criticalSectionPtr);
-}
-
-HANDLE ThreadSignalingEventCreate()
-{
-    const HANDLE ret = CreateEvent(
-        NULL,               // default security attributes
-        FALSE,              // auto-reset; after signaling immediately set to nonsignaled
-        FALSE,              // initial state is nonsignaled
-        NULL                // no name -- if you have two events with the same name, the more recent one stomps the less recent one
-    );
-    assert(ret);
-    return ret;
-}
-
-BOOL HandleCloseWindows(HANDLE*const h)
-{
-    assert(h);
-    const BOOL closeHandleResult = CloseHandle(*h);
-    assert(closeHandleResult);
-    *h = NULL;
-    return closeHandleResult;
-}
-
-void UnsignalSemaphoreWindows(const HANDLE semaphoreHandle)
-{
-    const BOOL resetEventResult = ResetEvent(semaphoreHandle);
-    assert(resetEventResult);
-}
-void SignalSemaphoreWindows(const HANDLE semaphoreHandle)
-{
-    const BOOL setEventResult = SetEvent(semaphoreHandle);
-    assert(setEventResult);
-}
-//use for both semaphores and mutexes
-void WaitForSignalWindows(const HANDLE semaphoreOrMutexHandle)
-{
-    const DWORD result = WaitForSingleObject(semaphoreOrMutexHandle, INFINITE);
-    assert(result == WAIT_OBJECT_0);
-}
-
 HANDLE CreateThreadWindows(LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter)
 {
     assert(lpStartAddress);
@@ -303,8 +230,8 @@ void ImageMemoryBarrier(
 
 VkResult SubmitCommandBuffer(
     RTL_CRITICAL_SECTION*const queueCriticalSectionPtr,
-    ConstVectorSafeRef<VkSemaphore> signalSemaphores,
-    ConstVectorSafeRef<VkSemaphore> waitSemaphores,
+    const ConstVectorSafeRef<VkSemaphore>& signalSemaphores,
+    const ConstVectorSafeRef<VkSemaphore>& waitSemaphores,
     ArraySafeRef<VkPipelineStageFlags> stagesWhereEachWaitSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
@@ -723,7 +650,7 @@ void CreateShaderModule(VkShaderModule*const shaderModulePtr, char*const code, c
     NTF_VK_ASSERT_SUCCESS(createShaderModuleResult);
 }
 
-bool CheckValidationLayerSupport(ConstVectorSafeRef<const char*> validationLayers)
+bool CheckValidationLayerSupport(const ConstVectorSafeRef<const char*>& validationLayers)
 {
     const int layersMax = 32;
     uint32_t layerCount;
@@ -858,7 +785,7 @@ void BeginCommandBuffer(const VkCommandBuffer& commandBuffer, const VkDevice& de
     NTF_VK_ASSERT_SUCCESS(beginCommandBufferResult);
 }
 
-bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstVectorSafeRef<const char*> deviceExtensions)
+bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, const ConstVectorSafeRef<const char*>& deviceExtensions)
 {
     uint32_t supportedExtensionCount;
     vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &supportedExtensionCount, nullptr);
@@ -901,7 +828,7 @@ bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstVe
 bool IsDeviceSuitable(
     const VkPhysicalDevice& physicalDevice,
     const VkSurfaceKHR& surface,
-    ConstVectorSafeRef<const char*> deviceExtensions)
+    const ConstVectorSafeRef<const char*>& deviceExtensions)
 {
     QueueFamilyIndices indices = FindQueueFamilies(physicalDevice, surface);
     const bool extensionsSupported = CheckDeviceExtensionSupport(physicalDevice, deviceExtensions);
@@ -922,7 +849,7 @@ bool IsDeviceSuitable(
 bool PickPhysicalDevice(
     VkPhysicalDevice*const physicalDevicePtr,
     const VkSurfaceKHR& surface,
-    ConstVectorSafeRef<const char*> deviceExtensions,
+    const ConstVectorSafeRef<const char*>& deviceExtensions,
     const VkInstance& instance)
 {
     assert(physicalDevicePtr);
@@ -966,8 +893,8 @@ void CreateLogicalDevice(
     VkQueue*const graphicsQueuePtr,
     VkQueue*const presentQueuePtr,
     VkQueue*const transferQueuePtr,
-    ConstVectorSafeRef<const char*> deviceExtensions,
-    ConstVectorSafeRef<const char*> validationLayers,
+    const ConstVectorSafeRef<const char*>& deviceExtensions,
+    const ConstVectorSafeRef<const char*>& validationLayers,
     const QueueFamilyIndices& indices,
     const VkPhysicalDevice& physicalDevice)
 {
@@ -986,7 +913,7 @@ void CreateLogicalDevice(
     const uint32_t queueFamiliesNum = 3;
     VectorSafe<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos(0);
     VectorSafe<int, queueFamiliesNum> uniqueQueueFamilies({ indices.graphicsFamily, indices.presentFamily, indices.transferFamily });
-    SortAndRemoveDuplicatesFromVectorSafe(&uniqueQueueFamilies);
+    uniqueQueueFamilies.SortAndRemoveDuplicates();
 
     const float queuePriority = 1.0f;
     for (const int queueFamily : uniqueQueueFamilies)
@@ -1940,7 +1867,7 @@ void CreateDepthResources(
 
 VkFormat FindSupportedFormat(
     const VkPhysicalDevice& physicalDevice,
-    ConstVectorSafeRef<VkFormat> candidates,
+    const ConstVectorSafeRef<VkFormat>& candidates,
     const VkImageTiling& tiling,
     const VkFormatFeatureFlags& features)
 {
@@ -2060,7 +1987,7 @@ void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& dev
 
 void CreateFramebuffers(
     VectorSafeRef<VkFramebuffer> swapChainFramebuffers,
-    ConstVectorSafeRef<VkImageView> swapChainImageViews,
+    const ConstVectorSafeRef<VkImageView>& swapChainImageViews,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkImageView& depthImageView,
@@ -2245,7 +2172,7 @@ void GetRequiredExtensions(VectorSafeRef<const char*> requiredExtensions)
     }
 }
 
-VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers)
+VkInstance CreateInstance(const ConstVectorSafeRef<const char*>& validationLayers)
 {
     //BEG_#AllocationCallbacks
     s_allocationCallbacks.pfnAllocation = NTF_vkAllocationFunction;
@@ -2413,7 +2340,7 @@ QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice& device, const VkSur
     return indices;
 }
 
-VkSurfaceFormatKHR ChooseSwapSurfaceFormat(ConstVectorSafeRef<VkSurfaceFormatKHR> availableFormats)
+VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const ConstVectorSafeRef<VkSurfaceFormatKHR>& availableFormats)
 {
     size_t availableFormatsNum = availableFormats.size();
     assert(availableFormatsNum > 0);
@@ -2436,7 +2363,7 @@ VkSurfaceFormatKHR ChooseSwapSurfaceFormat(ConstVectorSafeRef<VkSurfaceFormatKHR
     return availableFormats[0];//couldn't find the desired format
 }
 
-VkPresentModeKHR ChooseSwapPresentMode(ConstVectorSafeRef<VkPresentModeKHR> availablePresentModes)
+VkPresentModeKHR ChooseSwapPresentMode(const ConstVectorSafeRef<VkPresentModeKHR>& availablePresentModes)
 {
     assert(availablePresentModes.size());
 
@@ -2588,11 +2515,11 @@ void CleanupSwapChain(
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
-    ConstVectorSafeRef<VkFramebuffer> swapChainFramebuffers,
+    const ConstVectorSafeRef<VkFramebuffer>& swapChainFramebuffers,
     const VkCommandPool& commandPoolPrimary,
-    ConstVectorSafeRef<ArraySafe<VkCommandPool, 2>> commandPoolsSecondary,///<@todo NTF: refactor out magic number 2 (meant to be NTF_OBJECTS_NUM) and either support VectorSafeRef<ArraySafeRef<T>> or repeatedly call FreeCommandBuffers on each VectorSafe outside of this function
+    const ConstVectorSafeRef<ArraySafe<VkCommandPool, 2>>& commandPoolsSecondary,///<@todo NTF: refactor out magic number 2 (meant to be NTF_OBJECTS_NUM) and either support VectorSafeRef<ArraySafeRef<T>> or repeatedly call FreeCommandBuffers on each VectorSafe outside of this function
     const VkRenderPass& renderPass,
-    ConstVectorSafeRef<VkImageView> swapChainImageViews,
+    const ConstVectorSafeRef<VkImageView>& swapChainImageViews,
     const VkSwapchainKHR& swapChain)
 {
     assert(commandBuffersPrimary.size() == swapChainFramebuffers.size());
@@ -2622,7 +2549,7 @@ void CleanupSwapChain(
 
 void CreateImageViews(
     VectorSafeRef<VkImageView> swapChainImageViews,
-    ConstVectorSafeRef<VkImage> swapChainImages,
+    const ConstVectorSafeRef<VkImage>& swapChainImages,
     const VkFormat& swapChainImageFormat,
     const VkDevice& device)
 {

@@ -3,6 +3,7 @@
 #include"glmNTF.h"
 #include"stdArrayUtility.h"
 
+//streaming unit names
 const char*const g_streamingUnitName_UnitTest0 = "unitTest0";
 const char*const g_streamingUnitName_UnitTest1 = "unitTest1";
 const char*const g_streamingUnitName_UnitTest2 = "unitTest2";

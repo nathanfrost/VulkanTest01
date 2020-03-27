@@ -2,6 +2,7 @@
 #include"ntf_vulkan_utility.h"
 #include"StreamingUnitManager.h"
 #include"StreamingUnitTest.h"
+#include"WindowsUtil.h"
 
 #if NTF_DEBUG
 bool s_allowedToIssueStreamingCommands=false;
@@ -62,7 +63,7 @@ static void UnloadStreamingUnitsIfGpuDone(
     VectorSafeRef<StreamingUnitRuntime *> streamingUnitsRenderable, 
     ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
     RTL_CRITICAL_SECTION*const deviceLocalMemoryCriticalSectionPtr,
-    ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+    const ConstVectorSafeRef<VulkanPagedStackAllocator>& deviceLocalMemoryStreamingUnits,
     const StreamingUnitRuntime::FrameNumber lastCpuFrameCompleted, 
     const VkDevice& device)
 {
@@ -505,9 +506,9 @@ private:
             streamingUnit.Initialize(m_device);
             streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemoryBasicModel
         }
-        m_streamingUnits[0].m_filenameNoExtension.Snprintf(g_streamingUnitName_UnitTest0);
-        m_streamingUnits[1].m_filenameNoExtension.Snprintf(g_streamingUnitName_UnitTest1);
-        m_streamingUnits[2].m_filenameNoExtension.Snprintf(g_streamingUnitName_UnitTest2);
+        m_streamingUnits[0].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest0), strlen(g_streamingUnitName_UnitTest0));
+        m_streamingUnits[1].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest1), strlen(g_streamingUnitName_UnitTest1));
+        m_streamingUnits[2].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest2), strlen(g_streamingUnitName_UnitTest2));
 
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         
@@ -768,7 +769,7 @@ private:
                 }
 #if NTF_WIN_TIMER
                 WIN_TIMER_STOP(s_frameTimer);
-                FwriteSnprintf(s_winTimer, "s_frameTimer:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(s_frameTimer));
+                FwriteSprintf(s_winTimer, "s_frameTimer:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(s_frameTimer));
                 WIN_TIMER_START(s_frameTimer);
 #endif//#if NTF_WIN_TIMER
             }//if (streamingUnitsToRenderNum)
@@ -831,7 +832,7 @@ private:
             }//if (streamingUnitsToRenderNum)
             UnloadStreamingUnitsIfGpuDone(
                 &m_streamingUnitsToUnload, 
-                &m_streamingUnitsRenderable, 
+                &m_streamingUnitsRenderable,
                 &m_deviceLocalMemoryStreamingUnitsAllocated,
                 &m_deviceLocalMemoryCriticalSection,
                 m_deviceLocalMemoryStreamingUnits,

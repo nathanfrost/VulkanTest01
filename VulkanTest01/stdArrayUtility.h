@@ -8,7 +8,370 @@
 #include<string.h>
 #include<windows.h>//for DWORD
 
+#pragma warning(disable : 4996)//debug builds are responsible for detecting any buffer overruns in vsprintf()
+
 #define NTF_REF(ptrIdentifier, refIdentifier) assert(ptrIdentifier); auto& refIdentifier = *ptrIdentifier
+
+
+#define STD_ARRAY_UTILITY_CONST_TYPEDEFS    \
+typedef const T* const_iterator;            \
+typedef const T& const_reference;           \
+typedef size_t size_type;                   \
+typedef T value_type
+
+#define STD_ARRAY_UTILITY_NONCONST_TYPEDEFS \
+typedef T* iterator;                        \
+typedef T& reference                        \
+
+#define STD_ARRAY_UTILITY_CONST_METHODS                                                                                                             \
+const T* data() const                                                                                                                               \
+{                                                                                                                                                   \
+    return GetAddressOfUnderlyingArray();                                                                                                           \
+}                                                                                                                                                   \
+const_reference GetChecked(const size_type pos) const                                                                                               \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    assert(pos < size());                                                                                                                           \
+    return m_array[pos];                                                                                                                            \
+}                                                                                                                                                   \
+const_reference operator[](size_type pos) const                                                                                                     \
+{                                                                                                                                                   \
+    return GetChecked(pos);                                                                                                                         \
+}                                                                                                                                                   \
+const_reference at(size_type pos) const                                                                                                             \
+{                                                                                                                                                   \
+    return GetChecked(pos);                                                                                                                         \
+}                                                                                                                                                   \
+const_reference front() const                                                                                                                       \
+{                                                                                                                                                   \
+    return GetChecked(0);                                                                                                                           \
+}                                                                                                                                                   \
+const_iterator begin() const noexcept                                                                                                               \
+{                                                                                                                                                   \
+    return GetAddressOfUnderlyingArray();                                                                                                           \
+}                                                                                                                                                   \
+const_iterator cbegin() const noexcept                                                                                                              \
+{                                                                                                                                                   \
+    return begin();                                                                                                                                 \
+}                                                                                                                                                   \
+void Fwrite(FILE*const f, const size_t elementsNum)                                                                                                 \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    assert(f);                                                                                                                                      \
+    assert(elementsNum > 0);                                                                                                                        \
+    assert(elementsNum <= size());                                                                                                                  \
+    ::Fwrite(f, &m_array[0], sizeof(m_array[0]), elementsNum);                                                                                      \
+}                                                                                                                                                   \
+size_t SizeInBytes() const                                                                                                                          \
+{                                                                                                                                                   \
+    return size() * sizeof(T);                                                                                                                      \
+}                                                                                                                                                   \
+const T* GetAddressOfUnderlyingArray() const                                                                                                        \
+{                                                                                                                                                   \
+    return &m_array[0];                                                                                                                             \
+}                                                                                                                                                   \
+/*For *Vector* classes, this assumes any existing elements would be overwritten by the new elements; eg considers the Vector to be empty */         \
+void AssertSufficient(const size_t elementsNum) const                                                                                               \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    assert(SizeMax() >= elementsNum);                                                                                                               \
+}
+
+#define STD_ARRAY_UTILITY_ARRAYSAFE_CONSTARRAYSAFE_CONSTVECTORSAFE_SIZE_CONST_METHOD                                                                                                         \
+size_type size() const noexcept                                                                                                                     \
+{                                                                                                                                                   \
+    return m_elementsNumMax;                                                                                                                        \
+}
+
+
+#define STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONST_METHODS                                                                          \
+size_t Strnlen() const                                                                                                                              \
+{                                                                                                                                                   \
+    NTF_STATIC_ASSERT(sizeof(T) == sizeof(char));/*this function is intended to be used only when *this holds ASCII characters*/                    \
+    const size_t bufferMaxSize = size();                                                                                                            \
+    const size_t strnlenResult = strnlen(&m_array[0], bufferMaxSize);                                                                               \
+    return strnlenResult == bufferMaxSize ? 0 : strnlenResult;/*non-null-terminated buffer defined to be empty string*/                             \
+}                                                                                                                                                   \
+size_t GetLastValidIndex() const                                                                                                                    \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    return size() - 1;                                                                                                                              \
+}                                                                                                                                                   \
+size_t GetOneAfterLastValidIndex() const                                                                                                            \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    return GetLastValidIndex() + 1;                                                                                                                 \
+}                                                                                                                                                   \
+const_reference back() const                                                                                                                        \
+{                                                                                                                                                   \
+    return GetChecked(GetLastValidIndex());                                                                                                         \
+}                                                                                                                                                   \
+const_iterator end() const noexcept                                                                                                                 \
+{                                                                                                                                                   \
+    return const_iterator(GetAddressOfUnderlyingArray() + GetOneAfterLastValidIndex());                                                             \
+}                                                                                                                                                   \
+const_iterator cend() const noexcept                                                                                                                \
+{                                                                                                                                                   \
+    return end();                                                                                                                                   \
+}                                                                                                                                                   \
+//const_reverse_iterator rbegin() const noexcept 
+//{
+//    return const_reverse_iterator(end());
+//}
+//const_reverse_iterator crbegin() const noexcept 
+//{
+//    return rbegin();
+//}
+
+#define STD_ARRAY_UTILITY_VECTORSAFE_CONST_METHODS                                                                                                  \
+int Find(const T& item) const                                                                                                                       \
+{                                                                                                                                                   \
+    const size_type elementsNumCurrent = size();                                                                                                    \
+    for (size_type i = 0; i < elementsNumCurrent; ++i)                                                                                              \
+    {                                                                                                                                               \
+        if (m_array[i] == item)                                                                                                                     \
+        {                                                                                                                                           \
+            return CastWithAssert<size_type, int>(i);                                                                                               \
+        }                                                                                                                                           \
+    }                                                                                                                                               \
+    return -1;                                                                                                                                      \
+}                                                                                                                                                   \
+bool empty() const noexcept                                                                                                                         \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    return size() == 0;                                                                                                                             \
+}                                                                                                                                                   \
+
+#define STD_ARRAY_UTILITY_NON_CONST_METHODS                                                                                                         \
+void MemcpyFromStart(const void*const input, const size_t inputBytesNum)                                                                            \
+{                                                                                                                                                   \
+    MemcpyFromIndex(input, 0, inputBytesNum);                                                                                                       \
+}                                                                                                                                                   \
+T* data()                                                                                                                                           \
+{                                                                                                                                                   \
+    return GetAddressOfUnderlyingArray();                                                                                                           \
+}                                                                                                                                                   \
+T* GetAddressOfUnderlyingArray()                                                                                                                    \
+{                                                                                                                                                   \
+    return const_cast<T*>(static_cast<const ThisDataType*>(this)->GetAddressOfUnderlyingArray());                                                   \
+}                                                                                                                                                   \
+reference GetChecked(const size_type pos)                                                                                                           \
+{                                                                                                                                                   \
+    return const_cast<reference>(static_cast<const ThisDataType*>(this)->GetChecked(pos));                                                          \
+}                                                                                                                                                   \
+reference operator[](size_type pos)                                                                                                                 \
+{                                                                                                                                                   \
+    return GetChecked(pos);                                                                                                                         \
+}                                                                                                                                                   \
+reference at(size_type pos)                                                                                                                         \
+{                                                                                                                                                   \
+    return GetChecked(pos);                                                                                                                         \
+}                                                                                                                                                   \
+reference front()                                                                                                                                   \
+{                                                                                                                                                   \
+    return GetChecked(0);                                                                                                                           \
+}                                                                                                                                                   \
+iterator begin() noexcept                                                                                                                           \
+{                                                                                                                                                   \
+    return GetAddressOfUnderlyingArray();                                                                                                           \
+}                                                                                                                                                   \
+void MemsetEntireArray(const int val)/*<<for VectorSafe*'s only memsets size() elements, not the max elements *this can hold*/                      \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    memset(GetAddressOfUnderlyingArray(), val, SizeInBytes());                                                                                      \
+}                                                                                                                                                   \
+void Fread(FILE*const f, const size_t elementsNum)                                                                                                  \
+{                                                                                                                                                   \
+    assert(f);                                                                                                                                      \
+    assert(elementsNum > 0);                                                                                                                        \
+    assert(elementsNum <= SizeMax());                                                                                                               \
+    ::Fread(f, m_array, sizeof(T), elementsNum);                                                                                                    \
+    size(elementsNum);                                                                                                                              \
+    AssertValid();                                                                                                                                  \
+}                                                                                                                                                   \
+void Sprintf(const char*const formatString, ...)                                                                                                    \
+{                                                                                                                                                   \
+    va_list args;                                                                                                                                   \
+    va_start(args, formatString);                                                                                                                   \
+    Sprintf_va_list(formatString, args);                                                                                                            \
+    va_end(args);                                                                                                                                   \
+}
+
+#define STD_ARRAY_UTILITY_SPRINTF_VA_LIST_FUNCTION_SIGNATURE void Sprintf_va_list(const char*const formatString, va_list args)
+#define STD_ARRAY_UTILITY_SPRINTF_VA_LIST_PREFACE                                                                                                   \
+    assert(m_array);                                                                                                                                \
+    assert(formatString);                                                                                                                           \
+    assert(strlen(formatString) > 0);                                                                                                               
+#define STD_ARRAY_UTILITY_SPRINTF_VA_LIST_DEBUG_BODY                                                                                                \
+    const int charactersPrinted = vsnprintf(&m_array[0], SizeMax(), formatString, args);                                                            
+#define STD_ARRAY_UTILITY_SPRINTF_VA_LIST_RELEASE_BODY                                                                                              \
+    const int charactersPrinted = vsprintf(&m_array[0], formatString, args);                                                         
+#define STD_ARRAY_UTILITY_SPRINTF_VA_LIST_POSTFACE                                                                                                  \
+    assert(charactersPrinted > 0);                                                                                                                  \
+    size(CastWithAssert<int, size_t>(charactersPrinted + 1));/*include null-terminator in size*/                                                    \
+    AssertValid();
+
+#define STD_ARRAY_UTILITY_ARRAYSAFE_ARRAYSAFEREF_CONSTARRAYSAFEREF_CONSTVECTORSAFEREF_METHODS                                                       \
+size_t SizeMax() const                                                                                                                              \
+{                                                                                                                                                   \
+    return size();                                                                                                                                  \
+}                                                                                                                                                   \
+size_t SizeMaxInBytes() const                                                                                                                       \
+{                                                                                                                                                   \
+    return size() * sizeof(T);                                                                                                                      \
+}
+
+#define STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_NON_CONST_METHODS                                                                      \
+reference back()                                                                                                                                    \
+{                                                                                                                                                   \
+    return GetChecked(GetLastValidIndex());                                                                                                         \
+}                                                                                                                                                   \
+iterator end() noexcept                                                                                                                             \
+{                                                                                                                                                   \
+    return const_cast<iterator>(static_cast<const ThisDataType*>(this)->end());                                                                     \
+}                                                                                                                                                   \
+template<typename U>                                                                                                                                \
+void MemcpyFromStart(const U& other)                                                                                                                \
+{                                                                                                                                                   \
+    MemcpyFromStart(other.GetAddressOfUnderlyingArray(), other.size()*sizeof(U::value_type));                                                       \
+    AssertValid();                                                                                                                                  \
+}                                                                                                                                                   \
+
+#define STD_ARRAY_UTILITY_VECTORSAFE_VECTORSAFEREF_NON_CONST_METHODS                                                                                \
+void Append(const ConstVectorSafeRef<T>& vectorSafeOther)                                                                                           \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    const size_type vectorSafeOtherSize = vectorSafeOther.size();                                                                                   \
+    const size_type thisOriginalSize = size();                                                                                                      \
+    size(thisOriginalSize + vectorSafeOtherSize);                                                                                                   \
+    AssertValid();                                                                                                                                  \
+                                                                                                                                                    \
+    memcpy(GetAddressOfUnderlyingArray() + thisOriginalSize, vectorSafeOther.GetAddressOfUnderlyingArray(), sizeof(T)*vectorSafeOtherSize);         \
+}                                                                                                                                                   \
+void Push(const T& item)                                                                                                                            \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    const size_t indexForItem = size();                                                                                                             \
+    sizeIncrement();                                                                                                                                \
+    operator[](indexForItem) = item;                                                                                                                \
+}                                                                                                                                                   \
+bool PushIfUnique(const T& item)                                                                                                                    \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    if (Find(item) >= 0)                                                                                                                            \
+    {                                                                                                                                               \
+        return false;                                                                                                                               \
+    }                                                                                                                                               \
+    else                                                                                                                                            \
+    {                                                                                                                                               \
+        Push(item);                                                                                                                                 \
+        return true;                                                                                                                                \
+    }                                                                                                                                               \
+}                                                                                                                                                   \
+void Pop()                                                                                                                                          \
+{                                                                                                                                                   \
+    sizeDecrement();                                                                                                                                \
+}                                                                                                                                                   \
+void RemoveItemAtIndex(const size_type indexToRemove)                                                                                               \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    const size_type lastValidIndex = GetLastValidIndex();                                                                                           \
+    if (indexToRemove != lastValidIndex)                                                                                                            \
+    {                                                                                                                                               \
+        operator[](indexToRemove) = operator[](lastValidIndex);                                                                                     \
+    }                                                                                                                                               \
+    sizeDecrement();                                                                                                                                \
+}                                                                                                                                                   \
+bool Remove(const T& item)                                                                                                                          \
+{                                                                                                                                                   \
+    AssertValid();                                                                                                                                  \
+    const int itemIndex = Find(item);                                                                                                               \
+    if (itemIndex >= 0)                                                                                                                             \
+    {                                                                                                                                               \
+        RemoveItemAtIndex(itemIndex);                                                                                                               \
+        return true;                                                                                                                                \
+    }                                                                                                                                               \
+    else                                                                                                                                            \
+    {                                                                                                                                               \
+        return false;                                                                                                                               \
+    }                                                                                                                                               \
+}                                                                                                                                                   \
+void SortAndRemoveDuplicates()                                                                                                                      \
+{                                                                                                                                                   \
+    std::sort(begin(), end());                                                                                                                      \
+                                                                                                                                                    \
+    int uniqueIndex = 0;                                                                                                                            \
+    const size_t currentSize = size();                                                                                                              \
+    for (size_t index = 1; index < currentSize; ++index)                                                                                            \
+    {                                                                                                                                               \
+        auto& previousElement = GetChecked(index - 1);                                                                                              \
+        auto& currentElement = GetChecked(index);                                                                                                   \
+        if (previousElement != currentElement)                                                                                                      \
+        {                                                                                                                                           \
+            GetChecked(++uniqueIndex) = currentElement;                                                                                             \
+        }                                                                                                                                           \
+    }                                                                                                                                               \
+    size(uniqueIndex + 1);                                                                                                                          \
+}
+
+#define STD_ARRAY_UTILITY_ARRAYSAFEREF_VECTORSAFEREF_NON_CONST_METHODS                                                                              \
+void SetArray(T* p, const size_t elementsNumMax)                                                                                                    \
+{                                                                                                                                                   \
+    SetArray(p);                                                                                                                                    \
+    SetElementsNumMax(elementsNumMax);                                                                                                              \
+    AssertValid();                                                                                                                                  \
+}                                                                                                                                                   
+
+#define STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONSTVECTORSAFE_OPERATOR_EQUIVALENCE                       \
+template<class U>                                                                                                       \
+bool operator==(const U& rhs)                                                                                           \
+{                                                                                                                       \
+    if (this->size() != rhs.size())                                                                                     \
+    {                                                                                                                   \
+        return false;                                                                                                   \
+    }                                                                                                                   \
+    else                                                                                                                \
+    {                                                                                                                   \
+        /*purposefully do a binary comparison for speed; do not support generalized comparison operators for elements*/ \
+        return memcmp(this->data(), rhs.data(), rhs.SizeInBytes()) == 0;                                                \
+    }                                                                                                                   \
+}                                                                                                                       \
+template<class U>                                                                                                       \
+bool operator!=(const U& rhs)                                                                                           \
+{                                                                                                                       \
+    return !(*this == rhs);                                                                                             \
+}
+
+#define STD_ARRAY_UTILITY_ARRAYSAFEREF_CONSTARRAYSAFEREF_CONSTVECTORSAFEREF_ALIGNED_CONSTRUCTOR_SHARED_BODY             \
+assert((uintptr_t)p % alignment == 0);                                                                                  \
+assert(sizeof(T) % alignment == 0);                                                                                     \
+SetElementsNumMax(elementsNumMax);                                                                                      \
+SetArray(p);
+
+
+#define STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_FUNCTION_SIGNATURE void MemcpyFromIndex(const void*const input, const size_t index, const size_t inputBytesNum)
+#define STD_ARRAY_UTILITY_MEMPCY_FROM_INDEX_VECTOR_BODY                                                                                                 \
+    const size_t originalSize = size();                                                                                                                 \
+    assert(index <= originalSize);/*new elements must start at the first invalid index and/or overwrite existing elements -- eg do not create a "hole" of invalid elements between the old valid elements and the new valid elements*/\
+    const size_t newElementsNumPlusIndex = inputBytesNum / sizeof(T) + index;                                                                           \
+    SetElementsNumCurrent(originalSize > newElementsNumPlusIndex ? originalSize : newElementsNumPlusIndex);                                             \
+    AssertValid()
+#define STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_SHARED_BODY                                                                                                 \
+    AssertValid();                                                                                                                                      \
+    assert(index * sizeof(T) + inputBytesNum <= SizeMaxInBytes());                                                                                      \
+    assert(input);                                                                                                                                      \
+    assert(index >= 0);                                                                                                                                 \
+    /*assert(inputBytesNum >= 0);*//*allow memcpy's of 0 bytes for generality*/                                                                         \
+    assert(inputBytesNum % sizeof(T) == 0);                                                                                                             \
+    memcpy(&GetAddressOfUnderlyingArray()[index], input, inputBytesNum)
+
+#define STD_UTILITY_MEMCPY_FROM_FREAD_FUNCTION_SIGNATURE void MemcpyFromFread(FILE*const f, const size_t elementsNum)
+#define STD_UTILITY_MEMCPY_FROM_FREAD_FUNCTION_SHARED_BODY  \
+    assert(f);                                              \
+    assert(elementsNum > 0);                                \
+    assert(elementsNum <= SizeMax());                       \
+    ::Fread(f, &m_array[0], sizeof(T), elementsNum)
+                                                                                                                                                
 
 inline void Fopen(FILE**const f, const char*const filename, const char*const mode)
 {
@@ -29,8 +392,7 @@ inline void Fclose(FILE*const f)
     assert(fcloseRet == 0);
 }
 
-///@todo: unit test
-#define NTF_FWRITE_SNPRINTF_PREFACE             \
+#define NTF_FWRITE_SPRINTF_PREFACE              \
     assert(file);                               \
     assert(formatString);                       \
     assert(strlen(formatString) > 0);           \
@@ -38,22 +400,23 @@ inline void Fclose(FILE*const f)
     ArraySafe<char, kElementsMax> string;       \
     va_list args;                               \
     va_start(args, formatString);               \
-    string.Snprintf_va_list(formatString, args);\
+    string.Sprintf_va_list(formatString, args); \
     va_end(args);
+#define NTF_FWRITE_SPRINTF_FWRITE string.Fwrite(file, strlen(string.begin()) + 1)
 template<size_t kElementsMax=512>
-void FwriteSnprintf(FILE*const file, const char*const formatString, ...)
+void FwriteSprintf(FILE*const file, const char*const formatString, ...)
 {
-    NTF_FWRITE_SNPRINTF_PREFACE;
-    string.Fwrite(file, strlen(string.begin()));
+    NTF_FWRITE_SPRINTF_PREFACE;
+    NTF_FWRITE_SPRINTF_FWRITE;
 }
 template<size_t kElementsMax = 512>
-void FwriteSnprintf(FILE*const file, RTL_CRITICAL_SECTION*const criticalSectionPtr, const char*const formatString, ...)
+void FwriteSprintf(FILE*const file, RTL_CRITICAL_SECTION*const criticalSectionPtr, const char*const formatString, ...)
 {
     assert(criticalSectionPtr);
-    NTF_FWRITE_SNPRINTF_PREFACE;
+    NTF_FWRITE_SPRINTF_PREFACE;
 
     CriticalSectionEnter(criticalSectionPtr);
-    string.Fwrite(file, strlen(string.begin()));
+    NTF_FWRITE_SPRINTF_FWRITE;
     CriticalSectionLeave(criticalSectionPtr);
 }
 
@@ -93,24 +456,26 @@ template<class T>
 class ConstVectorSafeRef;
 
 template<class T>
+class ConstArraySafeRef;
+
+template<class T>
 class VectorSafeRef
 {
 public:
     typedef VectorSafeRef<T> ThisDataType;
-    typedef T* iterator;
-    typedef const T* const_iterator;
-    typedef T& reference;
-    typedef const T& const_reference;
-    typedef size_t size_type;
+    STD_ARRAY_UTILITY_CONST_TYPEDEFS;
+    STD_ARRAY_UTILITY_NONCONST_TYPEDEFS;
 
 private:
+    T* m_array;
+    size_t* m_elementsNumCurrent;
+#if STD_UTILITY_DEBUG
+    size_t m_elementsNumMax;
+#endif//#if STD_UTILITY_DEBUG
+
     void SetArray(T* p)
     {
-        assert(p);
         m_array = p;
-#if NTF_ARRAY_SAFE_DEBUG
-        m_arraySet = true;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
     }
     void SetElementsNumCurrent(const size_t elementsNumCurrent)
     {
@@ -125,198 +490,78 @@ private:
     void SetElementsNumMax(const size_t elementsNumMax)
     {
         assert(elementsNumMax > 0);
-#if NTF_ARRAY_SAFE_DEBUG
+#if STD_UTILITY_DEBUG
         m_elementsNumMax = elementsNumMax;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
+#endif//#if STD_UTILITY_DEBUG
     }
 
-    ///@todo: reduce code duplication with VectorSafe
-    T* m_array;
-    size_t* m_elementsNumCurrent;
-#if NTF_ARRAY_SAFE_DEBUG
-    size_t m_elementsNumMax;
-    bool m_arraySet;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-
 public:
-//this would be a non-const pointer to non-const -- this class is for const pointer to non-const
-//    VectorSafeRef()
-//    {
-//#if NTF_ARRAY_SAFE_DEBUG
-//        m_arraySet = m_elementsNumCurrentSet = false;
-//        m_elementsNumMax = 0;
-//#endif//#if NTF_ARRAY_SAFE_DEBUG
-//    }
-    ///@todo
-    //VectorSafeRef(T*const pointer, const std::initializer_list<T>& initializerList, const size_t maxSize)
-    //{
-    //    SetArray(pointer);
-    //    SetElementsNumMax(maxSize);
-    //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
-    //    AssertValid();
-    //}
-
-    //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability
+    //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability.  In terms of performance, I'm trusting compilers to simply reference a single class of *this's pointers rather than duplicating them; note that C++ does allow ConstVectorSafe and ConstArraySafe to be passed by const&, leaving no chance of unnecessarily duplicated pointers
     VectorSafeRef(VectorSafeRef<T>*const vectorSafeRef)
     {
         assert(vectorSafeRef);
         SetElementsNumCurrentPtr(vectorSafeRef->m_elementsNumCurrent);
-#if NTF_ARRAY_SAFE_DEBUG
+#if STD_UTILITY_DEBUG
         SetElementsNumMax(vectorSafeRef->m_elementsNumMax);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
+#endif//#if STD_UTILITY_DEBUG
         SetArray(vectorSafeRef->begin());
     }
 
     template<size_t kElementsMax>
-    VectorSafeRef(VectorSafe<T, kElementsMax>*const vectorSafe)
+    VectorSafeRef(VectorSafe<T,kElementsMax>*const vectorSafe)
     {
         assert(vectorSafe);
 
         SetElementsNumCurrentPtr(&vectorSafe->m_elementsNumCurrent);
+#if STD_UTILITY_DEBUG
         SetElementsNumMax(vectorSafe->SizeMax());
+#endif//#if STD_UTILITY_DEBUG
         SetArray(vectorSafe->begin());
     }
 
-    ///@todo: unit tests
-    VectorSafeRef(T*const p, const size_t elementsNumMax, const size_t alignment)
-    {
-        assert((uintptr_t)p % alignment == 0);
-        assert((elementsNumMax*sizeof(T)) % alignment == 0);
-
-        SetElementsNumMax(elementsNumMax);
-        SetArray(p);
-    }
-
-    ///@todo: unit tests
     VectorSafeRef()
     {
         Reset();
-    }
-    ///@todo: unit tests
+    }                                                                                                                                                 
+
     void Reset()
     {
         m_array = nullptr;
         m_elementsNumCurrent = 0;
 
-#if NTF_ARRAY_SAFE_DEBUG
-        m_arraySet = false;
+#if STD_UTILITY_DEBUG
         m_elementsNumMax = 0;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-    }
-
-	///@todo: unit test
-	int Find(const T& item) const
-	{
-        const size_type elementsNumCurrent = *m_elementsNumCurrent;
-		for (size_type i = 0; i < elementsNumCurrent; ++i)
-		{
-			if (m_array[i] == item)
-			{
-				return CastWithAssert<size_type,int>(i);
-			}
-		}
-		return -1;
-	}
-    ///@todo: unit tests
-    bool PushIfUnique(const T& item)
-    {
-        AssertValid();
-        if (Find(item) >= 0)
-        {
-            return false;
-        }
-        else
-        {
-            Push(item);
-            return true;
-        }
-    }
-
-    ///@todo: AssertCurrentSufficient() //m_elementsNumMax - m_elementsNumCurrent >= elementsNum
-    void AssertSufficient(const size_t elementsNum) const
-    {
-#if NTF_ARRAY_SAFE_DEBUG
-        AssertValid();
-        assert(m_elementsNumMax >= elementsNum);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
+#endif//#if STD_UTILITY_DEBUG
     }
 
     void AssertValid() const
     {
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(m_arraySet);
+#if STD_UTILITY_DEBUG
         assert(m_elementsNumCurrent);
-        assert(*m_elementsNumCurrent <= m_elementsNumMax);       
+        assert(*m_elementsNumCurrent <= m_elementsNumMax);
         assert(m_elementsNumMax > 0);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-    }
-
-    ///@todo: have to pass in number of bytes explicitly
-    //void Copy(const VectorSafeRef<T>& vectorSafeOther)
-    //{
-    //    MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
-    //}
-
-    ///@todo: totally untested; also unit tests
-    void Fwrite(FILE*const f)
-    {
-        AssertValid();
-        assert(f);
-        ::Fwrite(f, &m_array[0], sizeof(m_array[0]), *m_elementsNumCurrent);
-    }
-
-    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
-    {
-        AssertValid();
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(inputBytesNum <= SizeMaxInBytes());
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-
-        assert(input);
-        assert(inputBytesNum >= 0);
-        assert(inputBytesNum % sizeof(T) == 0);
-
-        memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
-        SetElementsNumCurrent(inputBytesNum / sizeof(T));
-        AssertValid();
-    }
-
-    ///@todo: unit tests
-    void Append(const ConstVectorSafeRef<T>& vectorSafeOther)
-    {
-        AssertValid();
-        const size_type vectorSafeOtherSize = vectorSafeOther.size();
-        const size_type thisOriginalSize = size();
-        size(thisOriginalSize + vectorSafeOtherSize);
-        AssertValid();
-
-        memcpy(GetAddressOfUnderlyingArray() + thisOriginalSize, vectorSafeOther.GetAddressOfUnderlyingArray(), sizeof(T)*vectorSafeOtherSize);
-    }
-
-    ///@todo: unit tests
-    void MemcpyFromFread(FILE*const f, const size_t elementsNum)
-    {
-        AssertValid();
-        assert(f);
-        assert(elementsNum > 0);
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(elementsNum <= m_elementsNumMax);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-        Fread(f, &m_array[0], sizeof(T), elementsNum);
-        SetElementsNumCurrent(elementsNum);
+#endif//#if STD_UTILITY_DEBUG
     }
 
     size_type size() const noexcept
     {
-        AssertValid();
-        return *m_elementsNumCurrent;
+        return m_elementsNumCurrent ? *m_elementsNumCurrent : 0;
     }
+#if STD_UTILITY_DEBUG
+    size_t SizeMax() const
+    {
+        return m_elementsNumMax;
+    }
+    size_t SizeMaxInBytes() const
+    {
+        AssertValid();
+        return m_elementsNumMax * sizeof(T);
+    }
+#endif//#if STD_UTILITY_DEBUG
     void size(const size_t size)
     {
         SetElementsNumCurrent(size);
-        AssertValid();
     }
-    ///@todo: unit tests
     void sizeIncrement()
     {
         AssertValid();
@@ -329,202 +574,68 @@ public:
         --(*m_elementsNumCurrent);
         AssertValid();
     }
-    size_t SizeCurrentInBytes() const
+
+    STD_ARRAY_UTILITY_SPRINTF_VA_LIST_FUNCTION_SIGNATURE
     {
-        return size()*sizeof(T);
-    }
-    size_t SizeMaxInBytes() const
-    {
-        AssertValid();
-        return m_elementsNumMax*sizeof(T);
-    }
-    void Push(const T& item)
-    {
-        AssertValid();
-        const size_t indexForItem = *m_elementsNumCurrent;
-        sizeIncrement();
-        operator[](indexForItem) = item;
-    }
-	void Pop()
-	{
-		sizeDecrement();
-	}
-	void RemoveItemAtIndex(const size_type indexToRemove)
-	{
-        AssertValid();
-		const size_type lastValidIndex = GetLastValidIndex();
-		if (indexToRemove != lastValidIndex)
-		{
-			operator[](indexToRemove) = operator[](lastValidIndex);
-		}
-        sizeDecrement();
-	}
-    ///@todo: unit tests
-    bool Remove(const T& item)
-    {
-        AssertValid();
-        const int itemIndex = Find(item);
-        if (itemIndex >= 0)
-        {
-            RemoveItemAtIndex(itemIndex);
-            return true;
-        }
-        else
-        {
-            return false;
-        }
+        NTF_STATIC_ASSERT(sizeof(T) == sizeof(char));//this function is intended to be used only when *this holds ASCII characters
+#if STD_UTILITY_DEBUG
+        STD_ARRAY_UTILITY_SPRINTF_VA_LIST_DEBUG_BODY;
+#else
+        STD_ARRAY_UTILITY_SPRINTF_VA_LIST_RELEASE_BODY;
+#endif//#if STD_UTILITY_DEBUG
+        STD_ARRAY_UTILITY_SPRINTF_VA_LIST_POSTFACE;
     }
 
-    const T* data() const
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    T* data()
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const T* GetAddressOfUnderlyingArray() const
-    {
-        AssertValid();
-        return &m_array[0];
-    }
-    T* GetAddressOfUnderlyingArray()
-    {
-        return const_cast<T*>(static_cast<const ThisDataType*>(this)->GetAddressOfUnderlyingArray());
-    }
-    const_reference GetChecked(const size_type pos) const
-    {
-        AssertValid();
-        assert(pos < *m_elementsNumCurrent);
-        return m_array[pos];
-    }
-    reference GetChecked(const size_type pos)
-    {
-        return const_cast<reference>(static_cast<const ThisDataType*>(this)->GetChecked(pos));
-    }
-    size_t GetLastValidIndex() const
-    {
-        AssertValid();
-        return *m_elementsNumCurrent - 1;
-    }
-    size_t GetOneAfterLastValidIndex() const
-    {
-        return GetLastValidIndex() + 1;
-    }
+    STD_ARRAY_UTILITY_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONST_METHODS;
+    STD_ARRAY_UTILITY_VECTORSAFE_CONST_METHODS;
+    STD_ARRAY_UTILITY_NON_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_NON_CONST_METHODS;
+    STD_ARRAY_UTILITY_VECTORSAFE_VECTORSAFEREF_NON_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFEREF_VECTORSAFEREF_NON_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONSTVECTORSAFE_OPERATOR_EQUIVALENCE;
 
-    reference operator[](size_type pos)
+    STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_FUNCTION_SIGNATURE
     {
-        return GetChecked(pos);
+        STD_ARRAY_UTILITY_MEMPCY_FROM_INDEX_VECTOR_BODY;
+        STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_SHARED_BODY;
     }
-    const_reference operator[](size_type pos) const
+    STD_UTILITY_MEMCPY_FROM_FREAD_FUNCTION_SIGNATURE
     {
-        return GetChecked(pos);
-    }
-
-    reference at(size_type pos)
-    {
-        return GetChecked(pos);
-    }
-    const_reference at(size_type pos) const
-    {
-        return GetChecked(pos);
-    }
-
-    reference front()
-    {
-        return GetChecked(0);
-    }
-    const_reference front() const
-    {
-        return GetChecked(0);
-    }
-
-    reference back()
-    {
-        return GetChecked(GetLastValidIndex());
-    }
-    const_reference back() const
-    {
-        return GetChecked(GetLastValidIndex());
-    }
-
-    iterator begin() noexcept
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const_iterator begin() const noexcept
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const_iterator cbegin() const noexcept
-    {
-        return end();
-    }
-
-    iterator end() noexcept
-    {
-        return const_cast<iterator>(static_cast<const ThisDataType*>(this)->end());
-    }
-    const_iterator end() const noexcept
-    {
-        return const_iterator(GetAddressOfUnderlyingArray() + GetOneAfterLastValidIndex());
-    }
-    const_iterator cend() const noexcept
-    {
-        return end();
-    }
-
-    //reverse_iterator rbegin() noexcept 
-    //{
-    //    return reverse_iterator(end());
-    //}
-    //const_reverse_iterator rbegin() const noexcept 
-    //{
-    //    return const_reverse_iterator(end());
-    //}
-    //const_reverse_iterator crbegin() const noexcept 
-    //{
-    //    return rbegin();
-    //}
-    //iterator rend() and crend() not implemented
-
-    bool empty() const noexcept
-    {
-        AssertValid();
-        return *m_elementsNumCurrent == 0;
+        STD_UTILITY_MEMCPY_FROM_FREAD_FUNCTION_SHARED_BODY;
+        SetElementsNumCurrent(elementsNum);
     }
 };
 
 
-///@todo: unit tests for entire class
 template<class T>
 class ArraySafeRef
 {
 public:
     typedef ArraySafeRef<T> ThisDataType;
-    typedef T* iterator;
-    typedef const T* const_iterator;
-    typedef T& reference;
-    typedef const T& const_reference;
-    typedef size_t size_type;
+    STD_ARRAY_UTILITY_CONST_TYPEDEFS;
+    STD_ARRAY_UTILITY_NONCONST_TYPEDEFS;
 
 private:
+    void size(const size_t size)
+    {
+        assert(size <= m_elementsNumMax);
+    }//to allow implementation of STD_ARRAY_UTILITY_SPRINTF_VA_LIST_BODY()
     void SetArray(T* p)
     {
         m_array = p;
     }
     void SetElementsNumMax(const size_t elementsNumMax)
     {
-#if NTF_ARRAY_SAFE_DEBUG
+#if STD_UTILITY_DEBUG
         m_elementsNumMax = elementsNumMax;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
+#endif//#if STD_UTILITY_DEBUG
     }
 
-    ///@todo: reduce code duplication with VectorSafe
     T* m_array;
-#if NTF_ARRAY_SAFE_DEBUG
-    size_t m_elementsNumMax;///<@todo: rename m_elementsNumMax for clarity
-#endif//#if NTF_ARRAY_SAFE_DEBUG
+#if STD_UTILITY_DEBUG
+    size_t m_elementsNumMax;
+#endif//#if STD_UTILITY_DEBUG
 
 public:
     ///@todo
@@ -535,236 +646,175 @@ public:
     //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     //    AssertValid();
     //}
-
-    template<size_t kElementsMax>
-    ArraySafeRef(VectorSafe<T, kElementsMax>*const vectorSafe)
+    //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability.  In terms of performance, I'm trusting compilers to simply reference a single class of *this's pointers rather than duplicating them; note that C++ does allow ConstVectorSafe and ConstArraySafe to be passed by const&, leaving no chance of unnecessarily duplicated pointers
+    template<typename U>
+    ArraySafeRef(U* const other)
     {
-        assert(vectorSafe);
-        SetElementsNumMax(vectorSafe->size());
-        SetArray(vectorSafe->begin());
-    }
-    ArraySafeRef(VectorSafeRef<T>*const vectorSafe)
-    {
-        assert(vectorSafe);
-        SetElementsNumMax(vectorSafe->size());
-        SetArray(vectorSafe->begin());
+        assert(other);
+#if STD_UTILITY_DEBUG
+        SetElementsNumMax(other->SizeMax());
+#endif//#if STD_UTILITY_DEBUG
+        SetArray(other->begin());
     }
 
-    template<size_t kElementsMax>
-    ArraySafeRef(ArraySafe<T, kElementsMax>*const arraySafe)
-    {
-        assert(arraySafe);
-        SetElementsNumMax(arraySafe->size());
-        SetArray(arraySafe->begin());
-    }
-	//allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability
-	///@todo: unit tests
-	ArraySafeRef(ArraySafeRef<T>*const arraySafeRef)
-	{
-		assert(arraySafeRef);
-#if NTF_ARRAY_SAFE_DEBUG
-		SetElementsNumMax(arraySafeRef->m_elementsNumMax);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-		SetArray(arraySafeRef->m_array);
-	}
-
-    ///@todo: unit tests
     ArraySafeRef(T*const p, const size_t elementsNumMax)
     {
         SetElementsNumMax(elementsNumMax);
         SetArray(p);
     }
 
-    ///@todo: unit tests
     ArraySafeRef(T*const p, const size_t elementsNumMax, const size_t alignment)
     {
-        assert((uintptr_t)p % alignment == 0);
-        assert((elementsNumMax*sizeof(T)) % alignment == 0);
-
-        SetElementsNumMax(elementsNumMax);
-        SetArray(p);
+        STD_ARRAY_UTILITY_ARRAYSAFEREF_CONSTARRAYSAFEREF_CONSTVECTORSAFEREF_ALIGNED_CONSTRUCTOR_SHARED_BODY;
     }
 
-    ///@todo: unit tests
     ArraySafeRef()
     {
         Reset();
     }
-    ///@todo: unit tests
-    ///<use Reset() to set this array to null, not this function
-    void SetArray(T* p, const size_t elementsNumMax)
-    {
-        SetArray(p);
-        SetElementsNumMax(elementsNumMax);
-        AssertValid();
-    }
-    ///@todo: unit tests
-    void SetArray(FILE*const f, const size_t elementsNum)
-    {
-        AssertValid();//assumes correctly initialized ArraySafe reference
-        assert(f);
-        assert(elementsNum > 0);
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(elementsNum <= m_elementsNumMax);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-        Fread(f, m_array, sizeof(T), elementsNum);
-    }
-    ///@todo: unit tests
     void Reset()
     {
         m_array = nullptr;
 
-#if NTF_ARRAY_SAFE_DEBUG
+#if STD_UTILITY_DEBUG
         m_elementsNumMax = 0;
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-    }
-
-    ///@todo: AssertCurrentSufficient() //m_elementsNumMax - m_elementsNumCurrent >= elementsNum
-    void AssertSufficient(const size_t elementsNum) const
-    {
-#if NTF_ARRAY_SAFE_DEBUG
-        AssertValid();
-        assert(m_elementsNumMax >= elementsNum);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
+#endif//#if STD_UTILITY_DEBUG
     }
 
     void AssertValid() const
     {
-#if NTF_ARRAY_SAFE_DEBUG
+#if STD_UTILITY_DEBUG
         assert(m_elementsNumMax > 0);
         assert(m_array);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
+#endif//#if STD_UTILITY_DEBUG
     }
 
-    ///@todo: have to pass in number of bytes explicitly
-    //void Copy(const ArraySafeRef<T>& vectorSafeOther)
-    //{
-    //    MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
-    //}
-    ///@todo: totally untested; and unit tests
-    void MemcpyFromFread(FILE*const f, const size_t elementsNum)
+    STD_ARRAY_UTILITY_SPRINTF_VA_LIST_FUNCTION_SIGNATURE
     {
-        AssertValid();
-        assert(f);
-        assert(elementsNum > 0);
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(elementsNum <= m_elementsNumMax);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-        Fread(f, &m_array[0], sizeof(T), elementsNum);
-    }
-    ///@todo: unit tests
-    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
-    {
-        MemcpyFromIndex(input, 0, inputBytesNum);
-    }
-    ///@todo: unit tests
-    void MemcpyFromIndex(const void*const input, const size_t index, const size_t inputBytesNum)
-    {
-        AssertValid();
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(index*sizeof(T) + inputBytesNum <= SizeMaxInBytes());
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-
-        assert(input);
-        assert(index >= 0);
-        assert(inputBytesNum >= 0);
-        assert(inputBytesNum % sizeof(T) == 0);
-
-        memcpy(&GetAddressOfUnderlyingArray()[index], input, inputBytesNum);
+        NTF_STATIC_ASSERT(sizeof(T) == sizeof(char));//this function is intended to be used only when *this holds ASCII characters
+#if STD_UTILITY_DEBUG
+        STD_ARRAY_UTILITY_SPRINTF_VA_LIST_DEBUG_BODY;
+#else
+        STD_ARRAY_UTILITY_SPRINTF_VA_LIST_RELEASE_BODY;
+#endif//#if STD_UTILITY_DEBUG
+        STD_ARRAY_UTILITY_SPRINTF_VA_LIST_POSTFACE;
     }
 
-    void Fwrite(FILE*const f, const size_t elementsNum)
+    STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_FUNCTION_SIGNATURE
     {
-        AssertValid();
-        assert(f);
-        assert(elementsNum > 0);
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(elementsNum <= m_elementsNumMax);
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-        ::Fwrite(f, &m_array[0], sizeof(m_array[0]), elementsNum);
+        STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_SHARED_BODY;
+    }
+    STD_UTILITY_MEMCPY_FROM_FREAD_FUNCTION_SIGNATURE
+    {
+        STD_UTILITY_MEMCPY_FROM_FREAD_FUNCTION_SHARED_BODY;
     }
 
-#if NTF_ARRAY_SAFE_DEBUG
-    size_type size() const noexcept
-    {
-        AssertValid();
-        return m_elementsNumMax;
-    }
-    size_t SizeMaxInBytes() const
-    {
-        AssertValid();
-        return size()*sizeof(T);
-    }
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-    const T* data() const
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    T* data()
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const T* GetAddressOfUnderlyingArray() const
-    {
-        return &m_array[0];
-    }
-    T* GetAddressOfUnderlyingArray()
-    {
-        return const_cast<T*>(static_cast<const ThisDataType*>(this)->GetAddressOfUnderlyingArray());
-    }
-    const_reference GetChecked(const size_type pos) const
-    {
-        AssertValid();
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(pos < size());
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-        return m_array[pos];
-    }
-    reference GetChecked(const size_type pos)
-    {
-        return const_cast<reference>(static_cast<const ThisDataType*>(this)->GetChecked(pos));
-    }
+#if STD_UTILITY_DEBUG
+    STD_ARRAY_UTILITY_ARRAYSAFE_CONSTARRAYSAFE_CONSTVECTORSAFE_SIZE_CONST_METHOD;
+    STD_ARRAY_UTILITY_ARRAYSAFE_ARRAYSAFEREF_CONSTARRAYSAFEREF_CONSTVECTORSAFEREF_METHODS;
+#endif//#if STD_UTILITY_DEBUG
 
-    reference operator[](size_type pos)
-    {
-        return GetChecked(pos);
-    }
-    const_reference operator[](size_type pos) const
-    {
-        return GetChecked(pos);
-    }
-
-    reference at(size_type pos)
-    {
-        return GetChecked(pos);
-    }
-    const_reference at(size_type pos) const
-    {
-        return GetChecked(pos);
-    }
-
-    reference front()
-    {
-        return GetChecked(0);
-    }
-    const_reference front() const
-    {
-        return GetChecked(0);
-    }
-
-    iterator begin() noexcept
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const_iterator begin() const noexcept
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const_iterator cbegin() const noexcept
-    {
-        return end();
-    }
+    STD_ARRAY_UTILITY_CONST_METHODS;
+    STD_ARRAY_UTILITY_NON_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFEREF_VECTORSAFEREF_NON_CONST_METHODS;
 };
+
+///can't just use a const ArraySafeRef<>() because I want to encourage the use of & for writable arguments -- and no & for read-only arguments -- as much as possible.  This class allows for the latter with ArraySafe
+///is best passed by const& -- eg const ConstArraySafeRef& -- since that all but ensures that all compilers will not create extraneous size datafields, even in debug builds
+template<class T>
+class ConstArraySafeRef
+{
+public:
+    typedef ConstArraySafeRef<T> ThisDataType;
+    STD_ARRAY_UTILITY_CONST_TYPEDEFS;
+
+private:
+    void SetArray(const T*const p)
+    {
+        m_array = p;
+    }
+    void SetElementsNumMax(const size_t elementsNumMax)
+    {
+#if STD_UTILITY_DEBUG
+        m_elementsNumMax = elementsNumMax;
+#endif//#if STD_UTILITY_DEBUG
+    }
+
+    const T* m_array;
+#if STD_UTILITY_DEBUG
+    size_t m_elementsNumMax;
+#endif//#if STD_UTILITY_DEBUG
+
+public:
+    ///@todo
+    //ConstArraySafeRef(T*const pointer, const std::initializer_list<T>& initializerList, const size_t maxSize)
+    //{
+    //    SetArray(pointer);
+    //    SetElementsNumMax(maxSize);
+    //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
+    //    AssertValid();
+    //}
+    //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability
+    ///@todo: work out why this doesn't work, or why it can't work
+//    template<typename U>
+//    ConstArraySafeRef(const U& other)
+//    {
+//        assert(other);
+//#if STD_UTILITY_DEBUG
+//        SetElementsNumMax(other->SizeMax());
+//#endif//#if STD_UTILITY_DEBUG
+//        SetArray(other->begin());
+//    }
+
+    template<size_t kElementsMax>
+    ConstArraySafeRef(const ArraySafe<T, kElementsMax>& other)
+    {
+#if STD_UTILITY_DEBUG
+        SetElementsNumMax(other.SizeMax());
+#endif//#if STD_UTILITY_DEBUG
+        SetArray(other.begin());
+    }
+
+    ConstArraySafeRef(const T*const p, const size_t elementsNumMax)
+    {
+        SetElementsNumMax(elementsNumMax);
+        SetArray(p);
+    }
+
+    ConstArraySafeRef(const T*const p, const size_t elementsNumMax, const size_t alignment)
+    {
+        STD_ARRAY_UTILITY_ARRAYSAFEREF_CONSTARRAYSAFEREF_CONSTVECTORSAFEREF_ALIGNED_CONSTRUCTOR_SHARED_BODY;
+    }
+
+    ConstArraySafeRef()
+    {
+        Reset();
+    }
+    void Reset()
+    {
+        m_array = nullptr;
+
+#if STD_UTILITY_DEBUG
+        m_elementsNumMax = 0;
+#endif//#if STD_UTILITY_DEBUG
+    }
+
+    void AssertValid() const
+    {
+#if STD_UTILITY_DEBUG
+        assert(m_elementsNumMax > 0);
+        assert(m_array);
+#endif//#if STD_UTILITY_DEBUG
+    }
+
+#if STD_UTILITY_DEBUG
+    STD_ARRAY_UTILITY_ARRAYSAFE_CONSTARRAYSAFE_CONSTVECTORSAFE_SIZE_CONST_METHOD;
+    STD_ARRAY_UTILITY_ARRAYSAFE_ARRAYSAFEREF_CONSTARRAYSAFEREF_CONSTVECTORSAFEREF_METHODS;
+#endif//#if STD_UTILITY_DEBUG
+
+    STD_ARRAY_UTILITY_CONST_METHODS;
+};
+
 
 ///NOTE: the caller is responsible for freeing this memory with AlignedFree(); VectorSafeRef is only a reference
 template<class T>
@@ -783,16 +833,19 @@ void AlignedFree(VectorSafeRef<T>*const vectorSafeRef)
 }
 
 
+///can't just use a const VectorSafeRef<>() because I want to encourage the use of & for writable arguments -- and no & for read-only arguments -- as much as possible.  This class allows for the latter with VectorSafe
+///is best passed by const& -- eg const ConstVectorSafeRef& -- since that all but ensures that all compilers will not create extraneous pointers from this double-pointer class
 template<class T>
 class ConstVectorSafeRef
 {
 public:
     typedef ConstVectorSafeRef<T> ThisDataType;
-    typedef const T* const_iterator;
-    typedef const T& const_reference;
-    typedef size_t size_type;
+    STD_ARRAY_UTILITY_CONST_TYPEDEFS;
 
 private:
+    const T* m_array;
+    size_t m_elementsNumMax;
+
     void SetArray(const T*const p)
     {
         m_array = p;
@@ -802,144 +855,48 @@ private:
         m_elementsNumMax = elementsNumMax;
     }
 
-    ///@todo: reduce code duplication with VectorSafe
-    const T* m_array;
-    size_t m_elementsNumMax;
-
 public:
     ConstVectorSafeRef()
     {
-        SetArray(nullptr);
-        SetElementsNumMax(0);
-        AssertValid();
+        Reset();
+    }
+
+    ConstVectorSafeRef(T*const p, const size_t elementsNumMax, const size_t alignment)
+    {
+        STD_ARRAY_UTILITY_ARRAYSAFEREF_CONSTARRAYSAFEREF_CONSTVECTORSAFEREF_ALIGNED_CONSTRUCTOR_SHARED_BODY;
     }
 
     ConstVectorSafeRef(const T*const pointer, const size_t elementsNumMax)
     {
-        SetArray(pointer);
         SetElementsNumMax(elementsNumMax);
-        AssertValid();
-    }
-    template<size_t kElementsMax>
-    ConstVectorSafeRef(const VectorSafe<T, kElementsMax>& vectorSafe)
-    {
-        SetArray(vectorSafe.begin());
-        SetElementsNumMax(vectorSafe.size());
-        AssertValid();
+        SetArray(pointer);
     }
 
-	ConstVectorSafeRef(const VectorSafeRef<T>& vectorSafeRef)
-	{
-		SetArray(vectorSafeRef.begin());
-		SetElementsNumMax(vectorSafeRef.size());
-		AssertValid();
-	}
-
-    ///@todo: unit test
-    int Find(const T& item) const
+    template<typename U>
+    ConstVectorSafeRef(const U& other)
     {
-        for (size_type i = 0; i < m_elementsNumMax; ++i)
-        {
-            if (m_array[i] == item)
-            {
-                return CastWithAssert<size_type, int>(i);
-            }
-        }
-        return -1;
+        SetArray(other.begin());
+        SetElementsNumMax(other.size());
+    }
+
+    void Reset()
+    {
+        SetArray(nullptr);
+        SetElementsNumMax(0);
     }
 
     void AssertValid() const
     {
+        //purposefully no-op to allow null ConstVectorSafeRef semantics
     }
 
-    size_type size() const noexcept
-    {
-        AssertValid();
-        return m_elementsNumMax;
-    }
-	size_t SizeCurrentInBytes()
-	{
-		AssertValid();
-		return m_elementsNumMax * sizeof(T);//current size in bytes will never change; since *this has const-semantics
-	}
-    size_t SizeMaxInBytes() const
-    {
-        return size()*sizeof(T);
-    }
-    const T* data() const
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const T* GetAddressOfUnderlyingArray() const
-    {
-        AssertValid();
-        return &m_array[0];
-    }
-    const_reference GetChecked(const size_type pos) const
-    {
-        AssertValid();
-        assert(pos < m_elementsNumMax);
-        return m_array[pos];
-    }
-    size_t GetLastValidIndex() const
-    {
-        return m_elementsNumMax - 1;
-    }
-    size_t GetOneAfterLastValidIndex() const
-    {
-        return GetLastValidIndex() + 1;
-    }
-    const_reference operator[](size_type pos) const
-    {
-        return GetChecked(pos);
-    }
-    const_reference at(size_type pos) const
-    {
-        return GetChecked(pos);
-    }
+    STD_ARRAY_UTILITY_ARRAYSAFE_CONSTARRAYSAFE_CONSTVECTORSAFE_SIZE_CONST_METHOD;
+    STD_ARRAY_UTILITY_ARRAYSAFE_ARRAYSAFEREF_CONSTARRAYSAFEREF_CONSTVECTORSAFEREF_METHODS;
 
-    const_reference front() const
-    {
-        return GetChecked(0);
-    }
-
-    const_reference back() const
-    {
-        return GetChecked(GetLastValidIndex());
-    }
-
-    const_iterator begin() const noexcept
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const_iterator cbegin() const noexcept
-    {
-        return end();
-    }
-
-    const_iterator end() const noexcept
-    {
-        return const_iterator(GetAddressOfUnderlyingArray() + GetOneAfterLastValidIndex());
-    }
-    const_iterator cend() const noexcept
-    {
-        return end();
-    }
-
-    //const_reverse_iterator rbegin() const noexcept 
-    //{
-    //    return const_reverse_iterator(end());
-    //}
-    //const_reverse_iterator crbegin() const noexcept 
-    //{
-    //    return rbegin();
-    //}
-
-    bool empty() const noexcept
-    {
-        AssertValid();
-        return m_elementsNumMax == 0;
-    }
+    STD_ARRAY_UTILITY_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONST_METHODS;
+    STD_ARRAY_UTILITY_VECTORSAFE_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONSTVECTORSAFE_OPERATOR_EQUIVALENCE;
 };
 
 template<class T, size_t kElementsNum>
@@ -947,19 +904,20 @@ class ArraySafe
 {
 public:
     typedef ArraySafe<T, kElementsNum> ThisDataType;
-    typedef T* iterator;
-    typedef const T* const_iterator;
-    typedef T& reference;
-    typedef const T& const_reference;
-    typedef size_t size_type;
+    STD_ARRAY_UTILITY_CONST_TYPEDEFS;
+    STD_ARRAY_UTILITY_NONCONST_TYPEDEFS;
 
 private:
+    void size(const size_t size)
+    {
+        assert(size <= kElementsNum);
+    }//to allow implementation of STD_ARRAY_UTILITY_SPRINTF_VA_LIST_BODY()
+
     T m_array[kElementsNum];
 public:
     ArraySafe()
     {
     }
-    ///@todo: totally untested; use and unit test
     ArraySafe(FILE*const f, const size_t elementsNum)
     {
         assert(f);
@@ -971,9 +929,26 @@ public:
     {
         MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     }
-    ArraySafe(ConstVectorSafeRef<T> r)
+    ArraySafe(const T*const p, const size_t elementsNum)
     {
-        MemcpyFromStart(r.begin(), r.size()*sizeof(T));
+        MemcpyFromStart(p, elementsNum*sizeof(T));
+    }
+    //don't use template<class U>ArraySafe(const U& r), since while this does eliminate a little code duplication, it also yields confusing templated compiler errors when a user erroneously passes a pointer without a number of elements rather than calling ArraySafe(const T*const p, const size_t elementsNum).  Prefer usability at the cost of minor code duplication
+    ArraySafe(const ConstVectorSafeRef<T>& r)
+    {
+        MemcpyFromStart(r);
+    }
+    ArraySafe(VectorSafeRef<T> r)
+    {
+        MemcpyFromStart(r);
+    }
+    ArraySafe(ArraySafeRef<T> r)
+    {
+        MemcpyFromStart(r);
+    }
+    ArraySafe(const ConstArraySafeRef<T>& r)
+    {
+        MemcpyFromStart(r);
     }
     template<class T, size_t kElementsNum>
     operator ArraySafeRef<T>()
@@ -981,192 +956,49 @@ public:
         return ArraySafeRef(this);
     }
 
-    template<size_t kElementsNumOther>
-    void Copy(const ArraySafe<T, kElementsNumOther>& arraySafeOther)
+    void AssertValid() const
     {
-        MemcpyFromStart(arraySafeOther.GetAddressOfUnderlyingArray(), arraySafeOther.SizeInBytes());
+        //purposefully no-op to satisfy STD_ARRAY_UTILITY* macros, to minimize code duplication
     }
 
-    void Fwrite(FILE*const f, const size_t elementsNum)
-    {
-        assert(f);
-        assert(elementsNum > 0);
-        assert(elementsNum <= kElementsNum);
-        ::Fwrite(f, &m_array[0], sizeof(m_array[0]), elementsNum);
-    }
-
-    ///@todo NTF: eliminate code duplication with VectorSafe
-    ///@todo: unit test
-    void Snprintf(const char*const formatString, ...)
-    {
-        va_list args;
-        va_start(args, formatString);
-        Snprintf_va_list(formatString, args);
-        va_end(args);
-    }
-    ///@todo: unit test
-    void Snprintf_va_list(const char*const formatString, va_list args)
+    STD_ARRAY_UTILITY_SPRINTF_VA_LIST_FUNCTION_SIGNATURE
     {
         NTF_STATIC_ASSERT(sizeof(T) == sizeof(char));//this function is intended to be used only when *this holds ASCII characters
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(formatString);
-
-        const char bellAsciiKeyCode = 7;
-        char*const lastElement = &m_array[GetLastValidIndex()];
-        *lastElement = bellAsciiKeyCode;//no "bell key" allowed -- use it as a sentinel to guard against the possibility of vsnprintf truncation
-#endif//#if NTF_ARRAY_SAFE_DEBUG
-
-        assert(strlen(formatString) > 0);
-        vsnprintf(&m_array[0], kElementsNum, formatString, args);
-
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(m_array);
-        assert(*lastElement == bellAsciiKeyCode);//vsnprintf may have had to truncate its result to stay within the buffer
-#endif//#if NTF_ARRAY_SAFE_DEBUG
+#if STD_UTILITY_DEBUG
+        STD_ARRAY_UTILITY_SPRINTF_VA_LIST_DEBUG_BODY;
+#else
+        STD_ARRAY_UTILITY_SPRINTF_VA_LIST_RELEASE_BODY;
+#endif//#if STD_UTILITY_DEBUG
+        STD_ARRAY_UTILITY_SPRINTF_VA_LIST_POSTFACE;
     }
 
-    ///@todo: unit test
-    size_t Strnlen() const
+    STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_FUNCTION_SIGNATURE
     {
-        NTF_STATIC_ASSERT(sizeof(T) == sizeof(char));//this function is intended to be used only when *this holds ASCII characters
-        const size_t strnlenResult = strnlen(&m_array[0], kElementsNum);
-        return strnlenResult == kElementsNum ? 0 : strnlenResult;//non-null-terminated buffer defined to be empty string
+        STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_SHARED_BODY;
     }
-
-    ///@todo: unit test
-    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
+    STD_UTILITY_MEMCPY_FROM_FREAD_FUNCTION_SIGNATURE
     {
-        assert(input);
-        assert(inputBytesNum > 0);
-        assert(inputBytesNum <= SizeInBytes());
-        assert(inputBytesNum % sizeof(T) == 0);
-
-        memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
-    }
-
-    ///@todo: unit test
-    void MemsetEntireArray(const int val)
-    {
-        memset(GetAddressOfUnderlyingArray(), val, SizeInBytes());
+        STD_UTILITY_MEMCPY_FROM_FREAD_FUNCTION_SHARED_BODY;
     }
 
     size_type size() const noexcept
     {
         return kElementsNum;
     }
-    size_t SizeInBytes() const
-    {
-        return size()*sizeof(T);
-    }
-    const T* data() const
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    T* data()
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const T* GetAddressOfUnderlyingArray() const
-    {
-        return &m_array[0];
-    }
-    T* GetAddressOfUnderlyingArray()
-    {
-        return const_cast<T*>(static_cast<const ThisDataType*>(this)->GetAddressOfUnderlyingArray());
-    }
-    const_reference GetChecked(const size_type pos) const
-    {
-        assert(pos < kElementsNum);
-        return m_array[pos];
-    }
-    reference GetChecked(const size_type pos)
-    {
-        return const_cast<reference>(static_cast<const ThisDataType*>(this)->GetChecked(pos));
-    }
-    size_t GetLastValidIndex() const
-    {
-        return kElementsNum - 1;
-    }
-    size_t GetOneAfterLastValidIndex() const
-    {
-        return GetLastValidIndex() + 1;
-    }
 
-    reference operator[](size_type pos)
-    {
-        return GetChecked(pos);
-    }
-    const_reference operator[](size_type pos) const
-    {
-        return GetChecked(pos);
-    }
-
-    reference at(size_type pos)
-    {
-        return GetChecked(pos);
-    }
-    const_reference at(size_type pos) const
-    {
-        return GetChecked(pos);
-    }
-
-    reference front()
-    {
-        return GetChecked(0);
-    }
-    const_reference front() const
-    {
-        return GetChecked(0);
-    }
-
-    reference back()
-    {
-        return GetChecked(GetLastValidIndex());
-    }
-    const_reference back() const
-    {
-        return GetChecked(GetLastValidIndex());
-    }
-
-    iterator begin() noexcept
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const_iterator begin() const noexcept
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const_iterator cbegin() const noexcept
-    {
-        return end();
-    }
-
-    iterator end() noexcept
-    {
-        return const_cast<iterator>(static_cast<const ThisDataType*>(this)->end());
-    }
-    const_iterator end() const noexcept
-    {
-        return const_iterator(GetAddressOfUnderlyingArray() + GetOneAfterLastValidIndex());
-    }
-    const_iterator cend() const noexcept
-    {
-        return end();
-    }
-
+    ///@todo: implement reverse iterator
     //reverse_iterator rbegin() noexcept 
     //{
     //    return reverse_iterator(end());
     //}
-    //const_reverse_iterator rbegin() const noexcept 
-    //{
-    //    return const_reverse_iterator(end());
-    //}
-    //const_reverse_iterator crbegin() const noexcept 
-    //{
-    //    return rbegin();
-    //}
     //iterator rend() and crend() not implemented
+
+    STD_ARRAY_UTILITY_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_ARRAYSAFEREF_CONSTARRAYSAFEREF_CONSTVECTORSAFEREF_METHODS;
+    STD_ARRAY_UTILITY_NON_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_NON_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONSTVECTORSAFE_OPERATOR_EQUIVALENCE;
 };
 
 template<class T, size_t kElementsMax>
@@ -1174,11 +1006,8 @@ class VectorSafe
 {
 public:
     typedef VectorSafe<T, kElementsMax> ThisDataType;
-    typedef T* iterator;
-    typedef const T* const_iterator;
-    typedef T& reference;
-    typedef const T& const_reference;
-    typedef size_t size_type;
+    STD_ARRAY_UTILITY_CONST_TYPEDEFS;
+    STD_ARRAY_UTILITY_NONCONST_TYPEDEFS;
 
 private:
     T m_array[kElementsMax];
@@ -1187,13 +1016,10 @@ private:
     friend class VectorSafeRef<T>;
     friend class ConstVectorSafeRef<T>;
 
-    void AssertValid() const
+    void SetElementsNumCurrent(const size_t elementsNumCurrent)
     {
-#if NTF_ARRAY_SAFE_DEBUG
-        assert(m_elementsNumCurrent <= kElementsMax);
-
-        static_assert(kElementsMax > 0, "VectorSafe<T>::kElementsMax must be greater than 0");
-#endif//#if NTF_ARRAY_SAFE_DEBUG
+        m_elementsNumCurrent = elementsNumCurrent;
+        AssertValid();
     }
 
 public:
@@ -1207,57 +1033,65 @@ public:
     }
     VectorSafe(const std::initializer_list<T>& initializerList)
     {
+        size(0);//don't trigger spurious assert about unset size in debug builds
         MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     }
-    VectorSafe(ConstVectorSafeRef<T> r)
+    VectorSafe(const T*const p, const size_t elementsNum)
     {
-        MemcpyFromStart(r.begin(), r.size()*sizeof(T));
+        size(0);//don't trigger spurious assert about unset size in debug builds
+        MemcpyFromStart(p, elementsNum * sizeof(T));
     }
+    VectorSafe(const ConstVectorSafeRef<T>& r)
+    {
+        size(0);//don't trigger spurious assert about unset size in debug builds if argument is of size zero
+        MemcpyFromStart(r);
+    }
+    template<class T, size_t kElementsMax>
+    operator const ConstVectorSafeRef<T>&()
+    {
+        return ConstVectorSafeRef(this);
+    }
+    ///can't use; no way of distinguishing conversion to VectorSafeRef vs ArraySafeRef, which is needed for clean interoperability
+    //VectorSafeRef<T> operator&()
+    //{
+    //    return VectorSafeRef<T>(this);
+    //}
     template<class T, size_t kElementsMax>
     operator VectorSafeRef<T>()
     {
         return VectorSafeRef(this);
     }
 
-	int64_t Find(const T& item)
-	{
-		for(size_t i=0; i < m_elementsNumCurrent; ++i)
-		{
-			if (m_array[i] == item)
-			{
-				return CastWithAssert<size_t, int64_t>(i);
-			}
-		}
-		return -1;
-	}
-
-    void Copy(ConstVectorSafeRef<T> vectorSafeOther)
+    void AssertValid() const
     {
-        MemcpyFromStart(vectorSafeOther.GetAddressOfUnderlyingArray(), vectorSafeOther.SizeCurrentInBytes());
+#if STD_UTILITY_DEBUG
+        assert(m_elementsNumCurrent <= SizeMax());
+
+        static_assert(kElementsMax > 0, "VectorSafe<T>::kElementsMax must be greater than 0");
+#endif//#if STD_UTILITY_DEBUG
     }
 
-    void MemcpyFromStart(const void*const input, const size_t inputBytesNum)
+    STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_FUNCTION_SIGNATURE
     {
-        assert(input);
-        assert(inputBytesNum >= 0);
-        size(inputBytesNum / sizeof(T));
-        assert(inputBytesNum <= SizeMaxInBytes());
-        assert(inputBytesNum % sizeof(T) == 0);
-		AssertValid();
-
-        memcpy(GetAddressOfUnderlyingArray(), input, inputBytesNum);
+        STD_ARRAY_UTILITY_MEMPCY_FROM_INDEX_VECTOR_BODY;
+        STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_SHARED_BODY;
+    }
+    STD_UTILITY_MEMCPY_FROM_FREAD_FUNCTION_SIGNATURE
+    {
+        STD_UTILITY_MEMCPY_FROM_FREAD_FUNCTION_SHARED_BODY;
+        SetElementsNumCurrent(elementsNum);
     }
 
-	///@todo: unit tests
-	void Append(const ConstVectorSafeRef<T>& vectorSafeOther)
-	{
-		const size_type vectorSafeOtherSize = vectorSafeOther.size();
-		const size_type thisOriginalSize = size();
-		size(thisOriginalSize + vectorSafeOtherSize);
-		AssertValid();
-
-		memcpy(GetAddressOfUnderlyingArray() + thisOriginalSize, vectorSafeOther.GetAddressOfUnderlyingArray(), sizeof(T)*vectorSafeOtherSize);
-	}
+    STD_ARRAY_UTILITY_SPRINTF_VA_LIST_FUNCTION_SIGNATURE
+    {
+        NTF_STATIC_ASSERT(sizeof(T) == sizeof(char));//this function is intended to be used only when *this holds ASCII characters
+#if STD_UTILITY_DEBUG
+    STD_ARRAY_UTILITY_SPRINTF_VA_LIST_DEBUG_BODY;
+#else
+    STD_ARRAY_UTILITY_SPRINTF_VA_LIST_RELEASE_BODY;
+#endif//#if STD_UTILITY_DEBUG
+    STD_ARRAY_UTILITY_SPRINTF_VA_LIST_POSTFACE;
+    }
 
     size_type size() const noexcept
     {
@@ -1269,12 +1103,6 @@ public:
         m_elementsNumCurrent = size;
         AssertValid();
     }
-    size_t SizeCurrentInBytes()
-    {
-        AssertValid();
-        return m_elementsNumCurrent*sizeof(T);
-    }
-    ///@todo: unit tests
     void sizeIncrement()
     {
         AssertValid();
@@ -1287,10 +1115,6 @@ public:
         --m_elementsNumCurrent;
         AssertValid();
     }
-    size_t SizeCurrentInBytes() const
-    {
-        return size()*sizeof(T);
-    }
     size_t SizeMax() const
     {
         return kElementsMax;
@@ -1299,257 +1123,15 @@ public:
     {
         return SizeMax()*sizeof(T);
     }
-    void Push(const T& item)
-    {
-        size_t indexForItem = m_elementsNumCurrent;
-        sizeIncrement();
-        operator[](indexForItem) = item;
-    }
-	///@todo: unit tests
-	bool PushIfUnique(const T& item)
-	{
-        if (Find(item) >= 0)
-		{
-			return false;
-		}
-		else
-		{
-			Push(item);
-			return true;
-		}
-	}
-	void Pop()
-	{
-		sizeDecrement();
-	}
-	void RemoveItemAtIndex(const size_type indexToRemove)
-	{
-		const size_type lastValidIndex = GetLastValidIndex();
-		if (indexToRemove != lastValidIndex)
-		{
-			operator[](indexToRemove) = operator[](lastValidIndex);
-		}
-        sizeDecrement();
-	}
-	///@todo: unit tests
-	bool Remove(const T& item)
-	{
-		const int64_t itemIndex = Find(item);
-		if (itemIndex >= 0)
-		{
-            RemoveItemAtIndex(CastWithAssert<int64_t,size_t>(itemIndex));
-			return true;
-		}
-		else
-		{
-			return false;
-		}
-	}
 
-    const T* data() const
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    T* data()
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const T* GetAddressOfUnderlyingArray() const
-    {
-        return &m_array[0];
-    }
-    T* GetAddressOfUnderlyingArray()
-    {
-        return const_cast<T*>(static_cast<const ThisDataType*>(this)->GetAddressOfUnderlyingArray());
-    }
-    const_reference GetChecked(const size_type pos) const
-    {
-        AssertValid();
-        assert(pos < m_elementsNumCurrent);
-        assert(pos < kElementsMax);
-        return m_array[pos];
-    }
-    reference GetChecked(const size_type pos)
-    {
-        return const_cast<reference>(static_cast<const ThisDataType*>(this)->GetChecked(pos));
-    }
-    size_t GetLastValidIndex() const
-    {
-        AssertValid();
-        return m_elementsNumCurrent - 1;
-    }
-    size_t GetOneAfterLastValidIndex() const
-    {
-        AssertValid();
-        return GetLastValidIndex() + 1;
-    }
-
-    reference operator[](size_type pos) 
-    {
-        return GetChecked(pos);
-    }
-    const_reference operator[](size_type pos) const 
-    {
-        return GetChecked(pos);
-    }
-
-    reference at(size_type pos)  
-    {
-        return GetChecked(pos);
-    }
-    const_reference at(size_type pos) const 
-    {
-        return GetChecked(pos);
-    }
-
-    reference front() 
-    {
-        return GetChecked(0);
-    }
-    const_reference front() const 
-    {
-        return GetChecked(0);
-    }
-
-    reference back() 
-    {
-        return GetChecked(GetLastValidIndex());
-    }
-    const_reference back() const 
-    {
-        return GetChecked(GetLastValidIndex());
-    }
-
-    iterator begin() noexcept
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const_iterator begin() const noexcept
-    {
-        return GetAddressOfUnderlyingArray();
-    }
-    const_iterator cbegin() const noexcept
-    {
-        return end();
-    }
-
-    iterator end() noexcept 
-    {
-        return const_cast<iterator>(static_cast<const ThisDataType*>(this)->end());
-    }
-    const_iterator end() const noexcept 
-    {
-        return const_iterator(GetAddressOfUnderlyingArray() + GetOneAfterLastValidIndex());
-    }
-    const_iterator cend() const noexcept 
-    {
-        return end();
-    }
-
-    //reverse_iterator rbegin() noexcept 
-    //{
-    //    return reverse_iterator(end());
-    //}
-    //const_reverse_iterator rbegin() const noexcept 
-    //{
-    //    return const_reverse_iterator(end());
-    //}
-    //const_reverse_iterator crbegin() const noexcept 
-    //{
-    //    return rbegin();
-    //}
-    //iterator rend() and crend() not implemented
-
-    bool empty() const noexcept 
-    {
-        AssertValid();
-        return m_elementsNumCurrent == 0;
-    }
+    STD_ARRAY_UTILITY_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONST_METHODS;
+    STD_ARRAY_UTILITY_VECTORSAFE_CONST_METHODS;
+    STD_ARRAY_UTILITY_NON_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_NON_CONST_METHODS;
+    STD_ARRAY_UTILITY_VECTORSAFE_VECTORSAFEREF_NON_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFEREF_VECTORSAFEREF_NON_CONST_METHODS;
+    STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONSTVECTORSAFE_OPERATOR_EQUIVALENCE;
 };
 
-template< class T, std::size_t N >
-bool operator==(const VectorSafe<T, N>& lhs,
-                const VectorSafe<T, N>& rhs)
-{
-    const size_t lhsSize = lhs.size();
-    if (lhsSize != rhs.size())
-    {
-        return false;
-    }
-    else
-    {
-        for (size_t i = 0; i < lhsSize; ++i)
-        {
-            if (lhs[i] != rhs[i])
-            {
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-template< class T, std::size_t N >
-bool operator!=(const VectorSafe<T, N>& lhs, const VectorSafe<T, N>& rhs)
-{
-    return !(lhs == rhs);
-}
-
-//purposefully don't overload comparison operators for VectorSafe
-
-template< size_t I, class T, size_t N >
-T& get(VectorSafe<T, N>& a) noexcept
-{
-    //if the implementation of this ever changes, update unit tests to cover the new implementation
-    return a.GetChecked(I);
-}
-
-template< size_t I, class T, size_t N >
-T&& get(VectorSafe<T, N>&& a) noexcept
-{
-    //if the implementation of this ever changes, update unit tests to cover the new implementation
-    return a.GetChecked(I);
-}
-
-template< size_t I, class T, size_t N >
-const T& get(VectorSafe<T, N>& a) noexcept
-{
-    //if the implementation of this ever changes, update unit tests to cover the new implementation
-    return a.GetChecked(I);
-}
-
-template< size_t I, class T, size_t N >
-const T&& get(VectorSafe<T, N>&& a) noexcept
-{
-    //if the implementation of this ever changes, update unit tests to cover the new implementation
-    return a.GetChecked(I);
-}
-
-template<class T, size_t size>
-void SortAndRemoveDuplicatesFromVectorSafe(VectorSafe<T, size>*const a)
-{
-    assert(a);
-    std::sort(a->begin(), a->end());
-    RemoveDuplicatesFromSortedVectorSafe(a);
-}
-
-template<class T, size_t size>
-void RemoveDuplicatesFromSortedVectorSafe(VectorSafe<T, size>*const a)
-{
-    assert(a);
-    VectorSafe<T, size>& aRef = *a;
-
-    int uniqueIndex = 0;
-    const size_t currentSize = a->size();
-    for (size_t index = 1; index < currentSize; ++index)
-    {
-        T& previousElement = aRef[index - 1];
-        T& currentElement = aRef[index];
-        if (previousElement != currentElement)
-        {
-            aRef[++uniqueIndex] = currentElement;
-        }
-    }
-    a->size(uniqueIndex + 1);
-}
+#pragma warning(default : 4996)//disallow sprintf() outside of this header                                                                                                             \
