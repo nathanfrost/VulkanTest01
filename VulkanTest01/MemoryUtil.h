@@ -1,6 +1,7 @@
 #pragma once
 
 #include<windows.h>
+#include<assert.h>
 
 ///@todo: refactor to a more sensible translation unit
 #define NTF_STATIC_ASSERT(expr) static_assert(expr, #expr)

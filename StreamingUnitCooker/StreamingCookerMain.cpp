@@ -87,7 +87,7 @@ struct StreamingUnitCooker
 void StreamingUnitCooker::FileNameOutputSet(const char*const filenameNoExtension)
 {
     ArraySafe<char, 512> filenameExtension;
-    filenameExtension.Snprintf("%s.%s", filenameNoExtension, StreamingUnitFilenameExtensionGet());
+    filenameExtension.Sprintf("%s.%s", filenameNoExtension, StreamingUnitFilenameExtensionGet());
     m_fileNameOutput = StreamingUnitCookerString(filenameExtension.begin());
 }
 

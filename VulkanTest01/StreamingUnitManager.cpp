@@ -1,5 +1,7 @@
 #include"StreamingUnitManager.h"
+
 #include"StreamingUnit.h"
+#include"WindowsUtil.h"
 
 #if NTF_UNIT_TEST_STREAMING_LOG
 FILE* s_streamingDebug;
@@ -104,7 +106,7 @@ void StreamingCommandsProcess(
 	VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> streamingUnitsToLoad;
 
     CriticalSectionEnter(&streamingUnitsAddToLoadCriticalSection);
-	streamingUnitsToLoad.Copy(streamingUnitsToAddToLoad);
+	streamingUnitsToLoad.MemcpyFromStart(streamingUnitsToAddToLoad);
 	streamingUnitsToAddToLoad.size(0);
 	CriticalSectionLeave(&streamingUnitsAddToLoadCriticalSection);
    
@@ -172,7 +174,7 @@ void StreamingCommandsProcess(
             VectorSafe<VkSemaphore, 1> transferFinishedSemaphores;
 
             ArraySafe<char, 512> streamingUnitFilePathRelative;
-            streamingUnitFilePathRelative.Snprintf("%s\\%s.%s",
+            streamingUnitFilePathRelative.Sprintf("%s\\%s.%s",
                 CookedFileDirectoryGet(), streamingUnit.m_filenameNoExtension.data(), StreamingUnitFilenameExtensionGet());
             FILE* streamingUnitFile;
 

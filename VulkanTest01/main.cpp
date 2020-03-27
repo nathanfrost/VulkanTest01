@@ -2,6 +2,7 @@
 #include"ntf_vulkan_utility.h"
 #include"StreamingUnitManager.h"
 #include"StreamingUnitTest.h"
+#include"WindowsUtil.h"
 
 #if NTF_DEBUG
 bool s_allowedToIssueStreamingCommands=false;
@@ -62,7 +63,7 @@ static void UnloadStreamingUnitsIfGpuDone(
     VectorSafeRef<StreamingUnitRuntime *> streamingUnitsRenderable, 
     ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated,
     RTL_CRITICAL_SECTION*const deviceLocalMemoryCriticalSectionPtr,
-    ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+    const ConstVectorSafeRef<VulkanPagedStackAllocator>& deviceLocalMemoryStreamingUnits,
     const StreamingUnitRuntime::FrameNumber lastCpuFrameCompleted, 
     const VkDevice& device)
 {
@@ -768,7 +769,7 @@ private:
                 }
 #if NTF_WIN_TIMER
                 WIN_TIMER_STOP(s_frameTimer);
-                FwriteSnprintf(s_winTimer, "s_frameTimer:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(s_frameTimer));
+                FwriteSprintf(s_winTimer, "s_frameTimer:%fms\n", WIN_TIMER_ELAPSED_MILLISECONDS(s_frameTimer));
                 WIN_TIMER_START(s_frameTimer);
 #endif//#if NTF_WIN_TIMER
             }//if (streamingUnitsToRenderNum)
@@ -831,7 +832,7 @@ private:
             }//if (streamingUnitsToRenderNum)
             UnloadStreamingUnitsIfGpuDone(
                 &m_streamingUnitsToUnload, 
-                &m_streamingUnitsRenderable, 
+                &m_streamingUnitsRenderable,
                 &m_deviceLocalMemoryStreamingUnitsAllocated,
                 &m_deviceLocalMemoryCriticalSection,
                 m_deviceLocalMemoryStreamingUnits,

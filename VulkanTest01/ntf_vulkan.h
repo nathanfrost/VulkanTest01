@@ -79,17 +79,6 @@ VkAllocationCallbacks* GetVulkanAllocationCallbacks();
 #if NTF_DEBUG
 size_t GetVulkanApiCpuBytesAllocatedMax();
 #endif//#if NTF_DEBUG
-HANDLE MutexCreate();
-void MutexRelease(const HANDLE mutex);
-HANDLE ThreadSignalingEventCreate();
-BOOL HandleCloseWindows(HANDLE*const h);
-void UnsignalSemaphoreWindows(const HANDLE semaphoreHandle);
-void SignalSemaphoreWindows(const HANDLE semaphoreHandle);
-void WaitForSignalWindows(const HANDLE semaphoreOrMutexHandle);
-void CriticalSectionCreate(RTL_CRITICAL_SECTION*const criticalSectionPtr);
-void CriticalSectionEnter(RTL_CRITICAL_SECTION*const criticalSectionPtr);
-void CriticalSectionLeave(RTL_CRITICAL_SECTION*const criticalSectionPtr);
-void CriticalSectionDelete(RTL_CRITICAL_SECTION*const criticalSectionPtr);
 void TransferImageFromCpuToGpu(
     const VkImage& image,
     const uint32_t width,
@@ -135,8 +124,8 @@ void CopyBufferToImage(
     const VkInstance instance);
 VkResult SubmitCommandBuffer(
     RTL_CRITICAL_SECTION*const criticalSectionPtr,
-    ConstVectorSafeRef<VkSemaphore> signalSemaphores,
-    ConstVectorSafeRef<VkSemaphore> waitSemaphores,
+    const ConstVectorSafeRef<VkSemaphore>& signalSemaphores,
+    const ConstVectorSafeRef<VkSemaphore>& waitSemaphores,
     ArraySafeRef<VkPipelineStageFlags> stagesWhereEachWaitSemaphoreWaits,///<@todo: ConstArraySafeRef
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
@@ -157,7 +146,7 @@ void CreateBuffer(
     const VkPhysicalDevice& physicalDevice);
 VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice);
 void CreateShaderModule(VkShaderModule*const shaderModulePtr, char*const code, const size_t codeSizeBytes, const VkDevice& device);
-bool CheckValidationLayerSupport(ConstVectorSafeRef<const char*> validationLayers);
+bool CheckValidationLayerSupport(const ConstVectorSafeRef<const char*>& validationLayers);
 void CreateImageView(VkImageView*const imageViewPtr, const VkDevice& device, const VkImage& image, const VkFormat& format, const VkImageAspectFlags& aspectFlags);
 void ReadFile(char**const fileData, StackCpu<VkDeviceSize>*const allocatorPtr, size_t*const fileSizeBytesPtr, const char*const filename);
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
@@ -214,7 +203,7 @@ HANDLE CreateThreadWindows(LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParam
 
 void GetRequiredExtensions(VectorSafeRef<const char*>*const requiredExtensions);
 
-VkInstance CreateInstance(ConstVectorSafeRef<const char*> validationLayers);
+VkInstance CreateInstance(const ConstVectorSafeRef<const char*>& validationLayers);
 
 VkDebugReportCallbackEXT SetupDebugCallback(const VkInstance& instance);
 
@@ -242,7 +231,7 @@ struct QueueFamilyIndices
 
 QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice& device, const VkSurfaceKHR& surface);
 
-VkSurfaceFormatKHR ChooseSwapSurfaceFormat(ConstVectorSafeRef<VkSurfaceFormatKHR> availableFormats);
+VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const ConstVectorSafeRef<VkSurfaceFormatKHR>& availableFormats);
 
 VkPresentModeKHR ChooseSwapPresentMode(const VectorSafeRef<VkPresentModeKHR>& availablePresentModes);
 
@@ -264,30 +253,30 @@ void CleanupSwapChain(
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
-    ConstVectorSafeRef<VkFramebuffer> swapChainFramebuffers,
+    const ConstVectorSafeRef<VkFramebuffer>& swapChainFramebuffers,
     const VkCommandPool& commandPool,
-    ConstVectorSafeRef<ArraySafe<VkCommandPool, 2>> commandPoolsSecondary,///<@todo NTF: refactor out magic number 2 (meant to be NTF_OBJECTS_NUM) and either support VectorSafeRef<ArraySafeRef<T>> or repeatedly call FreeCommandBuffers on each VectorSafe outside of this function
+    const ConstVectorSafeRef<ArraySafe<VkCommandPool, 2>>& commandPoolsSecondary,///<@todo NTF: refactor out magic number 2 (meant to be NTF_OBJECTS_NUM) and either support VectorSafeRef<ArraySafeRef<T>> or repeatedly call FreeCommandBuffers on each VectorSafe outside of this function
     const VkRenderPass& renderPass,
-    ConstVectorSafeRef<VkImageView> swapChainImageViews,
+    const ConstVectorSafeRef<VkImageView>& swapChainImageViews,
     const VkSwapchainKHR& swapChain);
 
 void CreateImageViews(
     VectorSafeRef<VkImageView> swapChainImageViewsPtr,
-    ConstVectorSafeRef<VkImage> swapChainImages,
+    const ConstVectorSafeRef<VkImage>& swapChainImages,
     const VkFormat& swapChainImageFormat,
     const VkDevice& device);
 
-bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, ConstVectorSafeRef<const char*> deviceExtensions);
+bool CheckDeviceExtensionSupport(const VkPhysicalDevice& physicalDevice, const ConstVectorSafeRef<const char*>& deviceExtensions);
 
 bool IsDeviceSuitable(
     const VkPhysicalDevice& physicalDevice,
     const VkSurfaceKHR& surface,
-    ConstVectorSafeRef<const char*> deviceExtensions);
+    const ConstVectorSafeRef<const char*>& deviceExtensions);
 
 bool PickPhysicalDevice(
     VkPhysicalDevice*const physicalDevicePtr,
     const VkSurfaceKHR& surface,
-    ConstVectorSafeRef<const char*> deviceExtensions,
+    const ConstVectorSafeRef<const char*>& deviceExtensions,
     const VkInstance& instance);
 
 void CreateLogicalDevice(
@@ -295,8 +284,8 @@ void CreateLogicalDevice(
     VkQueue*const graphicsQueuePtr,
     VkQueue*const presentQueuePtr,
     VkQueue*const transferQueuePtr,
-    ConstVectorSafeRef<const char*> deviceExtensions,
-    ConstVectorSafeRef<const char*> validationLayers,
+    const ConstVectorSafeRef<const char*>& deviceExtensions,
+    const ConstVectorSafeRef<const char*>& validationLayers,
     const QueueFamilyIndices& indices,
     const VkPhysicalDevice& physicalDevice);
 
@@ -425,7 +414,7 @@ void CreateDepthResources(
 
 VkFormat FindSupportedFormat(
     const VkPhysicalDevice& physicalDevice,
-    ConstVectorSafeRef<VkFormat> candidates,
+    const ConstVectorSafeRef<VkFormat>& candidates,
     const VkImageTiling& tiling,
     const VkFormatFeatureFlags& features);
 
@@ -450,7 +439,7 @@ void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& dev
 
 void CreateFramebuffers(
     VectorSafeRef<VkFramebuffer> swapChainFramebuffersPtr,
-    ConstVectorSafeRef<VkImageView> swapChainImageViews,
+    const ConstVectorSafeRef<VkImageView>& swapChainImageViews,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
     const VkImageView& depthImageView,

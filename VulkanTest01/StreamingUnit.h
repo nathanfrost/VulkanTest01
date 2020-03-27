@@ -58,7 +58,7 @@ public:
     void Free(
         ArraySafeRef<bool> deviceLocalMemoryStreamingUnitsAllocated, 
         RTL_CRITICAL_SECTION*const deviceLocalMemoryCriticalSection,
-        ConstVectorSafeRef<VulkanPagedStackAllocator> deviceLocalMemoryStreamingUnits,
+        const ConstVectorSafeRef<VulkanPagedStackAllocator>& deviceLocalMemoryStreamingUnits,
         const bool deallocateBackToGpu,
         const VkDevice& device);
     void Destroy(const VkDevice& device);

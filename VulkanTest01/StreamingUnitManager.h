@@ -11,7 +11,7 @@
 #if NTF_UNIT_TEST_STREAMING_LOG
 extern FILE* s_streamingDebug;
 extern RTL_CRITICAL_SECTION s_streamingDebugCriticalSection;
-#define NTF_LOG_STREAMING(...) FwriteSnprintf(s_streamingDebug, &s_streamingDebugCriticalSection, __VA_ARGS__)
+#define NTF_LOG_STREAMING(...) FwriteSprintf(s_streamingDebug, &s_streamingDebugCriticalSection, __VA_ARGS__)
 #else
 #define NTF_LOG_STREAMING(...)
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
