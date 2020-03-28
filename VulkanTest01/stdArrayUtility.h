@@ -659,7 +659,9 @@ public:
 
     ArraySafeRef(T*const p, const size_t elementsNumMax)
     {
+#if STD_UTILITY_DEBUG
         SetElementsNumMax(elementsNumMax);
+#endif//#if STD_UTILITY_DEBUG
         SetArray(p);
     }
 
@@ -777,7 +779,9 @@ public:
 
     ConstArraySafeRef(const T*const p, const size_t elementsNumMax)
     {
+#if STD_UTILITY_DEBUG
         SetElementsNumMax(elementsNumMax);
+#endif//#if STD_UTILITY_DEBUG
         SetArray(p);
     }
 
@@ -875,8 +879,8 @@ public:
     template<typename U>
     ConstVectorSafeRef(const U& other)
     {
-        SetArray(other.begin());
         SetElementsNumMax(other.size());
+        SetArray(other.begin());
     }
 
     void Reset()
