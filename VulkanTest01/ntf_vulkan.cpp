@@ -1945,7 +1945,7 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
 
     TextureSerialize1<SerializerRuntimeIn>(
         streamingUnitFile,
-        &ArraySafeRef<StreamingUnitByte>(), 
+        ConstArraySafeRef<StreamingUnitByte>(), 
         &stagingBufferMemoryMapCpuToGpuStack, 
         alignment, 
         imageSizeBytes,

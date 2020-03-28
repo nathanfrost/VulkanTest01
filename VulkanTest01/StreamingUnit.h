@@ -138,7 +138,7 @@ public:
         Fwrite(file, data, sizeof(*data), 1);
     }
     template<class T>
-    inline static void Execute(FILE*const file, ArraySafeRef<T> arraySafe, const size_t elementsNum)
+    inline static void Execute(FILE*const file, ConstArraySafeRef<T> arraySafe, const size_t elementsNum)
     {
         assert(file);
         assert(elementsNum > 0);
@@ -148,7 +148,7 @@ public:
     inline static void Execute(
         FILE*const file,
         const ElementNumType arrayNum,
-        ArraySafeRef<ElementType> arrayCookerOut,
+        ConstArraySafeRef<ElementType> arrayCookerOut,
         ArraySafeRef<StreamingUnitByte>,
         StackCpu<VkDeviceSize>*const,
         const VkDeviceSize,
@@ -180,7 +180,7 @@ public:
     inline static void Execute(
         FILE*const file, 
         const ElementNumType arrayNum,
-        ArraySafeRef<ElementType> arrayCookerOut,
+        ConstArraySafeRef<ElementType> arrayCookerOut,
         ArraySafeRef<StreamingUnitByte> bufferRuntimeIn,
         StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
         const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn,
@@ -228,7 +228,7 @@ inline void TextureSerialize0(
 template<class Serializer>
 inline void TextureSerialize1(   
     FILE*const file,
-    ArraySafeRef<StreamingUnitByte> pixelsCookOut,
+    ConstArraySafeRef<StreamingUnitByte> pixelsCookOut,
     StackCpu<VkDeviceSize>* stagingBufferMemoryMapCpuToGpuRuntimeIn,
     const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn,
     const size_t bufferSizeBytes,
@@ -252,7 +252,7 @@ inline void VertexBufferSerialize(
     StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeIn,
     StreamingUnitVerticesNum*const verticesNum,
-    ArraySafeRef<Vertex> verticesCookerOut,
+    ConstArraySafeRef<Vertex> verticesCookerOut,
     ArraySafeRef<StreamingUnitByte> vertexBufferRuntimeIn,
     size_t*const vertexBufferSizeBytesRuntimeIn,
     const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn)
@@ -278,7 +278,7 @@ inline void IndexBufferSerialize(
     StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeIn,
     StreamingUnitIndicesNum*const indicesNum,
-    ArraySafeRef<IndexBufferValue> indicesCookerOut,
+    ConstArraySafeRef<IndexBufferValue> indicesCookerOut,
     ArraySafeRef<StreamingUnitByte> indexBufferRuntimeIn,
     size_t*const indexBufferSizeBytesRuntimeIn,
     const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn)

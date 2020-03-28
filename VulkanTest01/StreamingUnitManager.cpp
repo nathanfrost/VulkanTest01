@@ -251,7 +251,7 @@ void StreamingCommandsProcess(
                     &stagingBufferMemoryMapCpuToGpu,
                     &stagingBufferGpuOffsetToAllocatedBlock,
                     &verticesNum,
-                    ArraySafeRef<Vertex>(),
+                    ConstArraySafeRef<Vertex>(),
                     stagingBufferCpuToGpuVertices,
                     &vertexBufferSizeBytes,
                     stagingBufferGpuAlignmentStandard);
@@ -279,7 +279,7 @@ void StreamingCommandsProcess(
                     &stagingBufferMemoryMapCpuToGpu,
                     &stagingBufferGpuOffsetToAllocatedBlock,
                     &indicesNum,
-                    ArraySafeRef<IndexBufferValue>(),
+                    ConstArraySafeRef<IndexBufferValue>(),
                     stagingBufferCpuToGpuIndices,
                     &indexBufferSizeBytes,
                     stagingBufferGpuAlignmentStandard);

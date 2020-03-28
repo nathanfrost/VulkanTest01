@@ -139,7 +139,7 @@ void StreamingUnitCooker::Cook()
 
         TextureSerialize0<SerializerCookerOut>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook);
         const size_t imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
-        TextureSerialize1<SerializerCookerOut>(f, ArraySafeRef<StreamingUnitByte>(pixels, imageSizeBytes), nullptr, 0, imageSizeBytes, nullptr);
+        TextureSerialize1<SerializerCookerOut>(f, ConstArraySafeRef<StreamingUnitByte>(pixels, imageSizeBytes), nullptr, 0, imageSizeBytes, nullptr);
         STBIImageFree(pixels, g_stbAllocator);
 
         //cook and write vertex and index buffers
@@ -205,7 +205,7 @@ void StreamingUnitCooker::Cook()
         assert(vertices.size() > 0);
         assert(indices.size() > 0);
         StreamingUnitVerticesNum verticesNum = CastWithAssert<size_t, StreamingUnitVerticesNum>(vertices.size());
-        ArraySafeRef<Vertex> verticesArraySafe(&vertices[0], verticesNum);
+        ConstArraySafeRef<Vertex> verticesArraySafe(&vertices[0], verticesNum);
         VertexBufferSerialize<SerializerCookerOut>(
             f,
             nullptr,
@@ -217,7 +217,7 @@ void StreamingUnitCooker::Cook()
             0);
 
         StreamingUnitIndicesNum indicesNum = CastWithAssert<size_t, StreamingUnitIndicesNum>(indices.size());
-        ArraySafeRef<IndexBufferValue> indicesArraySafe(&indices[0], indices.size());
+        ConstArraySafeRef<IndexBufferValue> indicesArraySafe(&indices[0], indices.size());
         IndexBufferSerialize<SerializerCookerOut>(
             f, 
             nullptr, 
