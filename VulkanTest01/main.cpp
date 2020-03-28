@@ -458,13 +458,13 @@ private:
          
         //#CommandPoolDuplication
         AllocateCommandBuffers(
-            &ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
+            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
             m_commandPoolTransfer,
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             1,
             m_device);
         AllocateCommandBuffers(
-			&ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
+			ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
             m_commandPoolTransitionImage,
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             1,
