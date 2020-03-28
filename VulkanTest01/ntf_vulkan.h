@@ -126,7 +126,7 @@ VkResult SubmitCommandBuffer(
     RTL_CRITICAL_SECTION*const criticalSectionPtr,
     const ConstVectorSafeRef<VkSemaphore>& signalSemaphores,
     const ConstVectorSafeRef<VkSemaphore>& waitSemaphores,
-    ArraySafeRef<VkPipelineStageFlags> stagesWhereEachWaitSemaphoreWaits,///<@todo: ConstArraySafeRef
+    const ConstArraySafeRef<VkPipelineStageFlags>& stagesWhereEachWaitSemaphoreWaits,
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
     const VkFence& fenceToSignalWhenCommandBufferDone,
@@ -326,7 +326,7 @@ void FillCommandBufferPrimary(
     StreamingUnitRuntime::FrameNumber*const streamingUnitLastFrameSubmittedPtr,
     const StreamingUnitRuntime::FrameNumber currentFrameNumber,
     const VkCommandBuffer& commandBufferPrimary,
-    const ArraySafeRef<TexturedGeometry> texturedGeometries,
+    const ConstArraySafeRef<TexturedGeometry>& texturedGeometries,
     const VkDescriptorSet descriptorSet,
     const size_t objectNum,
     const size_t drawCallsPerObjectNum,
@@ -368,7 +368,7 @@ void CreateDescriptorSet(
     const VkDescriptorPool& descriptorPool,
     const VkBuffer& uniformBuffer,
     const VkDeviceSize uniformBufferSize,
-    const ArraySafeRef<VkImageView> textureImageViews,
+    const ConstArraySafeRef<VkImageView>& textureImageViews,
     const size_t texturesNum,
     const VkSampler textureSampler,
     const VkDevice& device);

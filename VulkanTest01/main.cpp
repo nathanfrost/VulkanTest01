@@ -487,7 +487,7 @@ private:
             nullptr,//no need to critical section, since currently only the main thread is running and we guard against launching the asset loading thread until this command buffer completes
             ConstVectorSafeRef<VkSemaphore>(),
             ConstVectorSafeRef<VkSemaphore>(),
-            ArraySafeRef<VkPipelineStageFlags>(),
+            ConstArraySafeRef<VkPipelineStageFlags>(),
             m_commandBufferTransitionImage,
             m_graphicsQueue,
             initializationDone,
@@ -506,9 +506,9 @@ private:
             streamingUnit.Initialize(m_device);
             streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemoryBasicModel
         }
-        m_streamingUnits[0].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest0), strlen(g_streamingUnitName_UnitTest0));
-        m_streamingUnits[1].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest1), strlen(g_streamingUnitName_UnitTest1));
-        m_streamingUnits[2].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest2), strlen(g_streamingUnitName_UnitTest2));
+        m_streamingUnits[0].m_filenameNoExtension = ConstArraySafeRef<char>(g_streamingUnitName_UnitTest0, strlen(g_streamingUnitName_UnitTest0));
+        m_streamingUnits[1].m_filenameNoExtension = ConstArraySafeRef<char>(g_streamingUnitName_UnitTest1, strlen(g_streamingUnitName_UnitTest1));
+        m_streamingUnits[2].m_filenameNoExtension = ConstArraySafeRef<char>(g_streamingUnitName_UnitTest2, strlen(g_streamingUnitName_UnitTest2));
 
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         
@@ -744,7 +744,7 @@ private:
                         &streamingUnit.m_lastSubmittedCpuFrame,
                         m_frameNumberCurrentCpu,
                         commandBufferPrimary,
-                        &streamingUnit.m_texturedGeometries,///<@todo: ConstArraySafe
+                        streamingUnit.m_texturedGeometries,
                         streamingUnit.m_descriptorSet,
                         NTF_OBJECTS_NUM,
                         NTF_DRAWS_PER_OBJECT_NUM,
@@ -789,7 +789,7 @@ private:
                     &m_graphicsQueueCriticalSection,
                     signalSemaphores,
                     ConstVectorSafeRef<VkSemaphore>(&imageAvailableSemaphore, 1),
-                    ArraySafeRef<VkPipelineStageFlags>(&waitStages, 1),///<@todo: ArraySafeRefConst
+                    ConstArraySafeRef<VkPipelineStageFlags>(&waitStages, 1),
                     commandBufferPrimary,
                     m_graphicsQueue,
                     drawFrameFinishedFence.m_fence,

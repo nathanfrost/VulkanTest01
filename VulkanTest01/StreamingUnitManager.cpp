@@ -316,7 +316,7 @@ void StreamingCommandsProcess(
                 transferQueueCriticalSection,
                 transferFinishedSemaphores,
                 ConstVectorSafeRef<VkSemaphore>(),
-                ArraySafeRef<VkPipelineStageFlags>(),
+                ConstArraySafeRef<VkPipelineStageFlags>(),
                 commandBufferTransfer,
                 transferQueue,
                 streamingUnit.m_transferQueueFinishedFence,
@@ -329,7 +329,7 @@ void StreamingCommandsProcess(
                     &graphicsQueueCriticalSection,
                     ConstVectorSafeRef<VkSemaphore>(),
                     transferFinishedSemaphores,
-                    ArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),///<@todo: ArraySafeRefConst
+                    ConstArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),
                     commandBufferTransitionImage,
                     graphicsQueue,
                     streamingUnit.m_graphicsQueueFinishedFence,
@@ -354,7 +354,7 @@ void StreamingCommandsProcess(
                 streamingUnit.m_descriptorPool,
                 streamingUnit.m_uniformBuffer,
                 uniformBufferSize,
-                &streamingUnit.m_textureImageViews,///<@todo NTF: @todo: ConstArraySafeRef that does not need ambersand here
+                streamingUnit.m_textureImageViews,
                 TODO_REFACTOR_NUM,
                 streamingUnit.m_textureSampler,
                 device);

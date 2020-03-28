@@ -69,7 +69,7 @@ public:
     enum class State:size_t {kUnloaded, kLoading, kLoaded} m_state;
     State StateCriticalSection();
 
-    ArraySafeRef<char> m_filenameNoExtension;///<@todo: ConstArraySafeRef
+    ConstArraySafeRef<char> m_filenameNoExtension;
     VkSampler m_textureSampler;
 #define TODO_REFACTOR_NUM 2//is NTF_OBJECTS_NUM -- todo: generalize #StreamingMemoryBasicModel
     ArraySafe<TexturedGeometry, TODO_REFACTOR_NUM> m_texturedGeometries;
