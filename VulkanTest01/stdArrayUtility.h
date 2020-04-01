@@ -348,6 +348,10 @@ assert(sizeof(T) % alignment == 0);                                             
 SetElementsNumMax(elementsNumMax);                                                                                      \
 SetArray(p);
 
+#define STD_ARRAY_UTILITY_ARRAYSAFE_CONSTRUCTOR_ARRAYSAFE_SHARED_BODY                                                   \
+assert(elementsNum > 0);                                                                                                \
+MemcpyFromStart(r.data(), elementsNum * sizeof(T));
+
 
 #define STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_FUNCTION_SIGNATURE void MemcpyFromIndex(const void*const input, const size_t index, const size_t inputBytesNum)
 #define STD_ARRAY_UTILITY_MEMPCY_FROM_INDEX_VECTOR_BODY                                                                                                 \
@@ -975,7 +979,7 @@ public:
         assert(f);
         assert(elementsNum > 0);
         assert(elementsNum <= kElementsNum);
-        Fread(f, &m_array[0], sizeof(T), elementsNum);
+        Fread(f, elementsNum);
     }
     ArraySafe(const std::initializer_list<T>& initializerList)
     {
@@ -994,13 +998,13 @@ public:
     {
         MemcpyFromStart(r);
     }
-    ArraySafe(ArraySafeRef<T> r)
+    ArraySafe(ArraySafeRef<T> r, const size_t elementsNum)
     {
-        MemcpyFromStart(r);
+        STD_ARRAY_UTILITY_ARRAYSAFE_CONSTRUCTOR_ARRAYSAFE_SHARED_BODY;
     }
-    ArraySafe(const ConstArraySafeRef<T>& r)
+    ArraySafe(const ConstArraySafeRef<T>& r, const size_t elementsNum)
     {
-        MemcpyFromStart(r);
+        STD_ARRAY_UTILITY_ARRAYSAFE_CONSTRUCTOR_ARRAYSAFE_SHARED_BODY;
     }
     template<size_t kOtherElementsMax>
     ArraySafe(const VectorSafe<T, kOtherElementsMax>& other)
