@@ -326,7 +326,7 @@ private:
         }
 
         CleanupSwapChain(
-            &m_commandBuffersPrimary,
+            m_commandBuffersPrimary,
             m_device,
             m_depthImageView,
             m_depthImage,

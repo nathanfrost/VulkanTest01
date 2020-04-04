@@ -249,7 +249,7 @@ void CreateSwapChain(
     const VkDevice& device);
 
 void CleanupSwapChain(
-    VectorSafeRef<VkCommandBuffer> commandBuffersPrimary,
+    const ConstVectorSafeRef<VkCommandBuffer>& commandBuffersPrimary,
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,

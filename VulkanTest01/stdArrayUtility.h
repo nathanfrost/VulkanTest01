@@ -788,8 +788,8 @@ public:
     //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     //    AssertValid();
     //}
-    //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability
-    ///@todo: work out why this doesn't work, or why it can't work
+
+    //can't do this, because it would allow *this to be initialized with a (Const)VectorSafe(Ref), and read elements between (Const)VectorSafe(Ref)::size() and (Const)VectorSafe(Ref)::SizeMax()
 //    template<typename U>
 //    ConstArraySafeRef(const U& other)
 //    {

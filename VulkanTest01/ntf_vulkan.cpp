@@ -2504,14 +2504,14 @@ void CreateSwapChain(
     swapChainExtent = extent;
 }
 
-void FreeCommandBuffers(ArraySafeRef<VkCommandBuffer> commandBuffers, const uint32_t commandBuffersNum, const VkDevice& device, const VkCommandPool& commandPool)
+void FreeCommandBuffers(const ConstArraySafeRef<VkCommandBuffer>& commandBuffers, const uint32_t commandBuffersNum, const VkDevice& device, const VkCommandPool& commandPool)
 {
     assert(commandBuffersNum > 0);
     vkFreeCommandBuffers(device, commandPool, commandBuffersNum, commandBuffers.data());
 }
 
 void CleanupSwapChain(
-    VectorSafeRef<VkCommandBuffer> commandBuffersPrimary,
+    const ConstVectorSafeRef<VkCommandBuffer>& commandBuffersPrimary,
     const VkDevice& device,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
@@ -2535,7 +2535,7 @@ void CleanupSwapChain(
 
     //return command buffers to the pool from whence they came
     const size_t secondaryCommandBufferPerThread = 1;
-    FreeCommandBuffers(&commandBuffersPrimary, CastWithAssert<size_t, uint32_t>(commandBuffersPrimary.size()), device, commandPoolPrimary);
+    FreeCommandBuffers(commandBuffersPrimary, CastWithAssert<size_t, uint32_t>(commandBuffersPrimary.size()), device, commandPoolPrimary);
 
     vkDestroyRenderPass(device, renderPass, GetVulkanAllocationCallbacks());
 
