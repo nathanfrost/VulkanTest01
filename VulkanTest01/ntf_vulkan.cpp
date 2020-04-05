@@ -1650,7 +1650,7 @@ void CreateDescriptorSet(
 
     VkDescriptorBufferInfo bufferInfo = {};
     bufferInfo.buffer = uniformBuffer;
-    bufferInfo.offset = 0;
+    bufferInfo.offset = 0;//VkPhysicalDeviceLimits::minUniformBufferOffsetAlignment is the minimum required alignment, in bytes, for the offset member of the VkDescriptorBufferInfo structure for uniform buffers. When a descriptor of type VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER or VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC is updated, the offset must be an integer multiple of this limit. Similarly, dynamic offsets for uniform buffers must be multiples of this limit.
     bufferInfo.range = uniformBufferSize;
 
     VkDescriptorImageInfo samplerInfo = {};
