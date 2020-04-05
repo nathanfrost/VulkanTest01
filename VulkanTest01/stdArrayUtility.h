@@ -23,6 +23,18 @@ typedef T value_type
 typedef T* iterator;                        \
 typedef T& reference                        \
 
+#define STD_ARRAY_UTILITY_NONCONST_REF_PRIVATE_METHODS  \
+void SetArray(T*const p)                                \
+{                                                       \
+    m_array = p;                                        \
+}
+
+#define STD_ARRAY_UTILITY_CONST_REF_PRIVATE_METHODS     \
+void SetArray(const T*const p)                          \
+{                                                       \
+    m_array = p;                                        \
+}
+
 #define STD_ARRAY_UTILITY_CONST_METHODS                                                                                                             \
 const T* data() const                                                                                                                               \
 {                                                                                                                                                   \
@@ -488,10 +500,6 @@ private:
     size_t m_elementsNumMax;
 #endif//#if STD_UTILITY_DEBUG
 
-    void SetArray(T* p)
-    {
-        m_array = p;
-    }
     void SetElementsNumCurrent(const size_t elementsNumCurrent)
     {
         assert(m_elementsNumCurrent);
@@ -509,6 +517,8 @@ private:
         m_elementsNumMax = elementsNumMax;
 #endif//#if STD_UTILITY_DEBUG
     }
+
+    STD_ARRAY_UTILITY_NONCONST_REF_PRIVATE_METHODS;
 
 public:
     //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability.  In terms of performance, I'm trusting compilers to simply reference a single class of *this's pointers rather than duplicating them; note that C++ does allow ConstVectorSafe and ConstArraySafe to be passed by const&, leaving no chance of unnecessarily duplicated pointers
@@ -636,16 +646,14 @@ private:
     {
         assert(size <= m_elementsNumMax);
     }//to allow implementation of STD_ARRAY_UTILITY_SPRINTF_VA_LIST_BODY()
-    void SetArray(T* p)
-    {
-        m_array = p;
-    }
     void SetElementsNumMax(const size_t elementsNumMax)
     {
 #if STD_UTILITY_DEBUG
         m_elementsNumMax = elementsNumMax;
 #endif//#if STD_UTILITY_DEBUG
     }
+
+    STD_ARRAY_UTILITY_NONCONST_REF_PRIVATE_METHODS;
 
     T* m_array;
 #if STD_UTILITY_DEBUG
@@ -763,16 +771,14 @@ public:
     STD_ARRAY_UTILITY_CONST_TYPEDEFS;
 
 private:
-    void SetArray(const T*const p)
-    {
-        m_array = p;
-    }
     void SetElementsNumMax(const size_t elementsNumMax)
     {
 #if STD_UTILITY_DEBUG
         m_elementsNumMax = elementsNumMax;
 #endif//#if STD_UTILITY_DEBUG
     }
+
+    STD_ARRAY_UTILITY_CONST_REF_PRIVATE_METHODS;
 
     const T* m_array;
 #if STD_UTILITY_DEBUG
@@ -902,15 +908,12 @@ private:
     const T* m_array;
     size_t m_elementsNumMax;
 
-    void SetArray(const T*const p)
-    {
-        m_array = p;
-    }
     void SetElementsNumMax(const size_t elementsNumMax)
     {
         m_elementsNumMax = elementsNumMax;
     }
 
+    STD_ARRAY_UTILITY_CONST_REF_PRIVATE_METHODS;
 public:
     ConstVectorSafeRef()
     {
