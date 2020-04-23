@@ -1518,6 +1518,6 @@ int main()
 
     //done!
     printf("Unit test SUCCESS!\n");
-    ConsolePauseForUserAcknowledgement();
+    //ConsolePauseForUserAcknowledgement();
     return 0;
 }

@@ -219,17 +219,34 @@ void QuerySwapChainSupport(SwapChainSupportDetails*const swapChainSupportDetails
 
 struct QueueFamilyIndices
 {
-    int graphicsFamily = -1;
-    int presentFamily = -1;
-    int transferFamily = -1;
+    typedef int Datatype;
+    enum Type:Datatype {kGraphicsQueue, kComputeQueue, kTransferQueue, kPresentQueue, kTypeSize, kUninitialized = -1};
+    ArraySafe<Datatype, Type::kTypeSize> index;
+#define NTF_QUEUE_NUM_EXCLUDING_PRESENT Type::kTypeSize - 1
+    const ArraySafe<VkQueueFlagBits, NTF_QUEUE_NUM_EXCLUDING_PRESENT> kFamilyIndicesQueueFlags = ArraySafe<VkQueueFlagBits, NTF_QUEUE_NUM_EXCLUDING_PRESENT>(
+        {VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT, VK_QUEUE_TRANSFER_BIT});//mirrors QueueFamily, except present queue, which is unfortunately a special case in Vulkan and has no VK_QUEUE_PRESENT_BIT
+    QueueFamilyIndices()
+    {
+        for (auto& familyIndex : index)
+        {
+            familyIndex = kUninitialized;
+        }
+    }
 
     bool IsComplete()
     {
-        return graphicsFamily >= 0 && presentFamily >= 0 && transferFamily >= 0;
+        for (const auto& familyIndex : index)
+        {
+            if (familyIndex == kUninitialized)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 };
 
-QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice& device, const VkSurfaceKHR& surface);
+void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkPhysicalDevice& device, const VkSurfaceKHR& surface);
 
 VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const ConstVectorSafeRef<VkSurfaceFormatKHR>& availableFormats);
 

@@ -418,7 +418,7 @@ private:
         }
 
         NTFVulkanInitialize(m_physicalDevice);
-        m_queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
+        FindQueueFamilies(&m_queueFamilyIndices, m_physicalDevice, m_surface);
         CriticalSectionCreate(&m_graphicsQueueCriticalSection);
 		CriticalSectionCreate(&m_streamingUnitsAddToLoadCriticalSection);
 		CriticalSectionCreate(&m_streamingUnitsAddToRenderableCriticalSection);
@@ -445,9 +445,9 @@ private:
         CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
         CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
         
-        CreateCommandPool(&m_commandPoolPrimary, m_queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
-        CreateCommandPool(&m_commandPoolTransitionImage, m_queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
-        CreateCommandPool(&m_commandPoolTransfer, m_queueFamilyIndices.transferFamily, m_device, m_physicalDevice);
+        CreateCommandPool(&m_commandPoolPrimary, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue], m_device, m_physicalDevice);
+        CreateCommandPool(&m_commandPoolTransitionImage, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue], m_device, m_physicalDevice);
+        CreateCommandPool(&m_commandPoolTransfer, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kTransferQueue], m_device, m_physicalDevice);
 
         m_deviceLocalMemoryPersistent.Initialize(m_device, m_physicalDevice);
         for (auto& vulkanPagedStackAllocator : m_deviceLocalMemoryStreamingUnits)
@@ -518,7 +518,7 @@ private:
         {
             for (auto& commandPoolSecondary : commandPoolSecondaryArray)
             {
-                CreateCommandPool(&commandPoolSecondary, m_queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
+                CreateCommandPool(&commandPoolSecondary, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue], m_device, m_physicalDevice);
             }
         }
 

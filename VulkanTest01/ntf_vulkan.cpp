@@ -3,6 +3,8 @@
 #include"StreamingCookAndRuntime.h"
 #include"WindowsUtil.h"
 
+#pragma warning(disable:4800)//forcing value to bool 'true' or 'false' (performance warning) -- seems inconsistently applied, and not generally helpful
+
 //extern LARGE_INTEGER g_queryPerformanceFrequency;
 
 bool g_deviceDiagnosticCheckpointsSupported;
@@ -830,7 +832,8 @@ bool IsDeviceSuitable(
     const VkSurfaceKHR& surface,
     const ConstVectorSafeRef<const char*>& deviceExtensions)
 {
-    QueueFamilyIndices indices = FindQueueFamilies(physicalDevice, surface);
+    QueueFamilyIndices indices;
+    FindQueueFamilies(&indices, physicalDevice, surface);
     const bool extensionsSupported = CheckDeviceExtensionSupport(physicalDevice, deviceExtensions);
     bool swapChainAdequate = false;
     if (extensionsSupported)
@@ -912,7 +915,7 @@ void CreateLogicalDevice(
 
     const uint32_t queueFamiliesNum = 3;
     VectorSafe<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos(0);
-    VectorSafe<int, queueFamiliesNum> uniqueQueueFamilies({ indices.graphicsFamily, indices.presentFamily, indices.transferFamily });
+    VectorSafe<int, queueFamiliesNum> uniqueQueueFamilies({ indices.index[QueueFamilyIndices::Type::kGraphicsQueue], indices.index[QueueFamilyIndices::Type::kPresentQueue], indices.index[QueueFamilyIndices::Type::kTransferQueue] });
     uniqueQueueFamilies.SortAndRemoveDuplicates();
 
     const float queuePriority = 1.0f;
@@ -950,9 +953,9 @@ void CreateLogicalDevice(
     const VkResult createDeviceResult = vkCreateDevice(physicalDevice, &createInfo, GetVulkanAllocationCallbacks(), &device);
     NTF_VK_ASSERT_SUCCESS(createDeviceResult);
 
-    vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
-    vkGetDeviceQueue(device, indices.presentFamily, 0, &presentQueue);
-    vkGetDeviceQueue(device, indices.transferFamily, 0, &transferQueue);
+    vkGetDeviceQueue(device, indices.index[QueueFamilyIndices::Type::kGraphicsQueue], 0, &graphicsQueue);
+    vkGetDeviceQueue(device, indices.index[QueueFamilyIndices::Type::kPresentQueue], 0, &presentQueue);
+    vkGetDeviceQueue(device, indices.index[QueueFamilyIndices::Type::kTransferQueue], 0, &transferQueue);
 }
 
 void DescriptorTypeAssertOnInvalid(const VkDescriptorType descriptorType)
@@ -2282,62 +2285,174 @@ void QuerySwapChainSupport(SwapChainSupportDetails*const swapChainSupportDetails
     }
 }
 
-QueueFamilyIndices FindQueueFamilies(const VkPhysicalDevice& device, const VkSurfaceKHR& surface)
+static void SearchForQueueIndices(
+    QueueFamilyIndices*const queueFamilyIndicesPtr, 
+    const int queueFamilyCount, 
+    const ConstVectorSafeRef<VkQueueFamilyProperties>& queueFamilyProperties, 
+    const VkPhysicalDevice& device, 
+    const VkSurfaceKHR& surface,
+    void(*AssignmentMethod)(QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::Datatype queueFamilyIndex))
 {
-    QueueFamilyIndices indices;
+    NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
+    assert(AssignmentMethod);
+
+    for (QueueFamilyIndices::Datatype queueFamilyIndex = 0; queueFamilyIndex < queueFamilyCount; ++queueFamilyIndex)
+    {
+        const VkQueueFamilyProperties& queueFamilyProperty = queueFamilyProperties[queueFamilyIndex];
+        if (queueFamilyProperty.queueCount > 0)
+        {
+            VkBool32 presentSupport = false;
+            vkGetPhysicalDeviceSurfaceSupportKHR(device, queueFamilyIndex, surface, &presentSupport);
+            AssignmentMethod(&queueFamilyIndices, presentSupport, queueFamilyProperty.queueFlags, queueFamilyIndex);
+        }
+    }
+}
+
+void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkPhysicalDevice& device, const VkSurfaceKHR& surface)
+{
+    NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
 
     uint32_t queueFamilyCount = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-    VectorSafe<VkQueueFamilyProperties, 8> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+    VectorSafe<VkQueueFamilyProperties, 8> queueFamilyProperties(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilyProperties.data());
 
-    for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < queueFamilyCount; ++queueFamilyIndex)
+    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, device, surface, 
+        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::Datatype queueFamilyIndex) 
+            { 
+                NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
+
+                //use maximally specialized queue if possible -- eg a queue that solely performs one function
+                for (int queueFamilyType = 0; queueFamilyType < QueueFamilyIndices::Type::kTypeSize; ++queueFamilyType)
+                {
+                    auto& queueFamilyIndexToSet = queueFamilyIndices.index[queueFamilyType];
+                    if (queueFamilyIndexToSet == QueueFamilyIndices::kUninitialized)
+                    {
+                        if (queueFamilyType == QueueFamilyIndices::Type::kPresentQueue)
+                        {
+                            if (presentSupport && queueFlags == 0)
+                            {
+                                queueFamilyIndexToSet = queueFamilyIndex;
+                            }
+                        }
+                        else
+                        {
+                            const VkQueueFlags queueFlagsOnlyGraphicsComputeTransferBits = queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT);
+                            if ((queueFlagsOnlyGraphicsComputeTransferBits & ~(queueFamilyIndices.kFamilyIndicesQueueFlags[queueFamilyType])) == 0 && !presentSupport)
+                            {
+                                queueFamilyIndexToSet = queueFamilyIndex;
+                            }
+                        }
+                    }
+                }
+            } 
+        }
+    );
+
+    if (queueFamilyIndices.IsComplete())
     {
-        const VkQueueFamilyProperties& queueFamilyProperties = queueFamilies[queueFamilyIndex];
-        if (queueFamilyProperties.queueCount > 0)
-        {
-            ///@todo NTF: add logic to explicitly prefer a physical device that supports drawing and presentation in the same queue for improved performance rather than use presentFamily and graphicsFamily as separate queues
-            if ((queueFamilyProperties.queueFlags & VK_QUEUE_TRANSFER_BIT) && !(queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT))
-            {
-                indices.transferFamily = queueFamilyIndex;
-            }
-            
-            if (queueFamilyProperties.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-            {
-                indices.graphicsFamily = queueFamilyIndex;//queue supports rendering functionality
-            }
-
-            VkBool32 presentSupport = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR(device, queueFamilyIndex, surface, &presentSupport);
-            if (presentSupport)
-            {
-                indices.presentFamily = queueFamilyIndex;//queue supports present functionality
-            }
-        }
-
-        if (indices.IsComplete())
-        {
-            break;
-        }
+        return;
     }
 
-    if (indices.transferFamily < 0)//couldn't find a specialized transfer queue (here defined to be a queue that supports transfer but not graphics)
-    {
-        for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < queueFamilyCount; ++queueFamilyIndex)
-        {
-            const VkQueueFamilyProperties& queueFamilyProperties = queueFamilies[queueFamilyIndex];
-            if (queueFamilyProperties.queueCount > 0)
+    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, device, surface,
+        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::Datatype queueFamilyIndex)
             {
-                if (queueFamilyProperties.queueFlags & VK_QUEUE_TRANSFER_BIT)
+                NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
+
+                for (int queueFamilyType = 0; queueFamilyType < QueueFamilyIndices::Type::kTypeSize; ++queueFamilyType)
                 {
-                    indices.transferFamily = queueFamilyIndex;//accept any queue that supports transfer
-                    break;
+                    auto& queueFamilyIndexToSet = queueFamilyIndices.index[queueFamilyType];
+
+                    if (queueFamilyIndexToSet == QueueFamilyIndices::Type::kUninitialized)
+                    {
+                        const bool graphicsSupport = queueFlags & VK_QUEUE_GRAPHICS_BIT;
+                        const bool transferSupport = queueFlags & VK_QUEUE_TRANSFER_BIT;
+                        const bool computeSupport = queueFlags & VK_QUEUE_COMPUTE_BIT;
+
+                        if ((queueFamilyType == QueueFamilyIndices::Type::kPresentQueue || queueFamilyType == QueueFamilyIndices::Type::kGraphicsQueue) && 
+                            graphicsSupport && presentSupport && !transferSupport && !computeSupport)
+                        {
+                            queueFamilyIndexToSet = queueFamilyIndex;//take a queue specialized for graphics/present
+                        }
+                        else if (   (queueFamilyType == QueueFamilyIndices::Type::kComputeQueue || queueFamilyType == QueueFamilyIndices::Type::kTransferQueue) &&
+                                    computeSupport && transferSupport && !graphicsSupport && !presentSupport)
+                        {
+                            queueFamilyIndexToSet = queueFamilyIndex;//take a queue specialized for compute/transfer
+                        }
+                    }
                 }
             }
         }
+    );
+
+    if (queueFamilyIndices.IsComplete())
+    {
+        return;
     }
 
-    return indices;
+    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, device, surface,
+        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::Datatype queueFamilyIndex)
+            {
+                NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
+
+                for (int queueFamilyType = 0; queueFamilyType < QueueFamilyIndices::Type::kTypeSize; ++queueFamilyType)
+                {
+                    auto& queueFamilyIndexToSet = queueFamilyIndices.index[queueFamilyType];
+
+                    if (queueFamilyIndexToSet == QueueFamilyIndices::Type::kUninitialized)
+                    {
+                        const bool graphicsSupport = queueFlags & VK_QUEUE_GRAPHICS_BIT;
+                        const bool transferSupport = queueFlags & VK_QUEUE_TRANSFER_BIT;
+                        const bool computeSupport = queueFlags & VK_QUEUE_COMPUTE_BIT;
+
+                        if ((queueFamilyType == QueueFamilyIndices::Type::kPresentQueue || queueFamilyType == QueueFamilyIndices::Type::kGraphicsQueue) &&
+                            graphicsSupport && presentSupport && !computeSupport)
+                        {
+                            queueFamilyIndexToSet = queueFamilyIndex;//take a queue specialized for graphics/present but not compute
+                        }
+                        else if ((queueFamilyType == QueueFamilyIndices::Type::kComputeQueue || queueFamilyType == QueueFamilyIndices::Type::kTransferQueue) &&
+                                computeSupport && transferSupport && !graphicsSupport)
+                        {
+                            queueFamilyIndexToSet = queueFamilyIndex;//take a queue specialized for compute/transfer but not graphics
+                        }
+                    }
+                }
+            }
+        }
+    );
+
+    if (queueFamilyIndices.IsComplete())
+    {
+        return;
+    }
+
+    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, device, surface,
+        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::Datatype queueFamilyIndex)
+            {
+                NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
+
+                //couldn't find specialized queues, so just get the first one that supports the necessary functionality
+                for (int queueFamilyType = 0; queueFamilyType < QueueFamilyIndices::Type::kTypeSize; ++queueFamilyType)
+                {
+                    auto& queueFamilyIndexToSet = queueFamilyIndices.index[queueFamilyType];
+                    if (queueFamilyIndexToSet == QueueFamilyIndices::Type::kUninitialized)
+                    {
+                        if (queueFamilyIndexToSet == QueueFamilyIndices::kUninitialized)
+                        {
+                            if ((queueFamilyType == QueueFamilyIndices::Type::kPresentQueue && presentSupport) || 
+                                queueFlags & queueFamilyIndices.kFamilyIndicesQueueFlags[queueFamilyType])
+                            {
+                                queueFamilyIndexToSet = queueFamilyIndex;//accept any queue that supports the necessary functionality, no matter how unspecialized
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    );
+
+    assert(queueFamilyIndices.IsComplete());
+    return;
 }
 
 VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const ConstVectorSafeRef<VkSurfaceFormatKHR>& availableFormats)
@@ -2469,10 +2584,12 @@ void CreateSwapChain(
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;//color attachment, since this is a render target
                                                                 //if you pass the previous swap chain to createInfo.oldSwapChain, then that swap chain will be destroyed once it is finished with its work
 
-    QueueFamilyIndices indices = FindQueueFamilies(physicalDevice, surface);
-    uint32_t queueFamilyIndices[] = { static_cast<uint32_t>(indices.graphicsFamily), static_cast<uint32_t>(indices.presentFamily) };
-    if (indices.graphicsFamily != indices.presentFamily)
+    QueueFamilyIndices indices;
+    FindQueueFamilies(&indices, physicalDevice, surface);
+    uint32_t queueFamilyIndices[] = { static_cast<uint32_t>(indices.index[QueueFamilyIndices::Type::kGraphicsQueue]), static_cast<uint32_t>(indices.index[QueueFamilyIndices::Type::kPresentQueue]) };
+    if (indices.index[QueueFamilyIndices::Type::kGraphicsQueue] != indices.index[QueueFamilyIndices::Type::kPresentQueue])
     {
+        ///@todo: remove this block and always execute the else once we support separate graphics and present queues
         //assert(false);///<@todo: maybe use explicit ownership transfers between graphics and present queues?  Seems crazy
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;//Images can be used across multiple queue families without explicit ownership transfers.
         createInfo.queueFamilyIndexCount = 2;
