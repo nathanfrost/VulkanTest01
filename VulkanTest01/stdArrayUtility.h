@@ -2,11 +2,14 @@
 
 #include<algorithm>
 #include<assert.h>
-#include"ntf_compileTimeDefines.h"
-#include"MemoryUtil.h"
 #include<initializer_list>
 #include<string.h>
 #include<windows.h>//for DWORD
+
+#include"ntf_compileTimeDefines.h"
+#include"MemoryUtil.h"
+#include"WindowsUtil.h"
+
 
 #pragma warning(disable : 4996)//debug builds are responsible for detecting any buffer overruns in vsprintf()
 

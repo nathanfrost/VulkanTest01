@@ -118,6 +118,7 @@ void StreamingCommandsProcess(
 
         CriticalSectionEnter(&streamingUnit.m_stateCriticalSection);
         const bool stateWasLoading = streamingUnit.m_state == StreamingUnitRuntime::State::kLoading;
+        NTF_LOG_STREAMING("%s:%i:StreamingCommandsProcess():%s.m_state=%zu\n", __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
         assert(stateWasLoading);
         if (stateWasLoading)
         {

@@ -34,13 +34,16 @@ void StreamingUnitsAddToLoadCriticalSection(
 		NTF_REF(streamingUnitToLoadPtr, streamingUnitToLoad);
 
         CriticalSectionEnter(&streamingUnitToLoad.m_stateCriticalSection);
+
         const bool wasUnloadedState = streamingUnitToLoad.m_state == StreamingUnitRuntime::State::kUnloaded;
+        NTF_LOG_STREAMING("%s:%i:StreamingUnitsAddToLoadCriticalSection():%s.m_state=%zu\n",__FILE__, __LINE__, streamingUnitToLoad.m_filenameNoExtension.data(), streamingUnitToLoad.m_state);
 #if !NTF_UNIT_TEST_STREAMING
         assert(wasUnloadedState);
 #endif//#if !NTF_UNIT_TEST_STREAMING
         if (wasUnloadedState)
         {
             streamingUnitToLoad.m_state = StreamingUnitRuntime::State::kLoading;
+            NTF_LOG_STREAMING("%s:%i:StreamingUnitsAddToLoadCriticalSection():%s.m_state=%zu\n", __FILE__, __LINE__, streamingUnitToLoad.m_filenameNoExtension.data(), streamingUnitToLoad.m_state);
             CriticalSectionLeave(&streamingUnitToLoad.m_stateCriticalSection);
 
             CriticalSectionEnter(&streamingUnitsAddToLoadCriticalSection);
@@ -95,6 +98,7 @@ void StreamingUnitsAddToUnload(
 
         CriticalSectionEnter(&streamingUnitToUnload.m_stateCriticalSection);
         const bool streamingUnitCurrentlyLoaded = streamingUnitToUnload.m_state == StreamingUnitRuntime::State::kLoaded;
+        NTF_LOG_STREAMING("%s:%i:StreamingUnitsAddToUnload():%s.m_state=%zu\n", __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_state);
 #if !NTF_UNIT_TEST_STREAMING
         assert(streamingUnitCurrentlyLoaded);
 #endif//#if !NTF_UNIT_TEST_STREAMING
@@ -113,6 +117,7 @@ StreamingUnitRuntime::State StreamingUnitRuntime::StateCriticalSection()
 {
     CriticalSectionEnter(&m_stateCriticalSection);
     const State ret = m_state;
+    NTF_LOG_STREAMING("%s:%i:StreamingUnitRuntime::StateCriticalSection():%s.m_state=%zu\n", __FILE__, __LINE__, m_filenameNoExtension.data(), m_state);
     CriticalSectionLeave(&m_stateCriticalSection);
 
     return ret;
@@ -159,6 +164,9 @@ void StreamingUnitRuntime::Free(
 {
     NTF_REF(deviceLocalMemoryCriticalSectionPtr, deviceLocalMemoryCriticalSection);
 
+    NTF_LOG_STREAMING("%s:%i:StreamingUnitRuntime::Free():streaming unit %s\n",
+        __FILE__, __LINE__, m_filenameNoExtension.data());
+
     vkDestroySampler(device, m_textureSampler, GetVulkanAllocationCallbacks());
 
     for (auto& texturedGeometry : m_texturedGeometries)
@@ -203,6 +211,7 @@ void StreamingUnitRuntime::Free(
 
     CriticalSectionEnter(&m_stateCriticalSection);
     m_state = StreamingUnitRuntime::State::kUnloaded;
+    NTF_LOG_STREAMING("%s:%i:StreamingUnitRuntime::Free():%s.m_state=%zu\n", __FILE__, __LINE__, m_filenameNoExtension.data(), m_state);
     CriticalSectionLeave(&m_stateCriticalSection);
 
     NTF_LOG_STREAMING(  "%s:%i:StreamingUnitRuntime::Free():streaming unit %s\n",

@@ -76,9 +76,7 @@ static void UnloadStreamingUnitsIfGpuDone(
     {
         NTF_REF(streamingUnitToUnloadPtr, streamingUnitToUnload);
 
-        CriticalSectionEnter(&streamingUnitToUnload.m_stateCriticalSection);
-        const StreamingUnitRuntime::State streamingUnitToUnloadState = streamingUnitToUnload.m_state;
-        CriticalSectionLeave(&streamingUnitToUnload.m_stateCriticalSection);
+        const StreamingUnitRuntime::State streamingUnitToUnloadState = streamingUnitToUnload.StateCriticalSection();
         switch (streamingUnitToUnloadState)
         {
             case StreamingUnitRuntime::State::kUnloaded:
@@ -109,7 +107,7 @@ static void UnloadStreamingUnitsIfGpuDone(
                 if (streamingUnitToUnload.m_lastSubmittedCpuFrame - lastCpuFrameCompleted > -halfRange && 
                     streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted)                                                                               
                 {
-                    NTF_LOG_STREAMING(  "%s:%i:%s={m_loaded=kUnloaded,m_lastSubmittedCpuFrame=%i,m_lastCpuFrameCompleted=%i}\n",
+                    NTF_LOG_STREAMING(  "%s:%i:%s={m_lastSubmittedCpuFrame=%i,m_lastCpuFrameCompleted=%i}\n",
                                         __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_lastSubmittedCpuFrame, lastCpuFrameCompleted);
                     streamingUnitsToUnloadRemaining.Remove(&streamingUnitToUnload);
                     streamingUnitToUnload.Free(
@@ -681,9 +679,9 @@ private:
 
                 CriticalSectionEnter(&streamingUnit.m_stateCriticalSection);
                 streamingUnit.m_state = StreamingUnitRuntime::State::kLoaded;//must happen here, because now the streaming unit is guaranteed to be rendered at least once (correctly defining its cpu frame submitted number), which will allow it to be unloaded correctly -- all provided the app doesn't shut down first
+                NTF_LOG_STREAMING("%s:%i:%s.m_state=%zu\n",
+                    __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
                 CriticalSectionLeave(&streamingUnit.m_stateCriticalSection);
-                NTF_LOG_STREAMING(  "%s:%i:%s.m_state=kLoaded\n",
-                                    __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data());
             }
 
 			m_streamingUnitsToAddToRenderable.size(0);
@@ -727,6 +725,7 @@ private:
                 {
                     NTF_REF(streamingUnitPtr, streamingUnit);
                     assert(streamingUnit.m_state == StreamingUnitRuntime::State::kLoaded);
+                    NTF_LOG_STREAMING("%s:%i:MainLoop():%s.m_state=%zu\n", __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
 
                     UpdateUniformBuffer(
                         streamingUnit.m_uniformBufferCpuMemory,
