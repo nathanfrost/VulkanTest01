@@ -123,6 +123,10 @@ def StreamingUnitCooker_Run():
         Run(streamingUnitCookerString, "%s\%s" % (buildDirectory, WindowsExeExtensionAppend(streamingUnitCookerString)))
 FunctionCallConditional(streamingUnitCookerEnabled, StreamingUnitCooker_Run, "StreamingUnitCooker_Run")
 
+def WaitSeconds(secondsToWait):
+    Print("Waiting for %s seconds" % secondsToWait)
+    time.sleep(secondsToWait)
+
 def VulkanTest01_Run():
     for buildDirectory in buildDirectoriesVulkanTest01:
         ChdirWorkingPath("VulkanTest01")
@@ -131,10 +135,9 @@ def VulkanTest01_Run():
         Print(executableRootedFullPath)
         subprocess.Popen(executableRootedFullPath)
         
-        secondsToWait = 10
-        Print("Waiting for %s seconds" % secondsToWait)
-        time.sleep(secondsToWait)
-        OsSystem("taskkill /F /IM VulkanTest01.exe")
+        WaitSeconds(10)
+        OsSystem("taskkill /IM VulkanTest01.exe")
+        WaitSeconds(2)
 FunctionCallConditional(vulkanTest01Enabled, VulkanTest01_Run, "VulkanTest01_Run")
 
 Print("SUCCESS!")

@@ -153,11 +153,12 @@ public:
 
         MainLoop(m_window);
         Shutdown();
-
-        int i;
+        printf("SHUTDOWN COMPLETE\n");
 #if NTF_DEBUG
         printf("s_vulkanApiCpuBytesAllocatedMax=%zu\n", GetVulkanApiCpuBytesAllocatedMax());
 #endif//#if NTF_DEBUG
+
+        int i;
         printf("Enter a character and press ENTER to exit\n");
         scanf("%i", &i);
     }
