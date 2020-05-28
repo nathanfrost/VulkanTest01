@@ -2322,22 +2322,15 @@ void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkP
             { 
                 NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
 
-                //use maximally specialized queue if possible -- eg a queue that solely performs one function
+                //use maximally specialized queue if possible -- eg a queue that solely performs one function, except for a queue specialized for only Graphics or Present
                 for (int queueFamilyType = 0; queueFamilyType < QueueFamilyIndices::Type::kTypeSize; ++queueFamilyType)
                 {
                     auto& queueFamilyIndexToSet = queueFamilyIndices.index[queueFamilyType];
                     if (queueFamilyIndexToSet == QueueFamilyIndices::kUninitialized)
                     {
-                        if (queueFamilyType == QueueFamilyIndices::Type::kPresentQueue)
+                        if (queueFamilyType != QueueFamilyIndices::Type::kPresentQueue)
                         {
-                            if (presentSupport && queueFlags == 0)
-                            {
-                                queueFamilyIndexToSet = queueFamilyIndex;
-                            }
-                        }
-                        else
-                        {
-                            const VkQueueFlags queueFlagsOnlyGraphicsComputeTransferBits = queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT);
+                            const VkQueueFlags queueFlagsOnlyGraphicsComputeTransferBits = queueFlags & (VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT);
                             if ((queueFlagsOnlyGraphicsComputeTransferBits & ~(queueFamilyIndices.kFamilyIndicesQueueFlags[queueFamilyType])) == 0 && !presentSupport)
                             {
                                 queueFamilyIndexToSet = queueFamilyIndex;
@@ -2345,6 +2338,31 @@ void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkP
                         }
                     }
                 }
+
+                //the following is commented out, because I don't support a separate graphics/present queue
+                ////use maximally specialized queue if possible -- eg a queue that solely performs one function
+                //for (int queueFamilyType = 0; queueFamilyType < QueueFamilyIndices::Type::kTypeSize; ++queueFamilyType)
+                //{
+                //    auto& queueFamilyIndexToSet = queueFamilyIndices.index[queueFamilyType];
+                //    if (queueFamilyIndexToSet == QueueFamilyIndices::kUninitialized)
+                //    {
+                //        if (queueFamilyType == QueueFamilyIndices::Type::kPresentQueue)
+                //        {
+                //            if (presentSupport && queueFlags == 0)
+                //            {
+                //                queueFamilyIndexToSet = queueFamilyIndex;
+                //            }
+                //        }
+                //        else
+                //        {
+                //            const VkQueueFlags queueFlagsOnlyGraphicsComputeTransferBits = queueFlags & (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT);
+                //            if ((queueFlagsOnlyGraphicsComputeTransferBits & ~(queueFamilyIndices.kFamilyIndicesQueueFlags[queueFamilyType])) == 0 && !presentSupport)
+                //            {
+                //                queueFamilyIndexToSet = queueFamilyIndex;
+                //            }
+                //        }
+                //    }
+                //}
             } 
         }
     );
@@ -2452,6 +2470,7 @@ void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkP
     );
 
     assert(queueFamilyIndices.IsComplete());
+    assert(queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue] == queueFamilyIndices.index[QueueFamilyIndices::Type::kPresentQueue]);//we don't support separate graphics and present queues
     return;
 }
 
