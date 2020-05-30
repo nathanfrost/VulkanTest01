@@ -2308,6 +2308,7 @@ static void SearchForQueueIndices(
     }
 }
 
+///@todo NTF: cache this function's results?  (they ought to be constant data as long as they user isn't swapping graphics cards, which isn't supported)
 void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkPhysicalDevice& device, const VkSurfaceKHR& surface)
 {
     NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
@@ -2605,7 +2606,7 @@ void CreateSwapChain(
 
     QueueFamilyIndices indices;
     FindQueueFamilies(&indices, physicalDevice, surface);
-    uint32_t queueFamilyIndices[] = { static_cast<uint32_t>(indices.index[QueueFamilyIndices::Type::kGraphicsQueue]), static_cast<uint32_t>(indices.index[QueueFamilyIndices::Type::kPresentQueue]) };
+    const uint32_t queueFamilyIndices[] = { static_cast<uint32_t>(indices.index[QueueFamilyIndices::Type::kGraphicsQueue]), static_cast<uint32_t>(indices.index[QueueFamilyIndices::Type::kPresentQueue]) };
     if (indices.index[QueueFamilyIndices::Type::kGraphicsQueue] != indices.index[QueueFamilyIndices::Type::kPresentQueue])
     {
         ///@todo: remove this block and always execute the else once we support separate graphics and present queues

@@ -75,7 +75,7 @@ def FunctionCallConditional(enabled, function, stringIdentifier):
         Print("%s DISABLED" % stringIdentifier)
                 
 def VisualStudioBuild(configuration, platform, vcxprojFullPath):
-    SubProcess(r'"%s" "%s\%s" /Build "%s|%s" /Project "%s\%s"' % (devenvRootedFullPath, baseRootedPath, slnFilename, configuration, platform, baseRootedPath, vcxprojFullPath))
+    SubProcess(r'"%s" "%s\%s" /Build "%s|%s" /Project "%s\%s" /D NTF_NO_KEYSTROKE_TO_END_PROCESS' % (devenvRootedFullPath, baseRootedPath, slnFilename, configuration, platform, baseRootedPath, vcxprojFullPath))
 
 def VisualStudioBuildSet(vcxprojFullPath, visualStudioConfigurations, exclusions={platform_x86:[visualStudioConfigurationDebug]}):#unknown library problem with Debug|x86 that I don't care to solve)
     for platform in platforms:
