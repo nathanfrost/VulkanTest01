@@ -2044,8 +2044,8 @@ void CreateVulkanSemaphore(VkSemaphore*const semaphorePtr, const VkDevice& devic
 }
 
 void CreateFrameSyncPrimitives(
-    VectorSafeRef<VkSemaphore> imageAvailable, 
-    VectorSafeRef<VkSemaphore> renderFinished, 
+    ArraySafeRef<VkSemaphore> imageAvailable, 
+    ArraySafeRef<VkSemaphore> renderFinished, 
     ArraySafeRef<DrawFrameFinishedFence> fence,
     const size_t framesNum,
     const VkDevice& device)

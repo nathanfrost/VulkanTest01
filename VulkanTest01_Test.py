@@ -70,6 +70,7 @@ def SubProcess(command, exitOnFail=True):
     
 def FunctionCallConditional(enabled, function, stringIdentifier):
     if enabled:
+        Print("%s RUNNING" % stringIdentifier)
         function()
     else:
         Print("%s DISABLED" % stringIdentifier)
@@ -78,7 +79,7 @@ def VisualStudioBuild(configuration, platform, vcxprojFullPath, clean=False):
     buildOrClean = "Clean" if clean else "Build"
     SubProcess(r'"%s" "%s\%s" /%s "%s|%s" /Project "%s\%s"' % (devenvRootedFullPath, baseRootedPath, slnFilename, buildOrClean, configuration, platform, baseRootedPath, vcxprojFullPath))
 
-def VisualStudioBuildSet(vcxprojFullPath, visualStudioConfigurations, exclusions={platform_x86:[visualStudioConfigurationDebug]}):#unknown library problem with Debug|x86 that I don't care to solve)
+def VisualStudioBuildSet(vcxprojFullPath, visualStudioConfigurations, exclusions={}):#unknown library problem with Debug|x86 that I don't care to solve)
     for platform in platforms:
         for visualStudioConfiguration in visualStudioConfigurations:
             if not (exclusions and platform in exclusions and visualStudioConfiguration in exclusions[platform]):
@@ -95,6 +96,7 @@ FunctionCallConditional(streamingUnitCookerEnabled, StreamingUnitCooker_Build, "
 
 def VulkanTest01_Build():
     VisualStudioBuildSet(r"VulkanTest01\VulkanTest01.vcxproj", visualStudioConfigurationsVulkanTest01)
+    #VisualStudioBuildSet(r"VulkanTest01\VulkanTest01.vcxproj", visualStudioConfigurationsVulkanTest01, platform_x86:[visualStudioConfigurationDebug])
 FunctionCallConditional(vulkanTest01Enabled, VulkanTest01_Build, "VulkanTest01_Build")
 
 

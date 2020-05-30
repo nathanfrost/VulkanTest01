@@ -464,8 +464,8 @@ void CreateFramebuffers(
 void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const VkInstance& instance);
 void CreateVulkanSemaphore(VkSemaphore*const semaphorePtr, const VkDevice& device);
 void CreateFrameSyncPrimitives(
-    VectorSafeRef<VkSemaphore> imageAvailable,
-    VectorSafeRef<VkSemaphore> renderFinished,
+    ArraySafeRef<VkSemaphore> imageAvailable,
+    ArraySafeRef<VkSemaphore> renderFinished,
     ArraySafeRef<DrawFrameFinishedFence> fence,
     const size_t framesNum,
     const VkDevice& device);

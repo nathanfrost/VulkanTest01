@@ -13,9 +13,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "StreamingUnitCooker", "StreamingUnitCooker\StreamingUnitCooker.vcxproj", "{600934E0-47F4-4090-A61E-D8D5A07F37C8}"
-	ProjectSection(ProjectDependencies) = postProject
-		{542B7920-C5FE-4F60-BFE6-8DFE960E693A} = {542B7920-C5FE-4F60-BFE6-8DFE960E693A}
-	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
