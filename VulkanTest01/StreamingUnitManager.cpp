@@ -315,8 +315,8 @@ void StreamingCommandsProcess(
             EndCommandBuffer(commandBufferTransfer);
             SubmitCommandBuffer(
                 transferQueueCriticalSection,
-                transferFinishedSemaphores,
                 ConstVectorSafeRef<VkSemaphore>(),
+                transferFinishedSemaphores,
                 ConstArraySafeRef<VkPipelineStageFlags>(),
                 commandBufferTransfer,
                 transferQueue,
@@ -328,8 +328,8 @@ void StreamingCommandsProcess(
                 EndCommandBuffer(commandBufferTransitionImage);
                 SubmitCommandBuffer(
                     &graphicsQueueCriticalSection,
-                    ConstVectorSafeRef<VkSemaphore>(),
                     transferFinishedSemaphores,
+                    ConstVectorSafeRef<VkSemaphore>(),
                     ConstArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),
                     commandBufferTransitionImage,
                     graphicsQueue,

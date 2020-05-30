@@ -789,8 +789,8 @@ private:
                 VkPipelineStageFlags waitStages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
                 SubmitCommandBuffer(
                     &m_graphicsQueueCriticalSection,
-                    signalSemaphores,
                     ConstVectorSafeRef<VkSemaphore>(&imageAvailableSemaphore, 1),
+                    signalSemaphores,
                     ConstArraySafeRef<VkPipelineStageFlags>(&waitStages, 1),
                     commandBufferPrimary,
                     m_graphicsQueue,

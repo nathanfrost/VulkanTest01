@@ -124,8 +124,8 @@ void CopyBufferToImage(
     const VkInstance instance);
 VkResult SubmitCommandBuffer(
     RTL_CRITICAL_SECTION*const criticalSectionPtr,
-    const ConstVectorSafeRef<VkSemaphore>& signalSemaphores,
     const ConstVectorSafeRef<VkSemaphore>& waitSemaphores,
+    const ConstVectorSafeRef<VkSemaphore>& signalSemaphores,
     const ConstArraySafeRef<VkPipelineStageFlags>& stagesWhereEachWaitSemaphoreWaits,
     const VkCommandBuffer& commandBuffer,
     const VkQueue& queue,
