@@ -2,11 +2,14 @@
 
 #include<algorithm>
 #include<assert.h>
-#include"ntf_compileTimeDefines.h"
-#include"MemoryUtil.h"
 #include<initializer_list>
 #include<string.h>
 #include<windows.h>//for DWORD
+
+#include"ntf_compileTimeDefines.h"
+#include"MemoryUtil.h"
+#include"WindowsUtil.h"
+
 
 #pragma warning(disable : 4996)//debug builds are responsible for detecting any buffer overruns in vsprintf()
 
@@ -22,6 +25,18 @@ typedef T value_type
 #define STD_ARRAY_UTILITY_NONCONST_TYPEDEFS \
 typedef T* iterator;                        \
 typedef T& reference                        \
+
+#define STD_ARRAY_UTILITY_NONCONST_REF_PRIVATE_METHODS  \
+void SetArray(T*const p)                                \
+{                                                       \
+    m_array = p;                                        \
+}
+
+#define STD_ARRAY_UTILITY_CONST_REF_PRIVATE_METHODS     \
+void SetArray(const T*const p)                          \
+{                                                       \
+    m_array = p;                                        \
+}
 
 #define STD_ARRAY_UTILITY_CONST_METHODS                                                                                                             \
 const T* data() const                                                                                                                               \
@@ -348,6 +363,10 @@ assert(sizeof(T) % alignment == 0);                                             
 SetElementsNumMax(elementsNumMax);                                                                                      \
 SetArray(p);
 
+#define STD_ARRAY_UTILITY_ARRAYSAFE_CONSTRUCTOR_ARRAYSAFE_SHARED_BODY                                                   \
+assert(elementsNum > 0);                                                                                                \
+MemcpyFromStart(r.data(), elementsNum * sizeof(T));
+
 
 #define STD_ARRAY_UTILITY_MEMCPY_FROM_INDEX_FUNCTION_SIGNATURE void MemcpyFromIndex(const void*const input, const size_t index, const size_t inputBytesNum)
 #define STD_ARRAY_UTILITY_MEMPCY_FROM_INDEX_VECTOR_BODY                                                                                                 \
@@ -371,7 +390,18 @@ SetArray(p);
     assert(elementsNum > 0);                                \
     assert(elementsNum <= SizeMax());                       \
     ::Fread(f, &m_array[0], sizeof(T), elementsNum)
-                                                                                                                                                
+
+
+#define STD_UTILITY_ARRAYSAFEREF_VECTORSAFECONSTRUCTOR_BODY \
+    assert(other);                                          \
+    SetElementsNumMax(other->size());/*note that size() is used here -- not SizeMax() -- so that *this provides a "view" into only the current size of a VectorSafeRef; in other words, *this takes its maximum size to be the VectorSafeRef's current size, and ignores the VectorSafeRef's maximum size*/ \
+    SetArray(other->begin())
+
+#define STD_UTILITY_CONSTARRAYSAFEREF_VECTORSAFECONSTRUCTOR_BODY    \
+    SetElementsNumMax(other.size());/*note that size() is used here -- not SizeMax() -- so that *this provides a "view" into only the current size of a (Const)VectorSafeRef; in other words, *this takes its maximum size to be the (Const)VectorSafeRef's current size, and ignores the (Const)VectorSafeRef's maximum size*/ \
+    SetArray(other.begin())
+
+
 
 inline void Fopen(FILE**const f, const char*const filename, const char*const mode)
 {
@@ -473,10 +503,6 @@ private:
     size_t m_elementsNumMax;
 #endif//#if STD_UTILITY_DEBUG
 
-    void SetArray(T* p)
-    {
-        m_array = p;
-    }
     void SetElementsNumCurrent(const size_t elementsNumCurrent)
     {
         assert(m_elementsNumCurrent);
@@ -494,6 +520,8 @@ private:
         m_elementsNumMax = elementsNumMax;
 #endif//#if STD_UTILITY_DEBUG
     }
+
+    STD_ARRAY_UTILITY_NONCONST_REF_PRIVATE_METHODS;
 
 public:
     //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability.  In terms of performance, I'm trusting compilers to simply reference a single class of *this's pointers rather than duplicating them; note that C++ does allow ConstVectorSafe and ConstArraySafe to be passed by const&, leaving no chance of unnecessarily duplicated pointers
@@ -621,16 +649,14 @@ private:
     {
         assert(size <= m_elementsNumMax);
     }//to allow implementation of STD_ARRAY_UTILITY_SPRINTF_VA_LIST_BODY()
-    void SetArray(T* p)
-    {
-        m_array = p;
-    }
     void SetElementsNumMax(const size_t elementsNumMax)
     {
 #if STD_UTILITY_DEBUG
         m_elementsNumMax = elementsNumMax;
 #endif//#if STD_UTILITY_DEBUG
     }
+
+    STD_ARRAY_UTILITY_NONCONST_REF_PRIVATE_METHODS;
 
     T* m_array;
 #if STD_UTILITY_DEBUG
@@ -647,8 +673,7 @@ public:
     //    AssertValid();
     //}
     //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability.  In terms of performance, I'm trusting compilers to simply reference a single class of *this's pointers rather than duplicating them; note that C++ does allow ConstVectorSafe and ConstArraySafe to be passed by const&, leaving no chance of unnecessarily duplicated pointers
-    template<typename U>
-    ArraySafeRef(U* const other)
+    ArraySafeRef(ArraySafeRef<T>*const other)
     {
         assert(other);
 #if STD_UTILITY_DEBUG
@@ -656,10 +681,30 @@ public:
 #endif//#if STD_UTILITY_DEBUG
         SetArray(other->begin());
     }
+    template<size_t kElementsMax>
+    ArraySafeRef(ArraySafe<T, kElementsMax>*const other)
+    {
+        assert(other);
+#if STD_UTILITY_DEBUG
+        SetElementsNumMax(other->SizeMax());
+#endif//#if STD_UTILITY_DEBUG
+        SetArray(other->begin());
+    }
+    ArraySafeRef(VectorSafeRef<T>*const other)//can't be a non-const C++-reference, because the language (needlessly, in my view), disallows passing non-const temporary arguments by non-const reference
+    {
+        STD_UTILITY_ARRAYSAFEREF_VECTORSAFECONSTRUCTOR_BODY;
+    }
+    template<size_t kElementsMax>
+    ArraySafeRef(VectorSafe<T, kElementsMax>*const other)//can't be a non-const C++-reference, because the language (needlessly, in my view), disallows passing non-const temporary arguments by non-const reference
+    {
+        STD_UTILITY_ARRAYSAFEREF_VECTORSAFECONSTRUCTOR_BODY;
+    }
 
     ArraySafeRef(T*const p, const size_t elementsNumMax)
     {
+#if STD_UTILITY_DEBUG
         SetElementsNumMax(elementsNumMax);
+#endif//#if STD_UTILITY_DEBUG
         SetArray(p);
     }
 
@@ -729,16 +774,14 @@ public:
     STD_ARRAY_UTILITY_CONST_TYPEDEFS;
 
 private:
-    void SetArray(const T*const p)
-    {
-        m_array = p;
-    }
     void SetElementsNumMax(const size_t elementsNumMax)
     {
 #if STD_UTILITY_DEBUG
         m_elementsNumMax = elementsNumMax;
 #endif//#if STD_UTILITY_DEBUG
     }
+
+    STD_ARRAY_UTILITY_CONST_REF_PRIVATE_METHODS;
 
     const T* m_array;
 #if STD_UTILITY_DEBUG
@@ -754,8 +797,8 @@ public:
     //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     //    AssertValid();
     //}
-    //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability
-    ///@todo: work out why this doesn't work, or why it can't work
+
+    //can't do this, because it would allow *this to be initialized with a (Const)VectorSafe(Ref), and read elements between (Const)VectorSafe(Ref)::size() and (Const)VectorSafe(Ref)::SizeMax()
 //    template<typename U>
 //    ConstArraySafeRef(const U& other)
 //    {
@@ -774,10 +817,32 @@ public:
 #endif//#if STD_UTILITY_DEBUG
         SetArray(other.begin());
     }
+    ConstArraySafeRef(const ArraySafeRef<T>& other)
+    {
+#if STD_UTILITY_DEBUG
+        SetElementsNumMax(other.SizeMax());
+#endif//#if STD_UTILITY_DEBUG
+        SetArray(other.begin());
+    }
+    ConstArraySafeRef(const VectorSafeRef<T>& other)
+    {
+        STD_UTILITY_CONSTARRAYSAFEREF_VECTORSAFECONSTRUCTOR_BODY;
+    }
+    ConstArraySafeRef(const ConstVectorSafeRef<T>& other)
+    {
+        STD_UTILITY_CONSTARRAYSAFEREF_VECTORSAFECONSTRUCTOR_BODY;
+    }
+    template<size_t kElementsMax>
+    ConstArraySafeRef(const VectorSafe<T, kElementsMax>& other)
+    {
+        STD_UTILITY_CONSTARRAYSAFEREF_VECTORSAFECONSTRUCTOR_BODY;
+    }
 
     ConstArraySafeRef(const T*const p, const size_t elementsNumMax)
     {
+#if STD_UTILITY_DEBUG
         SetElementsNumMax(elementsNumMax);
+#endif//#if STD_UTILITY_DEBUG
         SetArray(p);
     }
 
@@ -846,15 +911,12 @@ private:
     const T* m_array;
     size_t m_elementsNumMax;
 
-    void SetArray(const T*const p)
-    {
-        m_array = p;
-    }
     void SetElementsNumMax(const size_t elementsNumMax)
     {
         m_elementsNumMax = elementsNumMax;
     }
 
+    STD_ARRAY_UTILITY_CONST_REF_PRIVATE_METHODS;
 public:
     ConstVectorSafeRef()
     {
@@ -875,8 +937,8 @@ public:
     template<typename U>
     ConstVectorSafeRef(const U& other)
     {
-        SetArray(other.begin());
         SetElementsNumMax(other.size());
+        SetArray(other.begin());
     }
 
     void Reset()
@@ -923,7 +985,7 @@ public:
         assert(f);
         assert(elementsNum > 0);
         assert(elementsNum <= kElementsNum);
-        Fread(f, &m_array[0], sizeof(T), elementsNum);
+        Fread(f, elementsNum);
     }
     ArraySafe(const std::initializer_list<T>& initializerList)
     {
@@ -942,13 +1004,19 @@ public:
     {
         MemcpyFromStart(r);
     }
-    ArraySafe(ArraySafeRef<T> r)
+    ArraySafe(ArraySafeRef<T> r, const size_t elementsNum)
     {
-        MemcpyFromStart(r);
+        STD_ARRAY_UTILITY_ARRAYSAFE_CONSTRUCTOR_ARRAYSAFE_SHARED_BODY;
     }
-    ArraySafe(const ConstArraySafeRef<T>& r)
+    ArraySafe(const ConstArraySafeRef<T>& r, const size_t elementsNum)
     {
-        MemcpyFromStart(r);
+        STD_ARRAY_UTILITY_ARRAYSAFE_CONSTRUCTOR_ARRAYSAFE_SHARED_BODY;
+    }
+    template<size_t kOtherElementsMax>
+    ArraySafe(const VectorSafe<T, kOtherElementsMax>& other)
+    {
+        assert(kElementsNum >= other.size());
+        MemcpyFromStart(other);
     }
     template<class T, size_t kElementsNum>
     operator ArraySafeRef<T>()

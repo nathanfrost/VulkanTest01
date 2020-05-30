@@ -97,7 +97,7 @@ void StreamingCommandsProcess(
     VkDeviceSize stagingBufferGpuOffsetToAllocatedBlock;
 
     const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
-    assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.transferFamily == queueFamilyIndices.graphicsFamily));
+    assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.index[QueueFamilyIndices::Type::kTransferQueue] == queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue]));
     RTL_CRITICAL_SECTION*const transferQueueCriticalSection = unifiedGraphicsAndTransferQueue ? &graphicsQueueCriticalSection : nullptr;//if we have a single queue for graphics and transfer rather than two separate queues, then we must criticalSection that one queue
 
     VkPipelineStageFlags transferFinishedPipelineStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -118,6 +118,7 @@ void StreamingCommandsProcess(
 
         CriticalSectionEnter(&streamingUnit.m_stateCriticalSection);
         const bool stateWasLoading = streamingUnit.m_state == StreamingUnitRuntime::State::kLoading;
+        NTF_LOG_STREAMING("%s:%i:StreamingCommandsProcess():%s.m_state=%zu\n", __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
         assert(stateWasLoading);
         if (stateWasLoading)
         {
@@ -229,9 +230,9 @@ void StreamingCommandsProcess(
                     imageFormat,
                     stagingBuffersGpu.back(),
                     commandBufferTransfer,
-                    queueFamilyIndices.transferFamily,
+                    queueFamilyIndices.index[QueueFamilyIndices::Type::kTransferQueue],
                     commandBufferTransitionImage,
-                    queueFamilyIndices.graphicsFamily,
+                    queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue],
                     device,
                     instance);
 
@@ -251,7 +252,7 @@ void StreamingCommandsProcess(
                     &stagingBufferMemoryMapCpuToGpu,
                     &stagingBufferGpuOffsetToAllocatedBlock,
                     &verticesNum,
-                    ArraySafeRef<Vertex>(),
+                    ConstArraySafeRef<Vertex>(),
                     stagingBufferCpuToGpuVertices,
                     &vertexBufferSizeBytes,
                     stagingBufferGpuAlignmentStandard);
@@ -279,7 +280,7 @@ void StreamingCommandsProcess(
                     &stagingBufferMemoryMapCpuToGpu,
                     &stagingBufferGpuOffsetToAllocatedBlock,
                     &indicesNum,
-                    ArraySafeRef<IndexBufferValue>(),
+                    ConstArraySafeRef<IndexBufferValue>(),
                     stagingBufferCpuToGpuIndices,
                     &indexBufferSizeBytes,
                     stagingBufferGpuAlignmentStandard);
@@ -316,7 +317,7 @@ void StreamingCommandsProcess(
                 transferQueueCriticalSection,
                 transferFinishedSemaphores,
                 ConstVectorSafeRef<VkSemaphore>(),
-                ArraySafeRef<VkPipelineStageFlags>(),
+                ConstArraySafeRef<VkPipelineStageFlags>(),
                 commandBufferTransfer,
                 transferQueue,
                 streamingUnit.m_transferQueueFinishedFence,
@@ -329,7 +330,7 @@ void StreamingCommandsProcess(
                     &graphicsQueueCriticalSection,
                     ConstVectorSafeRef<VkSemaphore>(),
                     transferFinishedSemaphores,
-                    ArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),///<@todo: ArraySafeRefConst
+                    ConstArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),
                     commandBufferTransitionImage,
                     graphicsQueue,
                     streamingUnit.m_graphicsQueueFinishedFence,
@@ -354,7 +355,7 @@ void StreamingCommandsProcess(
                 streamingUnit.m_descriptorPool,
                 streamingUnit.m_uniformBuffer,
                 uniformBufferSize,
-                &streamingUnit.m_textureImageViews,///<@todo NTF: @todo: ConstArraySafeRef that does not need ambersand here
+                streamingUnit.m_textureImageViews,
                 TODO_REFACTOR_NUM,
                 streamingUnit.m_textureSampler,
                 device);

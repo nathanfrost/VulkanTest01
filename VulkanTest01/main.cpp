@@ -76,9 +76,7 @@ static void UnloadStreamingUnitsIfGpuDone(
     {
         NTF_REF(streamingUnitToUnloadPtr, streamingUnitToUnload);
 
-        CriticalSectionEnter(&streamingUnitToUnload.m_stateCriticalSection);
-        const StreamingUnitRuntime::State streamingUnitToUnloadState = streamingUnitToUnload.m_state;
-        CriticalSectionLeave(&streamingUnitToUnload.m_stateCriticalSection);
+        const StreamingUnitRuntime::State streamingUnitToUnloadState = streamingUnitToUnload.StateCriticalSection();
         switch (streamingUnitToUnloadState)
         {
             case StreamingUnitRuntime::State::kUnloaded:
@@ -109,7 +107,7 @@ static void UnloadStreamingUnitsIfGpuDone(
                 if (streamingUnitToUnload.m_lastSubmittedCpuFrame - lastCpuFrameCompleted > -halfRange && 
                     streamingUnitToUnload.m_lastSubmittedCpuFrame <= lastCpuFrameCompleted)                                                                               
                 {
-                    NTF_LOG_STREAMING(  "%s:%i:%s={m_loaded=kUnloaded,m_lastSubmittedCpuFrame=%i,m_lastCpuFrameCompleted=%i}\n",
+                    NTF_LOG_STREAMING(  "%s:%i:%s={m_lastSubmittedCpuFrame=%i,m_lastCpuFrameCompleted=%i}\n",
                                         __FILE__, __LINE__, streamingUnitToUnload.m_filenameNoExtension.data(), streamingUnitToUnload.m_lastSubmittedCpuFrame, lastCpuFrameCompleted);
                     streamingUnitsToUnloadRemaining.Remove(&streamingUnitToUnload);
                     streamingUnitToUnload.Free(
@@ -155,13 +153,16 @@ public:
 
         MainLoop(m_window);
         Shutdown();
-
-        int i;
+        printf("SHUTDOWN COMPLETE\n");
 #if NTF_DEBUG
         printf("s_vulkanApiCpuBytesAllocatedMax=%zu\n", GetVulkanApiCpuBytesAllocatedMax());
 #endif//#if NTF_DEBUG
+
+#if !NTF_NO_KEYSTROKE_TO_END_PROCESS
+        int i;
         printf("Enter a character and press ENTER to exit\n");
         scanf("%i", &i);
+#endif//#if !NTF_NO_KEYSTROKE_TO_END_PROCESS
     }
 
     ///@todo: fix; not maintained so totally broken
@@ -326,7 +327,7 @@ private:
         }
 
         CleanupSwapChain(
-            &m_commandBuffersPrimary,
+            m_commandBuffersPrimary,
             m_device,
             m_depthImageView,
             m_depthImage,
@@ -418,7 +419,7 @@ private:
         }
 
         NTFVulkanInitialize(m_physicalDevice);
-        m_queueFamilyIndices = FindQueueFamilies(m_physicalDevice, m_surface);
+        FindQueueFamilies(&m_queueFamilyIndices, m_physicalDevice, m_surface);
         CriticalSectionCreate(&m_graphicsQueueCriticalSection);
 		CriticalSectionCreate(&m_streamingUnitsAddToLoadCriticalSection);
 		CriticalSectionCreate(&m_streamingUnitsAddToRenderableCriticalSection);
@@ -445,9 +446,9 @@ private:
         CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
         CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
         
-        CreateCommandPool(&m_commandPoolPrimary, m_queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
-        CreateCommandPool(&m_commandPoolTransitionImage, m_queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
-        CreateCommandPool(&m_commandPoolTransfer, m_queueFamilyIndices.transferFamily, m_device, m_physicalDevice);
+        CreateCommandPool(&m_commandPoolPrimary, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue], m_device, m_physicalDevice);
+        CreateCommandPool(&m_commandPoolTransitionImage, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue], m_device, m_physicalDevice);
+        CreateCommandPool(&m_commandPoolTransfer, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kTransferQueue], m_device, m_physicalDevice);
 
         m_deviceLocalMemoryPersistent.Initialize(m_device, m_physicalDevice);
         for (auto& vulkanPagedStackAllocator : m_deviceLocalMemoryStreamingUnits)
@@ -458,13 +459,13 @@ private:
          
         //#CommandPoolDuplication
         AllocateCommandBuffers(
-            &ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
+            ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransfer, 1),
             m_commandPoolTransfer,
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             1,
             m_device);
         AllocateCommandBuffers(
-			&ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
+			ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
             m_commandPoolTransitionImage,
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             1,
@@ -487,7 +488,7 @@ private:
             nullptr,//no need to critical section, since currently only the main thread is running and we guard against launching the asset loading thread until this command buffer completes
             ConstVectorSafeRef<VkSemaphore>(),
             ConstVectorSafeRef<VkSemaphore>(),
-            ArraySafeRef<VkPipelineStageFlags>(),
+            ConstArraySafeRef<VkPipelineStageFlags>(),
             m_commandBufferTransitionImage,
             m_graphicsQueue,
             initializationDone,
@@ -506,9 +507,9 @@ private:
             streamingUnit.Initialize(m_device);
             streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemoryBasicModel
         }
-        m_streamingUnits[0].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest0), strlen(g_streamingUnitName_UnitTest0));
-        m_streamingUnits[1].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest1), strlen(g_streamingUnitName_UnitTest1));
-        m_streamingUnits[2].m_filenameNoExtension = ArraySafeRef<char>(const_cast<char*>/**<@todo NTF: ConstArraySafeRef*/(g_streamingUnitName_UnitTest2), strlen(g_streamingUnitName_UnitTest2));
+        m_streamingUnits[0].m_filenameNoExtension = ConstArraySafeRef<char>(g_streamingUnitName_UnitTest0, strlen(g_streamingUnitName_UnitTest0));
+        m_streamingUnits[1].m_filenameNoExtension = ConstArraySafeRef<char>(g_streamingUnitName_UnitTest1, strlen(g_streamingUnitName_UnitTest1));
+        m_streamingUnits[2].m_filenameNoExtension = ConstArraySafeRef<char>(g_streamingUnitName_UnitTest2, strlen(g_streamingUnitName_UnitTest2));
 
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         
@@ -518,7 +519,7 @@ private:
         {
             for (auto& commandPoolSecondary : commandPoolSecondaryArray)
             {
-                CreateCommandPool(&commandPoolSecondary, m_queueFamilyIndices.graphicsFamily, m_device, m_physicalDevice);
+                CreateCommandPool(&commandPoolSecondary, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue], m_device, m_physicalDevice);
             }
         }
 
@@ -681,9 +682,9 @@ private:
 
                 CriticalSectionEnter(&streamingUnit.m_stateCriticalSection);
                 streamingUnit.m_state = StreamingUnitRuntime::State::kLoaded;//must happen here, because now the streaming unit is guaranteed to be rendered at least once (correctly defining its cpu frame submitted number), which will allow it to be unloaded correctly -- all provided the app doesn't shut down first
+                NTF_LOG_STREAMING("%s:%i:%s.m_state=%zu\n",
+                    __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
                 CriticalSectionLeave(&streamingUnit.m_stateCriticalSection);
-                NTF_LOG_STREAMING(  "%s:%i:%s.m_state=kLoaded\n",
-                                    __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data());
             }
 
 			m_streamingUnitsToAddToRenderable.size(0);
@@ -727,6 +728,7 @@ private:
                 {
                     NTF_REF(streamingUnitPtr, streamingUnit);
                     assert(streamingUnit.m_state == StreamingUnitRuntime::State::kLoaded);
+                    NTF_LOG_STREAMING("%s:%i:MainLoop():%s.m_state=%zu\n", __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_state);
 
                     UpdateUniformBuffer(
                         streamingUnit.m_uniformBufferCpuMemory,
@@ -744,7 +746,7 @@ private:
                         &streamingUnit.m_lastSubmittedCpuFrame,
                         m_frameNumberCurrentCpu,
                         commandBufferPrimary,
-                        &streamingUnit.m_texturedGeometries,///<@todo: ConstArraySafe
+                        streamingUnit.m_texturedGeometries,
                         streamingUnit.m_descriptorSet,
                         NTF_OBJECTS_NUM,
                         NTF_DRAWS_PER_OBJECT_NUM,
@@ -789,7 +791,7 @@ private:
                     &m_graphicsQueueCriticalSection,
                     signalSemaphores,
                     ConstVectorSafeRef<VkSemaphore>(&imageAvailableSemaphore, 1),
-                    ArraySafeRef<VkPipelineStageFlags>(&waitStages, 1),///<@todo: ArraySafeRefConst
+                    ConstArraySafeRef<VkPipelineStageFlags>(&waitStages, 1),
                     commandBufferPrimary,
                     m_graphicsQueue,
                     drawFrameFinishedFence.m_fence,

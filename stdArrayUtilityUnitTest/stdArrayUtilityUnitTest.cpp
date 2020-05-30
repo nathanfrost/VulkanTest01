@@ -1253,6 +1253,116 @@ int main()
         FreadTest(testFileName);
     }
 
+    //constructor tests
+    {
+        VectorSafe<int, kElementsMax> vectorSafeInitializerList0({ 0, 1, 2 });
+        VectorSafeRef<int> vectorSafeInitializerListRef0(&vectorSafeInitializerList0);
+
+        if (vectorSafeInitializerListRef0 != vectorSafeInitializerList0)
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        VectorSafeRef<int> vectorSafeInitializerListRef1(&vectorSafeInitializerListRef0);
+        if (vectorSafeInitializerListRef0 != vectorSafeInitializerListRef1)
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        VectorSafeRef<int> vectorSafeRefNull;
+        if (vectorSafeRefNull.size() != 0)
+        {
+            ExitOnFail(__LINE__);
+        }
+
+
+        ArraySafe<int, kElementsMax> arraySafeInitializerList({0,1,2});
+        ArraySafeRef<int> arraySafeInitializerListRef0(&arraySafeInitializerList);
+        if (memcmp(arraySafeInitializerList.data(), arraySafeInitializerListRef0.data(), arraySafeInitializerList.SizeInBytes()) != 0)
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        ArraySafeRef<int> arraySafeInitializerListRef1(&arraySafeInitializerListRef0);
+        if (memcmp(arraySafeInitializerListRef1.data(), arraySafeInitializerListRef0.data(), arraySafeInitializerList.SizeInBytes()) != 0)//not a typo; assume that arraySafeInitializerListRef0 = arraySafeInitializerList
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        ArraySafeRef<int> arraySafeInitializerListRef2(&vectorSafeInitializerListRef0);
+        if (memcmp(arraySafeInitializerListRef2.data(), vectorSafeInitializerListRef0.data(), vectorSafeInitializerListRef0.SizeInBytes()) != 0)
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        ArraySafeRef<int> arraySafeInitializerListRef3(&vectorSafeInitializerList0);
+        if (memcmp(arraySafeInitializerListRef3.data(), vectorSafeInitializerList0.data(), vectorSafeInitializerList0.SizeInBytes()) != 0)
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        ConstArraySafeRef<int> constArraySafeRef0(arraySafeInitializerListRef0);
+        if (memcmp(constArraySafeRef0.data(), arraySafeInitializerListRef0.data(), arraySafeInitializerList.SizeInBytes()) != 0)//not a typo; assume that arraySafeInitializerListRef0 = arraySafeInitializerList
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        ConstArraySafeRef<int> constArraySafeRef1(vectorSafeInitializerListRef0);
+        if (memcmp(constArraySafeRef1.data(), vectorSafeInitializerListRef0.data(), vectorSafeInitializerListRef0.SizeInBytes()) != 0)
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        ConstVectorSafeRef<int> constVectorSafeRef0(vectorSafeInitializerList0);
+        ConstArraySafeRef<int> constArraySafeRef2(constVectorSafeRef0);
+        if (memcmp(constArraySafeRef2.data(), constVectorSafeRef0.data(), constVectorSafeRef0.SizeInBytes()) != 0)
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        ConstArraySafeRef<int> constArraySafeRef3(vectorSafeInitializerList0);
+        if (memcmp(constArraySafeRef3.data(), vectorSafeInitializerList0.data(), vectorSafeInitializerList0.SizeInBytes()) != 0)
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        ConstArraySafeRef<int> constArraySafeRefNull;
+        if (constArraySafeRefNull.data() != nullptr)
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        ConstVectorSafeRef<int> constVectorSafeRefNull;
+        if (constVectorSafeRefNull.data() != nullptr)
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        ArraySafe<int, kElementsMax> arraySafe1(arraySafeInitializerListRef0, arraySafeInitializerList.size());//not a typo; assume that arraySafeInitializerListRef0 = arraySafeInitializerList
+        if (memcmp(arraySafe1.data(), arraySafeInitializerListRef0.data(), arraySafeInitializerList.SizeInBytes()) != 0)//not a typo; assume that arraySafeInitializerListRef0 = arraySafeInitializerList
+        {
+            ExitOnFail(__LINE__);
+        }
+
+        ArraySafe<int, kElementsMax> arraySafe2(constArraySafeRef0, arraySafeInitializerList.size());//not a typo; assume that constArraySafeRef0 = arraySafeInitializerList
+        if (memcmp(arraySafe2.data(), constArraySafeRef0.data(), arraySafeInitializerList.SizeInBytes()) != 0)//not a typo; assume that constArraySafeRef0 = arraySafeInitializerList
+        {
+            ExitOnFail(__LINE__);
+        }
+
+
+        FILE*const f = fopen("FreadUnitTest.bin", "rb");
+        ArraySafe<uint32_t, kElementsMax> arraySafeFread(f, kTestElementsNum);
+        for (size_t i = 0; i < kTestElementsNum; ++i)
+        {
+            if (arraySafeFread[i] != s_freadUnitTestDotBin[i])
+            {
+                ExitOnFail(__LINE__);
+            }
+        }
+        fclose(f);   
+    }
+
     //old tests below are kept because why not -- maybe a little extra coverage hiding in here
     ConstMethodTesting(vectorSafe, actualSize, lastValidValue);
 
@@ -1408,6 +1518,6 @@ int main()
 
     //done!
     printf("Unit test SUCCESS!\n");
-    ConsolePauseForUserAcknowledgement();
+    //ConsolePauseForUserAcknowledgement();
     return 0;
 }
