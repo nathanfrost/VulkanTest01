@@ -15,7 +15,6 @@ vulkanTest01Enabled = True
 #   For consistency, always write RootedFullPath (or one or the other of the two path descriptors, as appropriate)
 
 devenvRootedFullPath=r"C:\Program Files (x86)\Microsoft Visual Studio 14.0\Common7\IDE\devenv.com"
-baseRootedPath = r"E:\Code\VulkanTest01"
 slnFilename=r"VulkanTest01.sln"
 
 debug = "Debug"
@@ -41,11 +40,12 @@ def x64Directory(subdirectory):
 buildDirectoriesVulkanTest01 = [profileDirectory, releaseDirectory, shippingDirectory, x64Directory(debugDirectory), x64Directory(profileDirectory), x64Directory(releaseDirectory), x64Directory(shippingDirectory)]
 buildDirectoriesUnitCooker = [debugDirectory, releaseDirectory, x64Directory(debugDirectory), x64Directory(releaseDirectory)]
 
-
-
 def Print(s):
     print("BUILD_SYSTEM: %s" % s)
 
+baseRootedPath = os.getcwd()
+Print("Using baseRootedPath=%s" % baseRootedPath)
+	
 def Fail(s):
     Print("FAILED: %s" % s)
     quit(1)
@@ -74,13 +74,15 @@ def FunctionCallConditional(enabled, function, stringIdentifier):
     else:
         Print("%s DISABLED" % stringIdentifier)
                 
-def VisualStudioBuild(configuration, platform, vcxprojFullPath):
-    SubProcess(r'"%s" "%s\%s" /Build "%s|%s" /Project "%s\%s" /D NTF_NO_KEYSTROKE_TO_END_PROCESS' % (devenvRootedFullPath, baseRootedPath, slnFilename, configuration, platform, baseRootedPath, vcxprojFullPath))
+def VisualStudioBuild(configuration, platform, vcxprojFullPath, clean=False):
+    buildOrClean = "Clean" if clean else "Build"
+    SubProcess(r'"%s" "%s\%s" /%s "%s|%s" /Project "%s\%s"' % (devenvRootedFullPath, baseRootedPath, slnFilename, buildOrClean, configuration, platform, baseRootedPath, vcxprojFullPath))
 
 def VisualStudioBuildSet(vcxprojFullPath, visualStudioConfigurations, exclusions={platform_x86:[visualStudioConfigurationDebug]}):#unknown library problem with Debug|x86 that I don't care to solve)
     for platform in platforms:
         for visualStudioConfiguration in visualStudioConfigurations:
             if not (exclusions and platform in exclusions and visualStudioConfiguration in exclusions[platform]):
+                VisualStudioBuild(visualStudioConfiguration, platform, vcxprojFullPath, clean=True)#need to clean build to make sure preprocessor defines in the environment are respected
                 VisualStudioBuild(visualStudioConfiguration, platform, vcxprojFullPath)
 
 def StdArrayUtilityUnitTest_Build():
@@ -135,7 +137,7 @@ def VulkanTest01_Run():
         Print(executableRootedFullPath)
         subprocess.Popen(executableRootedFullPath)
         
-        WaitSeconds(10)
+        WaitSeconds(15)
         OsSystem("taskkill /IM VulkanTest01.exe")
         WaitSeconds(2)
 FunctionCallConditional(vulkanTest01Enabled, VulkanTest01_Run, "VulkanTest01_Run")
