@@ -352,8 +352,10 @@
     <ClCompile Include="WindowsUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="glmNTF.h" />
     <ClInclude Include="MemoryUtil.h" />
     <ClInclude Include="ntf_compileTimeDefines.h" />
+    <ClInclude Include="ntf_math.h" />
     <ClInclude Include="ntf_vulkan.h" />
     <ClInclude Include="ntf_vulkan_utility.h" />
     <ClInclude Include="StackNTF.h" />

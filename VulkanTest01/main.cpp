@@ -17,7 +17,7 @@ extern FILE* s_winTimer;
 VectorSafe<uint8_t, 8192 * 8192 * 4> s_pixelBufferScratch;
 
 WIN_TIMER_DEF(s_frameTimer);
-glm::vec3 s_cameraTranslation = glm::vec3(2.6f,3.4f,.9f);
+glm::vec3 s_cameraTranslation = glm::vec3(0.f,0.f,0.f);
 VectorSafe<const char*, NTF_VALIDATION_LAYERS_SIZE> s_validationLayers;
 
 #define NTF_FRAMES_IN_FLIGHT_NUM 2//#FramesInFlight
@@ -28,29 +28,30 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
     const float cameraSpeed = .1f;
     if (action == GLFW_REPEAT || action == GLFW_PRESS)
     {
-        if (key == GLFW_KEY_W)
-        {
-            s_cameraTranslation.x -= cameraSpeed;
-        }
-        else if (key == GLFW_KEY_S)
-        {
-            s_cameraTranslation.x += cameraSpeed;
-        }
-        else if (key == GLFW_KEY_A)
-        {
-            s_cameraTranslation.y -= cameraSpeed;
-        }
-        else if (key == GLFW_KEY_D)
-        {
-            s_cameraTranslation.y += cameraSpeed;
-        }
-        else if (key == GLFW_KEY_R)
+        //#WorldBasisVectors
+        if (key == GLFW_KEY_W)//into screen
         {
             s_cameraTranslation.z += cameraSpeed;
         }
-        else if (key == GLFW_KEY_F)
+        else if (key == GLFW_KEY_S)//out of screen
         {
             s_cameraTranslation.z -= cameraSpeed;
+        }
+        else if (key == GLFW_KEY_A)//left
+        {
+            s_cameraTranslation.x -= cameraSpeed;
+        }
+        else if (key == GLFW_KEY_D)//right
+        {
+            s_cameraTranslation.x += cameraSpeed;
+        }
+        else if (key == GLFW_KEY_E)//up
+        {
+            s_cameraTranslation.y -= cameraSpeed;
+        }
+        else if (key == GLFW_KEY_Q)//down
+        {
+            s_cameraTranslation.y += cameraSpeed;
         }
     }
 }
@@ -150,7 +151,6 @@ public:
 	{
         WindowInitialize(&m_window);
         VulkanInitialize();
-
         MainLoop(m_window);
         Shutdown();
         printf("SHUTDOWN COMPLETE\n");
@@ -507,9 +507,12 @@ private:
             streamingUnit.Initialize(m_device);
             streamingUnit.m_uniformBufferSizeUnaligned = sizeof(UniformBufferObject)*NTF_DRAWS_PER_OBJECT_NUM*NTF_OBJECTS_NUM;///#StreamingMemoryBasicModel
         }
-        m_streamingUnits[0].m_filenameNoExtension = ConstArraySafeRef<char>(g_streamingUnitName_UnitTest0, strlen(g_streamingUnitName_UnitTest0));
-        m_streamingUnits[1].m_filenameNoExtension = ConstArraySafeRef<char>(g_streamingUnitName_UnitTest1, strlen(g_streamingUnitName_UnitTest1));
-        m_streamingUnits[2].m_filenameNoExtension = ConstArraySafeRef<char>(g_streamingUnitName_UnitTest2, strlen(g_streamingUnitName_UnitTest2));
+        m_streamingUnits[0].m_filenameNoExtension = ConstStringSafe(g_streamingUnitName_UnitTest0);
+        m_streamingUnits[1].m_filenameNoExtension = ConstStringSafe(g_streamingUnitName_UnitTest1);
+        m_streamingUnits[2].m_filenameNoExtension = ConstStringSafe(g_streamingUnitName_UnitTest2);
+
+        //m_streamingUnits[3].m_filenameNoExtension = ConstStringSafe(g_streamingUnitName_TriangleCounterClockwise);
+        //m_streamingUnits[3].m_filenameNoExtension = ConstStringSafe(g_streamingUnitName_TriangleClockwise);
 
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         
@@ -715,7 +718,7 @@ private:
                 const size_t kClearValueNum = 2;
                 VectorSafe<VkClearValue, kClearValueNum> clearValues(kClearValueNum);
                 clearValues[0].color = { 0.0f, 0.0f, 0.0f, 1.0f };
-                clearValues[1].depthStencil = { 1.0f, 0 };
+                clearValues[1].depthStencil = { 0.f, 0 };
 
                 renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
                 renderPassInfo.pClearValues = clearValues.data();
@@ -848,6 +851,16 @@ private:
 #if NTF_DEBUG
             s_allowedToIssueStreamingCommands = true;
 #endif//#if NTF_DEBUG
+
+            //BEG_HAC
+            //static bool s_loadedSimpleTriangle;
+            //if (!s_loadedSimpleTriangle)
+            //{
+            //    StreamingUnitAddToLoadCriticalSection(&m_streamingUnits[3], &m_streamingUnitsToAddToLoad, &m_streamingUnitsAddToLoadCriticalSection);///@todo_NTF: should pair stream load queue with critical section to reduce error proneness
+            //    AssetLoadingThreadExecuteLoad(&m_assetLoadingThreadData.m_threadCommand, m_assetLoadingThreadData.m_handles.wakeEventHandle);
+            //    s_loadedSimpleTriangle = true;
+            //}
+            //END_HAC
 
             StreamingUnitTestTick(
                 &m_streamingUnits[0],

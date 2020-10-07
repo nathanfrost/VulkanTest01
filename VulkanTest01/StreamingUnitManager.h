@@ -16,7 +16,7 @@ extern RTL_CRITICAL_SECTION s_streamingDebugCriticalSection;
 #define NTF_LOG_STREAMING(...)
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
-enum { kStreamingUnitsNum = 6, kStreamingUnitsRenderableNum = 3, kStreamingUnitCommandsNum = kStreamingUnitsRenderableNum * 4 };
+enum { kStreamingUnitsNum = 6, kStreamingUnitsRenderableNum = 6, kStreamingUnitCommandsNum = kStreamingUnitsRenderableNum * 4 };
 
 DWORD WINAPI AssetLoadingThread(void* arg);
 

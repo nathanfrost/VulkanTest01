@@ -252,8 +252,6 @@ int main()
 
     streamingUnitCooker.Cook();
     streamingUnitCooker.Clear();
-
-
     streamingUnitCooker.FileNameOutputSet(g_streamingUnitName_UnitTest1);
 
     streamingUnitCooker.TexturedGeometryAdd("textures/chalet.jpg", "models/chalet.obj", 1.f);
@@ -270,6 +268,20 @@ int main()
 
     streamingUnitCooker.Cook();
     streamingUnitCooker.Clear();
+
+
+    //@todo: don't need texture
+    //streamingUnitCooker.FileNameOutputSet(g_streamingUnitName_TriangleClockwise);
+    //streamingUnitCooker.TexturedGeometryAdd("textures/skull.jpg", "models/triangle_norm_away_clockwise.obj", .05f);
+    //streamingUnitCooker.Cook();
+    //streamingUnitCooker.Clear();
+
+
+    //@todo: don't need texture
+    //streamingUnitCooker.FileNameOutputSet(g_streamingUnitName_TriangleCounterClockwise);
+    //streamingUnitCooker.TexturedGeometryAdd("textures/skull.jpg", "models/triangle_norm_away_counterclockwise.obj", .05f);
+    //streamingUnitCooker.Cook();
+    //streamingUnitCooker.Clear();
 
 
     STBAllocatorDestroy(&g_stbAllocator);

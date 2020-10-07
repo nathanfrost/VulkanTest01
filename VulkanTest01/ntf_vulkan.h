@@ -55,7 +55,7 @@ const bool s_enableValidationLayers = false;
 class VulkanPagedStackAllocator;
 
 static const uint32_t s_kWidth = 1600;
-static const uint32_t s_kHeight = 1200;
+static const uint32_t s_kHeight = 900;
 
 typedef uint32_t PushConstantBindIndexType;
 

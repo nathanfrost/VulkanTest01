@@ -880,6 +880,15 @@ public:
     STD_ARRAY_UTILITY_CONST_METHODS;
 };
 
+inline ConstArraySafeRef<char> ConstStringSafe(const char*const s) 
+{
+    assert(s);
+    const size_t strlenS = strlen(s) + 1;
+    assert(strlenS > 0);
+
+    return ConstArraySafeRef<char>(s, strlenS);
+}
+
 
 ///NOTE: the caller is responsible for freeing this memory with AlignedFree(); VectorSafeRef is only a reference
 template<class T>
