@@ -511,9 +511,6 @@ private:
         m_streamingUnits[1].m_filenameNoExtension = ConstStringSafe(g_streamingUnitName_UnitTest1);
         m_streamingUnits[2].m_filenameNoExtension = ConstStringSafe(g_streamingUnitName_UnitTest2);
 
-        //m_streamingUnits[3].m_filenameNoExtension = ConstStringSafe(g_streamingUnitName_TriangleCounterClockwise);
-        //m_streamingUnits[3].m_filenameNoExtension = ConstStringSafe(g_streamingUnitName_TriangleClockwise);
-
         CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
         
         const uint32_t swapChainFramebuffersSize = CastWithAssert<size_t,uint32_t>(m_swapChainFramebuffers.size());
@@ -745,6 +742,7 @@ private:
 
                     NTF_LOG_STREAMING(  "%s:%i:About to call FillCommandBufferPrimary():%s.m_lastSubmittedCpuFrame=%i\n",
                                         __FILE__, __LINE__, streamingUnit.m_filenameNoExtension.data(), streamingUnit.m_lastSubmittedCpuFrame);
+
                     FillCommandBufferPrimary(
                         &streamingUnit.m_lastSubmittedCpuFrame,
                         m_frameNumberCurrentCpu,
@@ -852,16 +850,6 @@ private:
             s_allowedToIssueStreamingCommands = true;
 #endif//#if NTF_DEBUG
 
-            //BEG_HAC
-            //static bool s_loadedSimpleTriangle;
-            //if (!s_loadedSimpleTriangle)
-            //{
-            //    StreamingUnitAddToLoadCriticalSection(&m_streamingUnits[3], &m_streamingUnitsToAddToLoad, &m_streamingUnitsAddToLoadCriticalSection);///@todo_NTF: should pair stream load queue with critical section to reduce error proneness
-            //    AssetLoadingThreadExecuteLoad(&m_assetLoadingThreadData.m_threadCommand, m_assetLoadingThreadData.m_handles.wakeEventHandle);
-            //    s_loadedSimpleTriangle = true;
-            //}
-            //END_HAC
-
             StreamingUnitTestTick(
                 &m_streamingUnits[0],
                 &m_streamingUnits[1],
@@ -874,7 +862,7 @@ private:
                 &m_assetLoadingThreadIdle,
                 m_assetLoadingThreadData.m_handles.wakeEventHandle,
                 m_frameNumberCurrentCpu,
-                24);
+                2400);
 #if NTF_DEBUG
             s_allowedToIssueStreamingCommands = false;
 #endif//#if NTF_DEBUG

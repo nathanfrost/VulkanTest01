@@ -7,7 +7,7 @@ layout (push_constant) uniform PushConstants
 } pushConstants;
 layout(binding = 0) uniform UniformBufferObject 
 {
-    mat4 modelToClip[4];
+    mat4 modelToClip[4];//#StreamingMemoryBasicModel
 } ubo;
 
 layout(location = 0) in vec3 inPosition;

@@ -11,6 +11,8 @@ REM -v print version strings
 REM -w suppress warnings (except as required by #extension : warn)
 REM -x save 32-bit hexadecimal numbers as text, requires a binary option (e.g., -V)
 
-%VK_SDK_PATH%/Bin32/glslangValidator.exe -V shader.vert
-%VK_SDK_PATH%/Bin32/glslangValidator.exe -V shader.frag
+%VK_SDK_PATH%/Bin32/glslangValidator.exe -V shader.vert -o vert.spv
+%VK_SDK_PATH%/Bin32/glslangValidator.exe -V shader.frag -o frag.spv
+%VK_SDK_PATH%/Bin32/glslangValidator.exe -V simpleTriangle.vert -o simpleTriangle_vert.spv
+%VK_SDK_PATH%/Bin32/glslangValidator.exe -V simpleTriangle.frag -o simpleTriangle_frag.spv
 pause

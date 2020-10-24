@@ -1111,15 +1111,11 @@ void CreateGraphicsPipeline(
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;  //any other setting (eg wireframe or point rendering) requires enabling the corresponding GPU feature
     rasterizer.lineWidth = 1.0f;                    //any setting greater than 1 requires enabling the wideLines GPU feature
 
-    //standard backface culling
-    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;///<@todo: #LeftHandedHack: WTF?  right-handed coordinate system should define clockwise!  
-    /*TODO: Given Python:
+    rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;//standard backface culling; eg cull all triangles with counterclockwise ordering, eg a negative area
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;//right-handed #WorldBasisVectors means clockwise ordering (eg a positive area) is expected
+    /*This Python code calculates the signed area of a 2D triangle specified by [v0,v1,v2], where v takes the form [vx,vy]
         def area(v0x,v0y,v1x,v1y,v2x,v2y):
             return -.5*(v0x*v1y-v1x*v0y+v1x*v2y-v2x*v1y+v2x*v0y-v0x*v2y)
-    area(0.34241,2.35734,0.33399,2.40607,0.35311,2.37412) = 0.00033134930000006113
-    
-    TODO: draw triangle myself and see what gets culled or not
     */
 
     //no depth biasing (for example, might be used to help with peter-panning issues in projected shadows)
@@ -2181,21 +2177,19 @@ void CameraToClipProjectionCalculate(
     const float& f = distanceFromEyeToFarClippingPlane;
     const float fMinusN = f - n;
     //#MatrixConvention: glm::mat4's constructor's textual layout is row-major
-    ///@todo: #LeftHandedHack: right-handed coordinate system should use: n/fMinusN, -f*n/fMinusN, -1.0f
     cameraToClip = glm::mat4(
         horizontalScale,    0.0f,           0.0f,           0.0f,
         0.0f,               verticalScale,  0.0f,           0.0f,
         0.0f,               0.0f,           -n/fMinusN,     1.0f, 
         0.0f,               0.0f,           f*n/fMinusN,   0.0f);
     /*  This matrix transforms every vertex in the vertex shader.  The 1-entry causes the vector's w=1 value to be replaced with the cameraspace-z 
-        value -- which will fall in the range [near-plane-value, far-plane-value] (see #zReverse) or else the vertex will be clipped.  After the 
-        vertex shader runs each vertex is scaled by its own 1/w value (also known as the w-divide), remapping the vertex's w back to 1
+        value -- which will fall in the range [near-plane-value, far-plane-value] or else the vertex will be clipped.  After the vertex shader runs 
+        each vertex is scaled by its own 1/w value (also known as the w-divide), remapping the vertex's w back to 1
 
-        The two entries that involve the near and far clipping plane values remap the cameraspace-z value to [0,distanceFromEyeToFarClippingPlane] 
-        (even if distanceFromEyeToFarClippingPlane represents the near-clipping plane with #zReverse), and the w-divide further remaps z to 
-        Normalized Device Coordinates (Z) -- [0,1].  This can be seen by expanding the formula for the z and w components of a vertex after both the 
-        matrix multiplication and the w-divide; with [z=n,w=1] the formula is: (f*n-f*n)/((f-n)*n) = 0; with [z=f,w=1], the formula is 
-        (f*f-f*n)/((f-n)*f) = (f*(f-n))/((f-n)*f) = f/f = 1 TODO: this is from traditional z-buffering; update for final right-handed zReverse projection matrix
+        The two entries that involve the near and far clipping plane values remap the cameraspace-z value to [0,distanceFromEyeToNearClippingPlane] 
+        and the w-divide further remaps z to Normalized Device Coordinates (Z) -- [0,1].  This can be seen by expanding the formula for the z and w 
+        components of a vertex after both the matrix multiplication and the w-divide; with [z=n,w=1], z'=(-n*n+f*n)/(f-n) = (n*(f-n))/(f-n) = n; the 
+        w-divide yields z''=n/n=1.  With [z=f,w=1], z'=(-f*n + f*n)/(f-n) = 0; the w-divide yields z''=0/f=0
 
         Note that this remapping of the vertex's z coordinate is totally independent of the remapping of that vertex's x and y coordinates
         
@@ -2435,7 +2429,7 @@ void RotationMatrixCalculate(glm::mat4x4*const cameraToClipPtr, const glm::vec3&
     assert(EqualEpsilon(glm::length(worldDown), 1.f));
     assert(fabs(glm::dot(forward, worldDown)) <= .99f);//ensure forward is not too parallel to worldUp
     
-    //#WorldBasisVectors: Use the same basis vectors as Vulkan: [xRight,yDown,zIntoScreen], right-handed
+    //#WorldBasisVectors: Use the same basis vectors as Vulkan: [xRight,yDown,zIntoScreen], which is right-handed
     const glm::vec3 right = glm::cross(worldDown, forward);
     const glm::vec3 down = glm::cross(forward, right);
     cameraToClip = glm::mat4(
@@ -2462,7 +2456,7 @@ void UpdateUniformBuffer(
     static auto startTime = std::chrono::high_resolution_clock::now();
 
     auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0f;
+    const float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.0f;
 
     ///#LocalAssetBasisInconsistency: these assets were authored with local coordinate systems ([xForward,yRight,zUp] -- possibly with any of these axes negated) that are inconsistent with what this renderer uses (#WorldBasisVectors)
     const glm::mat4 localToWorldRotationAboutInconsistentLocalX = glm::rotate(glm::mat4(), glm::radians(90.f), glm::vec3(1.0f, 0.0f, 0.0f));

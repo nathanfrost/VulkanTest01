@@ -82,6 +82,7 @@ struct StreamingUnitCooker
 
     StreamingUnitCookerString m_fileNameOutput;
     StreamingUnitCookerTexturedGeometries m_texturedGeometries;
+    bool m_flipNormals = false;
 };
 
 void StreamingUnitCooker::FileNameOutputSet(const char*const filenameNoExtension)
@@ -123,24 +124,28 @@ void StreamingUnitCooker::Cook()
     {
         const StreamingUnitCookerTexturedGeometry& texturedGeometry = m_texturedGeometries[texturedGeometryIndex];
 
-        //cook and write texture
-        const StreamingUnitCookerString texturePath = rootDirectoryWithTrailingBackslash + StreamingUnitCookerString(texturedGeometry.m_texturePathRelativeFromRoot.c_str());
-        int textureWidth, textureHeight, textureChannels;
-        
-        assert(g_stbAllocator->GetFirstByteFree() == 0);//ensure we can Clear() the whole stack correctly in STBIImageFree() (eg there's nothing already allocated in the stack)
-        NTF_STATIC_ASSERT(sizeof(stbi_uc) == sizeof(StreamingUnitByte));
-        StreamingUnitByte* pixels = stbi_load(texturePath.c_str(), &textureWidth, &textureHeight, &textureChannels, STBI_rgb_alpha);///<@todo: output ASTC (Android and PC), BC (PC), etc (see VK_FORMAT_* in vulkan_core.h).  In theory I could probably upload and image transition everything to VK_IMAGE_TILING_OPTIMAL and then write that buffer to disk for the fastest possible texture load, but in practice I don't think this can be done in 2019 with Vulkan (or DX12 or Metal)
-        assert(pixels);
-        textureChannels = 4;///<this is true because we passed STBI_rgb_alpha; stbi_load() reports the number of textures actually present even as it respects this flag
+        const char* texturePathRelativeFromRootCStr = texturedGeometry.m_texturePathRelativeFromRoot.c_str();
+        if (texturePathRelativeFromRootCStr[0])
+        {
+            //cook and write texture
+            const StreamingUnitCookerString texturePath = rootDirectoryWithTrailingBackslash + StreamingUnitCookerString(texturePathRelativeFromRootCStr);
+            int textureWidth, textureHeight, textureChannels;
 
-        StreamingUnitTextureDimension textureWidthCook = CastWithAssert<int,StreamingUnitTextureDimension>(textureWidth);
-        StreamingUnitTextureDimension textureHeightCook = CastWithAssert<int, StreamingUnitTextureDimension>(textureHeight);
-        StreamingUnitTextureChannels textureChannelsCook = CastWithAssert<int, StreamingUnitTextureChannels>(textureChannels);
+            assert(g_stbAllocator->GetFirstByteFree() == 0);//ensure we can Clear() the whole stack correctly in STBIImageFree() (eg there's nothing already allocated in the stack)
+            NTF_STATIC_ASSERT(sizeof(stbi_uc) == sizeof(StreamingUnitByte));
+            StreamingUnitByte* pixels = stbi_load(texturePath.c_str(), &textureWidth, &textureHeight, &textureChannels, STBI_rgb_alpha);///<@todo: output ASTC (Android and PC), BC (PC), etc (see VK_FORMAT_* in vulkan_core.h).  In theory I could probably upload and image transition everything to VK_IMAGE_TILING_OPTIMAL and then write that buffer to disk for the fastest possible texture load, but in practice I don't think this can be done in 2019 with Vulkan (or DX12 or Metal)
+            assert(pixels);
+            textureChannels = 4;///<this is true because we passed STBI_rgb_alpha; stbi_load() reports the number of textures actually present even as it respects this flag
 
-        TextureSerialize0<SerializerCookerOut>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook);
-        const size_t imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
-        TextureSerialize1<SerializerCookerOut>(f, ConstArraySafeRef<StreamingUnitByte>(pixels, imageSizeBytes), nullptr, 0, imageSizeBytes, nullptr);
-        STBIImageFree(pixels, g_stbAllocator);
+            StreamingUnitTextureDimension textureWidthCook = CastWithAssert<int, StreamingUnitTextureDimension>(textureWidth);
+            StreamingUnitTextureDimension textureHeightCook = CastWithAssert<int, StreamingUnitTextureDimension>(textureHeight);
+            StreamingUnitTextureChannels textureChannelsCook = CastWithAssert<int, StreamingUnitTextureChannels>(textureChannels);
+
+            TextureSerialize0<SerializerCookerOut>(f, &textureWidthCook, &textureHeightCook, &textureChannelsCook);
+            const size_t imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
+            TextureSerialize1<SerializerCookerOut>(f, ConstArraySafeRef<StreamingUnitByte>(pixels, imageSizeBytes), nullptr, 0, imageSizeBytes, nullptr);
+            STBIImageFree(pixels, g_stbAllocator);
+        }
 
         //cook and write vertex and index buffers
         std::vector<Vertex> vertices;
@@ -162,7 +167,7 @@ void StreamingUnitCooker::Cook()
 
         ///@todo: replace this STL with a good, static-memory hashmap
         //build index list and un-duplicate vertices
-        std::unordered_map<Vertex, uint32_t> uniqueVertices = {};
+        std::unordered_map<Vertex, IndexBufferValue> uniqueVertices = {};
 
         for (const auto& shape : shapes)
         {
@@ -187,13 +192,26 @@ void StreamingUnitCooker::Cook()
 
                 if (uniqueVertices.count(vertex) == 0)
                 {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+                    uniqueVertices[vertex] = static_cast<IndexBufferValue>(vertices.size());
                     vertices.push_back(vertex);
                 }
 
                 indices.push_back(uniqueVertices[vertex]);
             }
         }
+        if (m_flipNormals)
+        {
+            const size_t indicesSize = indices.size();
+            assert(indicesSize % 3 == 0);
+            for (size_t indexOfFirstElementOfTriplet = 0; indexOfFirstElementOfTriplet < indicesSize; indexOfFirstElementOfTriplet += 3)
+            {
+                const size_t indexOfLastElementOfTriplet = indexOfFirstElementOfTriplet + 2;
+                const IndexBufferValue originalValueOfFirstElement = indices[indexOfFirstElementOfTriplet];
+                indices[indexOfFirstElementOfTriplet] = indices[indexOfLastElementOfTriplet];
+                indices[indexOfLastElementOfTriplet] = originalValueOfFirstElement;
+            }
+        }
+
         if (texturedGeometry.m_uniformScale != 1.f)
         {
             for (auto& vertex : vertices)
@@ -246,13 +264,17 @@ int main()
     //const float m_uniformScale[TODO_REFACTOR_NUM] = { /*0.5f,*//*,.0025f*//*.01f,*/ /*1.f*/ };//#StreamingMemoryBasicModel
 
     streamingUnitCooker.FileNameOutputSet(g_streamingUnitName_UnitTest0);
+    streamingUnitCooker.m_flipNormals = true;
 
     streamingUnitCooker.TexturedGeometryAdd("textures/skull.jpg", "models/skull.obj", .05f);
     streamingUnitCooker.TexturedGeometryAdd("textures/Banana.jpg", "models/Banana.obj", .005f);
 
     streamingUnitCooker.Cook();
     streamingUnitCooker.Clear();
+
+    
     streamingUnitCooker.FileNameOutputSet(g_streamingUnitName_UnitTest1);
+    streamingUnitCooker.m_flipNormals = true;
 
     streamingUnitCooker.TexturedGeometryAdd("textures/chalet.jpg", "models/chalet.obj", 1.f);
     streamingUnitCooker.TexturedGeometryAdd("textures/cat_diff.tga", "models/cat.obj", 1.f);
@@ -262,6 +284,7 @@ int main()
 
 
     streamingUnitCooker.FileNameOutputSet(g_streamingUnitName_UnitTest2);
+    streamingUnitCooker.m_flipNormals = true;
 
     streamingUnitCooker.TexturedGeometryAdd("textures/appleD.jpg", "models/apple textured obj.obj", .01f);
     streamingUnitCooker.TexturedGeometryAdd("textures/container_clean_diffuse01.jpeg", "models/Container_OBJ.obj", .002f);
@@ -269,19 +292,20 @@ int main()
     streamingUnitCooker.Cook();
     streamingUnitCooker.Clear();
 
+    
+    ///@todo: clean up "no texture"
+    streamingUnitCooker.FileNameOutputSet(g_streamingUnitName_TriangleClockwise);
+    streamingUnitCooker.m_flipNormals = false;
+    streamingUnitCooker.TexturedGeometryAdd(StreamingUnitCookerString(""), "models/triangle_norm_away_clockwise.obj", 1.f);
+    streamingUnitCooker.Cook();
+    streamingUnitCooker.Clear();
 
-    //@todo: don't need texture
-    //streamingUnitCooker.FileNameOutputSet(g_streamingUnitName_TriangleClockwise);
-    //streamingUnitCooker.TexturedGeometryAdd("textures/skull.jpg", "models/triangle_norm_away_clockwise.obj", .05f);
-    //streamingUnitCooker.Cook();
-    //streamingUnitCooker.Clear();
-
-
-    //@todo: don't need texture
-    //streamingUnitCooker.FileNameOutputSet(g_streamingUnitName_TriangleCounterClockwise);
-    //streamingUnitCooker.TexturedGeometryAdd("textures/skull.jpg", "models/triangle_norm_away_counterclockwise.obj", .05f);
-    //streamingUnitCooker.Cook();
-    //streamingUnitCooker.Clear();
+    ///@todo: clean up "no texture"
+    streamingUnitCooker.FileNameOutputSet(g_streamingUnitName_TriangleCounterClockwise);
+    streamingUnitCooker.m_flipNormals = false;
+    streamingUnitCooker.TexturedGeometryAdd(StreamingUnitCookerString(""), "models/triangle_norm_away_counterclockwise.obj", 1.f);
+    streamingUnitCooker.Cook();
+    streamingUnitCooker.Clear();
 
 
     STBAllocatorDestroy(&g_stbAllocator);

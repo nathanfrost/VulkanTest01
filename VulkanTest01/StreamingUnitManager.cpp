@@ -383,7 +383,8 @@ void StreamingCommandsProcess(
                 //printf("Staging buffers cleaned up\n");
             }
 
-            //streaming unit is now loaded so tag it renderable -- but don't set state to loaded until it is guaranteed to be rendered at least once (provided the app doesn't shut down first)
+            /*  streaming unit is now loaded so tag it renderable -- but don't set state to loaded until it is guaranteed to be rendered at least 
+                once (provided the app doesn't shut down first) */
             CriticalSectionEnter(&streamingUnitsAddToRenderableCriticalSection);
             streamingUnitsToAddToRenderable.Push(&streamingUnit);
             CriticalSectionLeave(&streamingUnitsAddToRenderableCriticalSection);
