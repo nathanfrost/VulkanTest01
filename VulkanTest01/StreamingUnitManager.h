@@ -2,7 +2,7 @@
 #include"ntf_vulkan.h"
 #include"QueueCircular.h"
 
-///@todo: update to latest code; this is currently broken
+///@todo: single-threaded may be broken; I don't remember
 #define NTF_ASSET_LOADING_MULTITHREADED 1
 
 #define NTF_UNIT_TEST_STREAMING_LOG 0

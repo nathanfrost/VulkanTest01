@@ -399,7 +399,7 @@ private:
         //QueryPerformanceFrequency(&g_queryPerformanceFrequency);
 
         s_validationLayers.size(0);
-        s_validationLayers.Push("VK_LAYER_LUNARG_standard_validation");
+        s_validationLayers.Push("VK_LAYER_KHRONOS_validation");
 #if NTF_API_DUMP_VALIDATION_LAYER_ON
         s_validationLayers.Push("VK_LAYER_LUNARG_api_dump");///<this produces "file not found" after outputting to (I believe) stdout for a short while; seems like it overruns Windows 7's file descriptor or something.  Weirdly, running from Visual Studio 2015 does not seem to have this problem, but then I'm limited to 9999 lines of the command prompt VS2015 uses for output.  Not ideal
 #endif//NTF_API_DUMP_VALIDATION_LAYER_ON
@@ -862,7 +862,7 @@ private:
                 &m_assetLoadingThreadIdle,
                 m_assetLoadingThreadData.m_handles.wakeEventHandle,
                 m_frameNumberCurrentCpu,
-                2400);
+                24);
 #if NTF_DEBUG
             s_allowedToIssueStreamingCommands = false;
 #endif//#if NTF_DEBUG

@@ -961,7 +961,11 @@ void CreateLogicalDevice(
 
 void DescriptorTypeAssertOnInvalid(const VkDescriptorType descriptorType)
 {
-    assert(descriptorType >= VK_DESCRIPTOR_TYPE_BEGIN_RANGE && descriptorType <= VK_DESCRIPTOR_TYPE_END_RANGE);
+    /*  Vulkan 1.2.135.0 defined VK_DESCRIPTOR_TYPE_BEGIN_RANGE and VK_DESCRIPTOR_TYPE_END_RANGE, but 1.2.154.1 does not, so I do it myself, hoping 
+        I don't get unknowingly out of sync with future Vulkan versions */
+    const VkDescriptorType descriptorTypeBeginRange = VK_DESCRIPTOR_TYPE_SAMPLER;
+    const VkDescriptorType descriptorTypeEndRange = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+    assert(descriptorType >= descriptorTypeBeginRange && descriptorType <= descriptorTypeEndRange);
 }
 
 void CreateDescriptorSetLayout(
@@ -1142,9 +1146,8 @@ void CreateGraphicsPipeline(
 
     //allows you to only keep fragments that fall within a specific depth-range
     depthStencil.depthBoundsTestEnable = VK_FALSE;
-    depthStencil.minDepthBounds = 0.f; // Optional
-    depthStencil.maxDepthBounds = 1.f; // Optional
-    //#TODO: should above min/max be swapped for #zReverse?  I don't think so...
+    depthStencil.minDepthBounds = 0.f;
+    depthStencil.maxDepthBounds = 1.f;
 
     //stencil not being used
     depthStencil.stencilTestEnable = VK_FALSE;
@@ -1305,11 +1308,10 @@ void CreateRenderPass(
     dependency.dstSubpass = 0;//must always be higher than srcSubpass to prevent cycles in dependency graph
     dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     dependency.srcAccessMask = 0;
-    //The operations that should wait on this are in the color attachment stage and involve the reading and writing of 
-    //the color attachment.  These settings will prevent the transition from happening until it's actually necessary 
-    //(and allowed): when we want to start writing colors to it
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    /*  The operations that should wait on this are in the color attachment stage TODO and involve the reading and writing of the color attachment.  These 
+        settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it */
+    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
     VectorSafe<VkAttachmentDescription, 2> attachments({ colorAttachment,depthAttachment });
     VkRenderPassCreateInfo renderPassInfo = {};
@@ -2439,7 +2441,7 @@ void RotationMatrixCalculate(glm::mat4x4*const cameraToClipPtr, const glm::vec3&
         translation.x,  translation.y,  translation.z,  1.0f);
 }
 
-///@todo: investigate using push constants instead; see if it's more efficient
+//push constants can be more efficient than uniform buffers, but are typically much more size-limited
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
     const glm::vec3 cameraTranslation,
@@ -2501,7 +2503,7 @@ void UpdateUniformBuffer(
     mappedMemoryRange.memory = uniformBufferGpuMemory;
     mappedMemoryRange.offset = offsetToGpuMemory;
     mappedMemoryRange.size = uniformBufferSize;
-    vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange);///<@todo: respect: If pMemoryRanges includes sets of nonCoherentAtomSize bytes where no bytes have been written by the host, those bytes must not be flushed
+    vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange);///If pMemoryRanges includes sets of nonCoherentAtomSize bytes where no bytes have been written by the host, those bytes must not be flushed -- here the entire uniform buffer is written to every frame
 }
 
 void AcquireNextImage(
@@ -2578,12 +2580,19 @@ VkInstance CreateInstance(const ConstVectorSafeRef<const char*>& validationLayer
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
 #if NTF_DEBUG
+    VectorSafe<VkValidationFeatureEnableEXT, 8> validationEnabledFeatures;
     //instrument SPIR-V code with debugging checks
-    VkValidationFeatureEnableEXT enables[] = { VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT, VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT };
+    validationEnabledFeatures.Push(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);//mutually exclusive with VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
+    validationEnabledFeatures.Push(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT);
+
+    validationEnabledFeatures.Push(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);//best-practices advice (warnings, not generally errors)
+    //validationEnabledFeatures.Push(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);//allow shaders to call debugPrintfEXT() for debugging -- mutually exclusive with VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT
+    validationEnabledFeatures.Push(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);//synchronization errors (memory barriers, render/sub-pass dependencies)
+    
     VkValidationFeaturesEXT features = {};
     features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-    features.enabledValidationFeatureCount = 1;
-    features.pEnabledValidationFeatures = enables;
+    features.enabledValidationFeatureCount = CastWithAssert<size_t, uint32_t>(validationEnabledFeatures.size());
+    features.pEnabledValidationFeatures = validationEnabledFeatures.data();
     createInfo.pNext = &features;
 #endif NTF_DEBUG
 
@@ -2979,8 +2988,8 @@ void CreateSwapChain(
     const uint32_t queueFamilyIndices[] = { static_cast<uint32_t>(indices.index[QueueFamilyIndices::Type::kGraphicsQueue]), static_cast<uint32_t>(indices.index[QueueFamilyIndices::Type::kPresentQueue]) };
     if (indices.index[QueueFamilyIndices::Type::kGraphicsQueue] != indices.index[QueueFamilyIndices::Type::kPresentQueue])
     {
-        ///@todo: remove this block and always execute the else once we support separate graphics and present queues
-        //assert(false);///<@todo: maybe use explicit ownership transfers between graphics and present queues?  Seems crazy
+        ///@todo: could remove this block and always execute if we support separate graphics and present queues
+        //assert(false);///<@todo: maybe this would require using explicit ownership transfers between graphics and present queues?  Seems crazy
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;//Images can be used across multiple queue families without explicit ownership transfers.
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndices;
