@@ -484,6 +484,15 @@ void UpdateUniformBuffer(
     const VkExtent2D& swapChainExtent,
     const VkDevice& device);
 
+///@todo: find better translation unit
+template<class T>
+inline T MaxNtf(const T a, const T b)
+{
+    assert(a >= 0);
+    assert(b >= 0);
+    return a > b ? a : b;
+}
+
 enum class CmdSetCheckpointValues :size_t 
 {
     vkCmdBeginRenderPass_kBefore, 
