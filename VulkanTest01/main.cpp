@@ -158,11 +158,12 @@ public:
         printf("s_vulkanApiCpuBytesAllocatedMax=%zu\n", GetVulkanApiCpuBytesAllocatedMax());
 #endif//#if NTF_DEBUG
 
-#if !NTF_NO_KEYSTROKE_TO_END_PROCESS
+#define NTF_KEYSTROKE_TO_END_PROCESS 1
+#if NTF_KEYSTROKE_TO_END_PROCESS
         int i;
         printf("Enter a character and press ENTER to exit\n");
         scanf("%i", &i);
-#endif//#if !NTF_NO_KEYSTROKE_TO_END_PROCESS
+#endif//#if !NTF_KEYSTROKE_TO_END_PROCESS
     }
 
     ///@todo: fix; not maintained so totally broken
