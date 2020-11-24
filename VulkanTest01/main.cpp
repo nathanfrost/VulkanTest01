@@ -4,6 +4,8 @@
 #include"StreamingUnitTest.h"
 #include"WindowsUtil.h"
 
+#define NTF_KEYSTROKE_TO_END_PROCESS 0
+
 #if NTF_DEBUG
 bool s_allowedToIssueStreamingCommands=false;
 #endif//#if NTF_DEBUG
@@ -158,7 +160,6 @@ public:
         printf("s_vulkanApiCpuBytesAllocatedMax=%zu\n", GetVulkanApiCpuBytesAllocatedMax());
 #endif//#if NTF_DEBUG
 
-#define NTF_KEYSTROKE_TO_END_PROCESS 1
 #if NTF_KEYSTROKE_TO_END_PROCESS
         int i;
         printf("Enter a character and press ENTER to exit\n");
@@ -396,7 +397,10 @@ private:
         Fopen(&s_streamingDebug, "StreamingDebug.txt", "w+");
         CriticalSectionLeave(&s_streamingDebugCriticalSection);
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
-        
+
+        const VkResult volkInitializeResult = volkInitialize();//load Vulkan dll; get Vulkan function pointer that gets other Vulkan function pointers
+        NTF_VK_ASSERT_SUCCESS(volkInitializeResult);
+
         //QueryPerformanceFrequency(&g_queryPerformanceFrequency);
 
         s_validationLayers.size(0);
@@ -407,6 +411,7 @@ private:
         m_deviceExtensions = VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>({VK_KHR_SWAPCHAIN_EXTENSION_NAME});
 
         m_instance = CreateInstance(s_validationLayers);
+        volkLoadInstance(m_instance);//load Vulkan function pointers using Vulkan's loader dispatch code (supports multiple devices at the performance cost of additional indirection)
         m_callback = SetupDebugCallback(m_instance);
         CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it influences physical device selection
         PickPhysicalDevice(&m_physicalDevice, m_surface, m_deviceExtensions, m_instance);
@@ -434,6 +439,7 @@ private:
             s_validationLayers, 
             m_queueFamilyIndices, 
             m_physicalDevice);
+        volkLoadDevice(m_device);//load Vulkan function pointers for the one-and-only Vulkan device for minimal indirection and maximum performance
         CreateSwapChain(
             m_window, 
             &m_swapChain, 
