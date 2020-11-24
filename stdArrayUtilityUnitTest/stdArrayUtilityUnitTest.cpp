@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include"../VulkanTest01/QueueCircular.h"
-#include"../VulkanTest01/stdArrayUtility.h"
-#include"../VulkanTest01/WindowsUtil.h"
+#include"QueueCircular.h"
+#include"stdArrayUtility.h"
+#include"WindowsUtil.h"
 
 ///@todo: allow failed asserts to continue -- eg allow unit tests to succeed BECAUSE they trigger asserts, verifying that the asserts are working as intended.  Replace raw assert's with a macro that can be defined to exit(-1) in non-debug builds
 
