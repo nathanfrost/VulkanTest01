@@ -215,14 +215,14 @@ void ImageMemoryBarrier(
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
 
-    barrier.srcAccessMask = srcAccessMask;
-    barrier.dstAccessMask = dstAccessMask;
+    barrier.srcAccessMask = srcAccessMask;//types of memory accesses that are made available and visible to stages specified in srcStageMask
+    barrier.dstAccessMask = dstAccessMask;//types of memory accesses that are made available and visible to stages specified in dstStageMask
 
     CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdPipelineBarrier_kBefore)], instance);
     vkCmdPipelineBarrier(
         commandBuffer,
-        srcStageMask,//perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader),
-        dstStageMask,
+        srcStageMask,///<all work currently submitted to these pipeline stages must complete...
+        dstStageMask,///<...before any work subsequently submitted to these pipeline stages is allowed to begin executing.  Work submitted in pipeline stages not specified in dstStageMask is unaffected by this barrier and may execute in any order
         0,
         0, nullptr,
         0, nullptr,
@@ -323,7 +323,7 @@ void TransferImageFromCpuToGpu(
         image,
         0,
         VK_ACCESS_TRANSFER_WRITE_BIT,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,//perform source operation immediately (and not at some later stage, like the vertex shader or fragment shader), 
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
         commandBufferTransfer,
         instance);
@@ -1261,7 +1261,7 @@ void CreateRenderPass(
     VkAttachmentDescription colorAttachment = {};
     colorAttachment.format = swapChainImageFormat;
     colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;                    //no MSAA
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;               //clear to a constant value defined in VkRenderPassBeginInfo; other options are VK_ATTACHMENT_LOAD_OP_LOAD: Preserve the existing contents of the attachment and VK_ATTACHMENT_LOAD_OP_DONT_CARE: Existing contents are undefined; we don't care about them
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;               //clear to a constant value defined in VkRenderPassBeginInfo; other options are VK_ATTACHMENT_LOAD_OP_LOAD: Preserve the existing contents of the attachment (least efficient; often involves hitting system memory) and VK_ATTACHMENT_LOAD_OP_DONT_CARE: Existing contents are undefined; we don't care about them (most efficient)
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;             //store buffer in memory for later; other option is VK_ATTACHMENT_STORE_OP_DONT_CARE: Contents of the framebuffer will be undefined after the rendering operation
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;    //not doing anything with stencil buffer
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;  //not doing anything with stencil buffer
@@ -1306,12 +1306,15 @@ void CreateRenderPass(
     VkSubpassDependency dependency = {};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;//implicit subpass before or after the render pass depending on whether it is specified in srcSubpass or dstSubpass
     dependency.dstSubpass = 0;//must always be higher than srcSubpass to prevent cycles in dependency graph
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependency.srcAccessMask = 0;
-    /*  The operations that should wait on this are in the color attachment stage TODO and involve the reading and writing of the color attachment.  These 
-        settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to start writing colors to it */
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;//first synchronization scope -- including a particular pipeline stage here implicitly includes logically earlier pipeline stages in the synchronization scope
+    dependency.srcAccessMask = 0;//specific memory accesses that are made available and visible to stages specified in srcStageMask
+
+    /*  The operations that should wait on this are in the color and depth/early-fragment test stages and involve the reading and writing of the
+        color attachment.  These settings will prevent the transition from happening until it's actually necessary (and allowed): when we want to
+        start writing colors to it */
+    dependency.dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;//second synchronization scope includes logically later pipeline stages -- NOTE: if this is true, there should only be VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, because VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT happens-after -- but if I do this I get: validation layer: Validation Error: [ SYNC-HAZARD-WRITE_AFTER_WRITE ] Object 0: handle = 0xd76249000000000c, type = VK_OBJECT_TYPE_RENDER_PASS; | MessageID = 0xfdf9f5e1 | vkCmdBeginRenderPass: Hazard WRITE_AFTER_WRITE vs. layout transition in subpass 0 for attachment 0 aspect color during load with loadOp VK_ATTACHMENT_LOAD_OP_CLEAR on Nvidia RTX 2080 SUPER with driver 441.12
+    dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;//specific memory accesses that are made available and visible to stages specified in dstStageMask
+    dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;//dependencies are frame-local -- eg on tiled architectures, restrict shaders to tiled memory, providing no ordering guarantees between tiles (eg no full-screen effect type processing)
 
     VectorSafe<VkAttachmentDescription, 2> attachments({ colorAttachment,depthAttachment });
     VkRenderPassCreateInfo renderPassInfo = {};
@@ -2086,7 +2089,7 @@ void FenceCreate(VkFence*const fencePtr, const VkFenceCreateFlagBits flags, cons
 }
 void FenceWaitUntilSignalled(const VkFence& fence, const VkDevice& device)
 {
-    vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX/*wait until fence is signaled*/);
+    vkWaitForFences(device, 1, &fence, VK_TRUE, UINT64_MAX/*wait until fence is signaled*/);//if significant time passes here, we could use vkGetFenceStatus() to ascertain that vkWaitForFences() would stall for at least a little time and then loop on vkGetFenceStatus(), sneaking in a few small pieces of processing until we run out of such processing (at which point we vkWaitForFences()) or vkGetFenceStatus() tells us to proceed
     assert(vkGetFenceStatus(device, fence) == VK_SUCCESS);
 }
 void FenceReset(const VkFence& fence, const VkDevice& device)
@@ -2887,12 +2890,12 @@ VkPresentModeKHR ChooseSwapPresentMode(const ConstVectorSafeRef<VkPresentModeKHR
         {
             /*  instead of blocking the application when the queue is full, the images that are already queued are simply replaced with the newer 
                 ones -- eg wait for the next vertical blanking interval to update the image. If we render another image, the image waiting to be 
-                displayed is overwritten. */
+                displayed is overwritten (poor choice for mobile, since it allows for entire frames to be discarded without being displayed) */
             return availablePresentMode;
         }
     }
 
-    return VK_PRESENT_MODE_FIFO_KHR;/* display takes an image from the front of the queue on a vertical blank and the program inserts rendered images 
+    return VK_PRESENT_MODE_FIFO_KHR;/*  display takes an image from the front of the queue on a vertical blank and the program inserts rendered images 
                                         at the back of the queue.  If the queue is full then the program has to wait */
     /* could also return:
     * VK_PRESENT_MODE_FIFO_RELAXED_KHR: This mode only differs from VK_PRESENT_MODE_FIFO_KHR if the application is late and the queue was 
