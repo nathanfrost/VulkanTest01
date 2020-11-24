@@ -932,6 +932,9 @@ void CreateLogicalDevice(
 
     VkPhysicalDeviceFeatures deviceFeatures = {};
     deviceFeatures.samplerAnisotropy = true;
+#if NTF_DEBUG
+    //deviceFeatures.robustBufferAccess = true;//If you get crashes or DEVICE_LOST; try enabling this to see if the problem goes away.  If so, the issue is probably an out-of-bounds problem.  Broadly, this costs performance for bounds-checking but returns well-defined values (like zeroes) for out-of-bounds checks; also see VkPhysicalDeviceRobustness2FeaturesEXT's robustBufferAccess2 and robustImageAccess2 members
+#endif//#if NTF_DEBUG
 
     VkDeviceCreateInfo createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
