@@ -193,6 +193,7 @@ void StreamingCommandsProcess(
             {
                 //load texture
                 StreamingUnitTextureDimension textureWidth, textureHeight;
+                uint32_t mipLevels;
                 auto& texturedGeometry = streamingUnit.m_texturedGeometries[texturedGeometryIndex];
                 size_t imageSizeBytes;
                 const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
@@ -201,6 +202,7 @@ void StreamingCommandsProcess(
                     &deviceLocalMemory,
                     &textureWidth,
                     &textureHeight,
+                    &mipLevels,
                     &stagingBufferMemoryMapCpuToGpu,
                     &imageSizeBytes,
                     &stagingBufferGpuOffsetToAllocatedBlock,
@@ -227,6 +229,7 @@ void StreamingCommandsProcess(
                     texturedGeometry.textureImage,
                     textureWidth,
                     textureHeight,
+                    mipLevels,
                     imageFormat,
                     stagingBuffersGpu.back(),
                     commandBufferTransfer,
@@ -236,7 +239,7 @@ void StreamingCommandsProcess(
                     device,
                     instance);
 
-                CreateTextureImageView(&streamingUnit.m_textureImageViews[texturedGeometryIndex], texturedGeometry.textureImage, device);
+                CreateTextureImageView(&streamingUnit.m_textureImageViews[texturedGeometryIndex], texturedGeometry.textureImage, mipLevels, device);
                 {
                     //LARGE_INTEGER perfCount;
                     //QueryPerformanceCounter(&perfCount);

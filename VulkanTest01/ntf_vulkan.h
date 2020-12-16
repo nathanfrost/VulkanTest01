@@ -84,6 +84,7 @@ void TransferImageFromCpuToGpu(
     const VkImage& image,
     const uint32_t width,
     const uint32_t height,
+    const uint32_t mipLevels,
     const VkFormat& format,
     const VkBuffer& stagingBuffer,
     const VkCommandBuffer commandBufferTransfer,
@@ -92,14 +93,16 @@ void TransferImageFromCpuToGpu(
     const uint32_t graphicsQueueFamilyIndex,
     const VkDevice& device, 
     const VkInstance instance);
-void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device);
+void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const uint32_t mipLevels, const VkDevice& device);
 bool CreateAllocateBindImageIfAllocatorHasSpace(
     VkImage*const imagePtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const alignmentPtr,
     const uint32_t width,
     const uint32_t height,
+    const uint32_t mipLevels,
     const VkFormat& format,
+    const VkImageLayout& initialLayout,
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
@@ -148,7 +151,13 @@ void CreateBuffer(
 VkFormat FindDepthFormat(const VkPhysicalDevice& physicalDevice);
 void CreateShaderModule(VkShaderModule*const shaderModulePtr, char*const code, const size_t codeSizeBytes, const VkDevice& device);
 bool CheckValidationLayerSupport(const ConstVectorSafeRef<const char*>& validationLayers);
-void CreateImageView(VkImageView*const imageViewPtr, const VkDevice& device, const VkImage& image, const VkFormat& format, const VkImageAspectFlags& aspectFlags);
+void CreateImageView(
+    VkImageView*const imageViewPtr,
+    const VkImage& image,
+    const VkFormat& format,
+    const VkImageAspectFlags& aspectFlags,
+    const uint32_t mipLevels,
+    const VkDevice& device);
 void ReadFile(char**const fileData, StackCpu<VkDeviceSize>*const allocatorPtr, size_t*const fileSizeBytesPtr, const char*const filename);
 VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
     VkDebugReportFlagsEXT flags,
@@ -443,6 +452,7 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VulkanPagedStackAllocator*const allocatorPtr,
     StreamingUnitTextureDimension*const textureWidthPtr,
     StreamingUnitTextureDimension*const textureHeightPtr,
+    uint32_t*const mipLevelsPtr,
     StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuStackPtr,
     size_t*const imageSizeBytesPtr,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,

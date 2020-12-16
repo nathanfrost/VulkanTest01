@@ -153,12 +153,14 @@ HANDLE CreateThreadWindows(LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParam
     return threadHandle;
 }
 
-void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const VkDevice& device)
+void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const uint32_t mipLevels, const VkDevice& device)
 {
     assert(textureImageViewPtr);
     auto& textureImageView = *textureImageViewPtr;
 
-    CreateImageView(&textureImageView, device, textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
+    assert(mipLevels >= 1);
+
+    CreateImageView(&textureImageView, textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels, device);
 }
 
 void CopyBufferToImage(
@@ -186,6 +188,24 @@ void CopyBufferToImage(
     CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdCopyBufferToImage_kAfter)], instance);
 }
 
+static void CmdPipelineImageBarrier(
+    const VkImageMemoryBarrier*const barrierPtr,
+    const VkCommandBuffer& commandBuffer, 
+    const VkPipelineStageFlags& srcStageMask, 
+    const VkPipelineStageFlags& dstStageMask)
+{
+    NTF_REF(barrierPtr, barrier);
+
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        srcStageMask,///<all work currently submitted to these pipeline stages must complete...
+        dstStageMask,///<...before any work subsequently submitted to these pipeline stages is allowed to begin executing.  Work submitted in pipeline stages not specified in dstStageMask is unaffected by this barrier and may execute in any order
+        0,
+        0, nullptr,
+        0, nullptr,
+        1,
+        &barrier);
+}
 void ImageMemoryBarrier(
     const VkImageLayout& oldLayout,
     const VkImageLayout& newLayout,
@@ -197,9 +217,12 @@ void ImageMemoryBarrier(
     const VkAccessFlags& dstAccessMask, 
     const VkPipelineStageFlags& srcStageMask,
     const VkPipelineStageFlags& dstStageMask,
+    const uint32_t mipLevels,
     const VkCommandBuffer& commandBuffer,
     const VkInstance instance)
 {
+    assert(mipLevels >= 1);
+
     VkImageMemoryBarrier barrier = {};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier.oldLayout = oldLayout;
@@ -209,9 +232,10 @@ void ImageMemoryBarrier(
     barrier.image = image;
     barrier.subresourceRange.aspectMask = aspectMask;
 
-    //not an array and has no mipmapping levels
     barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
+    barrier.subresourceRange.levelCount = mipLevels;
+
+    //not an array
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
 
@@ -219,15 +243,7 @@ void ImageMemoryBarrier(
     barrier.dstAccessMask = dstAccessMask;//types of memory accesses that are made available and visible to stages specified in dstStageMask
 
     CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdPipelineBarrier_kBefore)], instance);
-    vkCmdPipelineBarrier(
-        commandBuffer,
-        srcStageMask,///<all work currently submitted to these pipeline stages must complete...
-        dstStageMask,///<...before any work subsequently submitted to these pipeline stages is allowed to begin executing.  Work submitted in pipeline stages not specified in dstStageMask is unaffected by this barrier and may execute in any order
-        0,
-        0, nullptr,
-        0, nullptr,
-        1,
-        &barrier);
+    CmdPipelineImageBarrier(&barrier, commandBuffer, srcStageMask, dstStageMask);
     CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdPipelineBarrier_kAfter)], instance);
 }
 
@@ -298,10 +314,20 @@ VkResult SubmitCommandBuffer(
     return queueSubmitResult;
 }
 
+static void DivideByTwoIfGreaterThanOne(int32_t*const vPtr)
+{
+    NTF_REF(vPtr, v);
+
+    if (v > 1)
+    {
+        v >>= 1;
+    }
+}
 void TransferImageFromCpuToGpu(
     const VkImage& image,
-    const uint32_t width,
-    const uint32_t height,
+    const uint32_t widthMip0,
+    const uint32_t heightMip0,
+    const uint32_t mipLevels,
     const VkFormat& format,
     const VkBuffer& stagingBuffer,
     const VkCommandBuffer commandBufferTransfer,
@@ -311,6 +337,8 @@ void TransferImageFromCpuToGpu(
     const VkDevice& device,
     const VkInstance instance)
 {
+    assert(mipLevels >= 1);
+
     const bool unifiedGraphicsAndTransferQueue = (transferQueueFamilyIndex == graphicsQueueFamilyIndex);
 
     //transition memory to format optimal for copying from CPU->GPU
@@ -325,33 +353,18 @@ void TransferImageFromCpuToGpu(
         VK_ACCESS_TRANSFER_WRITE_BIT,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
+        mipLevels,
         commandBufferTransfer,
         instance);
 
-    CopyBufferToImage(stagingBuffer, image, width, height, commandBufferTransfer, device, instance);
-    if (unifiedGraphicsAndTransferQueue)
+    CopyBufferToImage(stagingBuffer, image, widthMip0, heightMip0, commandBufferTransfer, device, instance);
+    const VkCommandBuffer commandBufferForBlits = unifiedGraphicsAndTransferQueue ? commandBufferTransfer : commandBufferGraphics;
+    if(!unifiedGraphicsAndTransferQueue)
     {
-        //transferQueue == graphicsQueue, so prepare image for shader reads with no change of queue ownership
+        //start transition resource ownership from transfer queue to graphics queue
         ImageMemoryBarrier(
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            transferQueueFamilyIndex,
-            transferQueueFamilyIndex,
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            image,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
-            VK_ACCESS_SHADER_READ_BIT,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, 
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            commandBufferTransfer, 
-            instance);
-    }
-    else
-    {
-        //transition resource ownership from transfer queue to graphics queue
-        ImageMemoryBarrier(
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             transferQueueFamilyIndex,
             graphicsQueueFamilyIndex,
             VK_IMAGE_ASPECT_COLOR_BIT,
@@ -359,25 +372,98 @@ void TransferImageFromCpuToGpu(
             VK_ACCESS_TRANSFER_WRITE_BIT,
             0,
             VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,///<for queue ownership transfer, the transfer queue is not blocked by issuing this barrier
+            mipLevels,
             commandBufferTransfer,
             instance);
 
-        //prepare texture for shader reads
+        //finalize transition resource ownership from transfer queue to graphics queue
         ImageMemoryBarrier(
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             transferQueueFamilyIndex,
             graphicsQueueFamilyIndex,
             VK_IMAGE_ASPECT_COLOR_BIT,
             image,
             0,
-            VK_ACCESS_SHADER_READ_BIT,//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            VK_ACCESS_TRANSFER_READ_BIT,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,///<for queue ownership transfer, the graphics queue must not wait on anything as a result of this barrier -- the graphics queue instead relies on a subsequent use of a semaphore at command submission time to ensure this barrier executes only after the transfer queue's copy operation above completes
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            mipLevels,
             commandBufferGraphics,
             instance);
     }
+
+    VkImageMemoryBarrier barrier{};
+    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    barrier.image = image;
+    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    barrier.subresourceRange.baseArrayLayer = 0;
+    barrier.subresourceRange.layerCount = 1;
+    barrier.subresourceRange.levelCount = 1;
+
+    int32_t mipWidth = widthMip0;
+    int32_t mipHeight = heightMip0;
+
+    for (uint32_t i = 1; i < mipLevels; i++)
+    {
+        //transition previous mip level to read transfer
+        const uint32_t iMinusOne = i - 1;
+        barrier.subresourceRange.baseMipLevel = iMinusOne;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        CmdPipelineImageBarrier(&barrier, commandBufferForBlits, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+        VkImageBlit blit{};
+        /*  #VkImageBlitZOffset :   Vulkan considers 2D images to have a depth of 1, so to specify a 2D region of pixels use offset[0].z = 0 and
+                                    offset[1].z = 1 */
+        blit.srcOffsets[0] = { 0, 0, 0 };
+        blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+
+        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.srcSubresource.mipLevel = iMinusOne;
+        blit.srcSubresource.baseArrayLayer = 0;
+        blit.srcSubresource.layerCount = 1;
+
+        //#VkImageBlitZOffset
+        DivideByTwoIfGreaterThanOne(&mipWidth);
+        DivideByTwoIfGreaterThanOne(&mipHeight);
+        blit.dstOffsets[0] = { 0, 0, 0 };
+        blit.dstOffsets[1] = { mipWidth, mipHeight, 1 };
+
+        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        blit.dstSubresource.mipLevel = i;
+        blit.dstSubresource.baseArrayLayer = 0;
+        blit.dstSubresource.layerCount = 1;
+
+        vkCmdBlitImage(
+            commandBufferForBlits,
+            image,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            1,
+            &blit,
+            VK_FILTER_LINEAR);
+
+        //now that the current mip level has been blitted/created from the previous mip level, transition the previous mip level to shader-ready
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        CmdPipelineImageBarrier(&barrier, commandBufferForBlits, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+    }
+
+    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    CmdPipelineImageBarrier(&barrier, commandBufferForBlits, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 }
 
 bool CreateAllocateBindImageIfAllocatorHasSpace(
@@ -386,7 +472,9 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     VkDeviceSize*const alignmentPtr,
     const uint32_t width,
     const uint32_t height,
+    const uint32_t mipLevels,
     const VkFormat& format,
+    const VkImageLayout& initialLayout,
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
@@ -400,6 +488,7 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     auto& allocator = *allocatorPtr;
 
     NTF_REF(alignmentPtr, alignment);
+    assert(mipLevels >= 1);
 
     VkImageCreateInfo imageInfo = {};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -407,14 +496,19 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     imageInfo.extent.width = width;
     imageInfo.extent.height = height;
     imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
+    imageInfo.mipLevels = mipLevels;
     imageInfo.arrayLayers = 1;
     imageInfo.format = format;
     imageInfo.tiling = tiling;
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+    imageInfo.initialLayout = initialLayout;
     imageInfo.usage = usage;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;//used by only one queue family at a time
+
+    if (imageInfo.mipLevels > 1)
+    {
+        imageInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;//allow image to be source of transfer operation
+    }
 
     const VkResult createImageResult = vkCreateImage(device, &imageInfo, GetVulkanAllocationCallbacks(), &image);
     NTF_VK_ASSERT_SUCCESS(createImageResult);
@@ -690,10 +784,19 @@ bool CheckValidationLayerSupport(const ConstVectorSafeRef<const char*>& validati
     return true;
 }
 
-void CreateImageView(VkImageView*const imageViewPtr, const VkDevice& device, const VkImage& image, const VkFormat& format, const VkImageAspectFlags& aspectFlags)
+void CreateImageView(
+    VkImageView*const imageViewPtr, 
+    const VkImage& image, 
+    const VkFormat& format, 
+    const VkImageAspectFlags& aspectFlags,
+    const uint32_t mipLevels,
+    const VkDevice& device)
 {
     assert(imageViewPtr);
     auto& imageView = *imageViewPtr;
+
+    assert(mipLevels >= 1);
+    assert(!(aspectFlags & VK_IMAGE_ASPECT_DEPTH_BIT) || mipLevels == 1);//depth texture must have 1 mip level
 
     VkImageViewCreateInfo viewInfo = {};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -702,7 +805,7 @@ void CreateImageView(VkImageView*const imageViewPtr, const VkDevice& device, con
     viewInfo.format = format;
     viewInfo.subresourceRange.aspectMask = aspectFlags;
     viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.baseArrayLayer = 0;
     viewInfo.subresourceRange.layerCount = 1;
 
@@ -1862,14 +1965,16 @@ void CreateDepthResources(
         &alignment,
         swapChainExtent.width,
         swapChainExtent.height,
+        1,
         depthFormat,
+        VK_IMAGE_LAYOUT_UNDEFINED, 
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         device,
         physicalDevice);
 
-    CreateImageView(&depthImageView, device, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+    CreateImageView(&depthImageView, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1, device);
 
     ImageMemoryBarrier(
         VK_IMAGE_LAYOUT_UNDEFINED,
@@ -1882,6 +1987,7 @@ void CreateDepthResources(
         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+        1,
         commandBuffer,
         instance);
 }
@@ -1921,6 +2027,7 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     VulkanPagedStackAllocator*const allocatorPtr,
     StreamingUnitTextureDimension*const textureWidthPtr,
     StreamingUnitTextureDimension*const textureHeightPtr,
+    uint32_t*const mipLevelsPtr,
     StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuStackPtr,
     size_t*const imageSizeBytesPtr,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
@@ -1941,6 +2048,8 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     assert(textureHeightPtr);
     auto& textureHeight = *textureHeightPtr;
 
+    NTF_REF(mipLevelsPtr, mipLevels);
+
     assert(streamingUnitFile);
     NTF_REF(stagingBufferMemoryMapCpuToGpuStackPtr, stagingBufferMemoryMapCpuToGpuStack);
     NTF_REF(imageSizeBytesPtr, imageSizeBytes);
@@ -1949,6 +2058,8 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     StreamingUnitTextureChannels textureChannels;
     TextureSerialize0<SerializerRuntimeIn>(streamingUnitFile, &textureWidth, &textureHeight, &textureChannels);
     imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
+    mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(textureWidth, textureHeight)))) + 1;//+1 to ensure the original image gets a mip level
+    assert(mipLevels >= 1);
 
     VkDeviceSize alignment;
     CreateAllocateBindImageIfAllocatorHasSpace(
@@ -1957,7 +2068,9 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
         &alignment,
         textureWidth,
         textureHeight,
+        mipLevels,
         format,
+        VK_IMAGE_LAYOUT_PREINITIALIZED,
         tiling,
         usage,
         properties,
@@ -2001,6 +2114,9 @@ void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& dev
     samplerInfo.compareEnable = VK_FALSE;//if true, texels will first be compared to a value, and the result of that comparison is used in filtering operations (as in Percentage Closer Filtering for soft shadows)
     samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.minLod = 0.f;   ///<minimum allowable level-of-detail level -- use however many mips levels are available for any given texture
+    samplerInfo.maxLod = VK_LOD_CLAMP_NONE; //maximum allowable level-of-detail level use however many mips levels are available for any given texture
+    samplerInfo.mipLodBias = 0.f;   //no offset to calculated mip level
 
     const VkResult createSamplerResult = vkCreateSampler(device, &samplerInfo, GetVulkanAllocationCallbacks(), &textureSampler);
     NTF_VK_ASSERT_SUCCESS(createSamplerResult);
@@ -3080,7 +3196,7 @@ void CreateImageViews(
 
     for (size_t i = 0; i < swapChainImagesSize; i++)
     {
-        CreateImageView(&swapChainImageViews[i], device, swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT);
+        CreateImageView(&swapChainImageViews[i], swapChainImages[i], swapChainImageFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1, device);
     }
 }
 

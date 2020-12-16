@@ -426,6 +426,9 @@ private:
 
         NTFVulkanInitialize(m_physicalDevice);
         FindQueueFamilies(&m_queueFamilyIndices, m_physicalDevice, m_surface);
+        //uncomment to force unified graphics/transfer queues
+        //m_queueFamilyIndices.index[QueueFamilyIndices::Type::kTransferQueue] = m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue];
+        
         CriticalSectionCreate(&m_graphicsQueueCriticalSection);
 		CriticalSectionCreate(&m_streamingUnitsAddToLoadCriticalSection);
 		CriticalSectionCreate(&m_streamingUnitsAddToRenderableCriticalSection);
@@ -856,6 +859,10 @@ private:
 #if NTF_DEBUG
             s_allowedToIssueStreamingCommands = true;
 #endif//#if NTF_DEBUG
+
+            //uncomment to load just one streaming unit
+            //StreamingUnitAddToLoadCriticalSection(&m_streamingUnits[1], &m_streamingUnitsToAddToLoad, &m_streamingUnitsAddToLoadCriticalSection);
+            //AssetLoadingThreadExecuteLoad(&m_assetLoadingThreadData.m_threadCommand, m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
             StreamingUnitTestTick(
                 &m_streamingUnits[0],
