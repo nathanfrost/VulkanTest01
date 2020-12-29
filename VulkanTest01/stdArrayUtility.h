@@ -12,6 +12,7 @@
 
 
 #pragma warning(disable : 4996)//debug builds are responsible for detecting any buffer overruns in vsprintf()
+#pragma warning(disable : 4100)//unreferenced formal parameters are required to keep function parameter lists consistent between assert-enabled and assert-disabled builds -- some parameters are unused in assert-disabled builds
 
 #define NTF_REF(ptrIdentifier, refIdentifier) assert(ptrIdentifier); auto& refIdentifier = *ptrIdentifier
 
@@ -1211,4 +1212,5 @@ public:
     STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONSTVECTORSAFE_OPERATOR_EQUIVALENCE;
 };
 
+#pragma warning(default : 4100)//unreferenced formal parameters should still be warnings outside of this header file
 #pragma warning(default : 4996)//disallow sprintf() outside of this header                                                                                                             \

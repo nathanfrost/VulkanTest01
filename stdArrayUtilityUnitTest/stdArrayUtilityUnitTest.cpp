@@ -6,9 +6,9 @@
 
 ///@todo: allow failed asserts to continue -- eg allow unit tests to succeed BECAUSE they trigger asserts, verifying that the asserts are working as intended.  Replace raw assert's with a macro that can be defined to exit(-1) in non-debug builds
 
-//don't complain about scanf being unsafe
-#pragma warning(disable : 4996)
+#pragma warning(disable : 4996)//don't complain about scanf being unsafe
 #pragma warning(disable : 4702)
+#pragma warning(disable : 4100)//unreferenced formal parameters are not issues; this is unit test code where templatization and the preprocessor are used as much as possible to eliminate as much tedium as possible
 
 static void ConsolePauseForUserAcknowledgement()
 {
