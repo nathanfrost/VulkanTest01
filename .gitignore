@@ -29,11 +29,14 @@
 *_manifest.rc
 !/*.pdb
 mayaExporterTestPlugin/_UpgradeReport_Files
-*/Debug/*.lib
-*/Release/*.lib
-*/ReleaseDebug/*.lib
+*/Debug/*
+*/Release/*
+*/Shipping/*
 !VulkanTest01/models/*.obj
 VulkanTest01/cooked/*
 VulkanTest01/WinTimer.txt
 VulkanTest01/WinTiming.txt
+VulkanTest01/Debug/*
+VulkanTest01/Release/*
+VulkanTest01/Shipping/*
 *.VC.db

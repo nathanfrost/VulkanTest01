@@ -5,7 +5,7 @@
 #include"WindowsUtil.h"
 
 #if NTF_DEBUG
-extern bool s_allowedToIssueStreamingCommands;
+bool s_allowedToIssueStreamingCommands=false;
 #endif//#if NTF_DEBUG
 
 void StreamingUnitAddToLoadCriticalSection(
@@ -87,7 +87,7 @@ void StreamingUnitAddToUnload(
 	StreamingUnitsAddToUnload(&temp, streamingUnitsRenderable, streamingUnitsToUnload);
 }
 void StreamingUnitsAddToUnload(
-	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToAddToUnload,///<not ConstVectorSafeRef because I want to force the passer to use '&', since semantically want to emphasize that the streaming units contained in the vector will be modified, even if the vector itself will not
+	VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToAddToUnload,
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsToUnload)
 {
@@ -231,3 +231,8 @@ void StreamingUnitRuntime::AssertValid() const
 {
     assert(strlen(m_filenameNoExtension.data()) > 0);
 }
+
+#if NTF_DEBUG
+/*static*/ FILE* SerializerRuntimeIn::s_fDebugLog;
+/*static*/ FILE* SerializerCookerOut::s_fDebugLog;
+#endif//#if NTF_DEBUG

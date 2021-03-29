@@ -1,7 +1,12 @@
 #include"StreamingUnitManager.h"
 
+#include"ntf_math.h"
 #include"StreamingUnit.h"
 #include"WindowsUtil.h"
+
+//#include "bmpImageFormat.h"
+
+using namespace ntf;
 
 #if NTF_UNIT_TEST_STREAMING_LOG
 FILE* s_streamingDebug;
@@ -9,8 +14,6 @@ RTL_CRITICAL_SECTION s_streamingDebugCriticalSection;
 #endif//#if NTF_UNIT_TEST_STREAMING_LOG
 
 //extern LARGE_INTEGER g_queryPerformanceFrequency;
-
-#define NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE (128 * 1024 * 1024)
 
 void AssetLoadingThreadPersistentResourcesCreate(
     AssetLoadingPersistentResources*const assetLoadingPersistentResourcesPtr, 
@@ -33,7 +36,8 @@ void AssetLoadingThreadPersistentResourcesCreate(
     static StreamingUnitByte stackAllocatorHackMemory[stackAllocatorHackMemorySizeBytes];
     shaderLoadingScratchSpace.Initialize(&stackAllocatorHackMemory[0], stackAllocatorHackMemorySizeBytes);
 
-    const VkDeviceSize stagingBufferCpuToGpuSizeAligned = AlignToNonCoherentAtomSize(NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
+    const size_t stagingBufferCpuToGpuSizeBytes = 128 * 1024 * 1024;
+    const VkDeviceSize stagingBufferCpuToGpuSizeAligned = AlignToNonCoherentAtomSize(stagingBufferCpuToGpuSizeBytes);
     CreateBuffer(
         &stagingBufferGpu,
         &stagingBufferGpuMemory,
@@ -51,7 +55,7 @@ void AssetLoadingThreadPersistentResourcesCreate(
 
     void* stagingBufferMemoryMapCpuToGpuPtr;
     MapMemory(&stagingBufferMemoryMapCpuToGpuPtr, stagingBufferGpuMemory, offsetToFirstByteOfStagingBuffer, stagingBufferCpuToGpuSizeAligned, device);
-    stagingBufferMemoryMapCpuToGpu.Initialize(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpuPtr), NTF_STAGING_BUFFER_CPU_TO_GPU_SIZE);
+    stagingBufferMemoryMapCpuToGpu.Initialize(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpuPtr), stagingBufferCpuToGpuSizeBytes);
 
     CreateVulkanSemaphore(&transferFinishedSemaphore, device);
 }
@@ -101,7 +105,7 @@ void StreamingCommandsProcess(
     RTL_CRITICAL_SECTION*const transferQueueCriticalSection = unifiedGraphicsAndTransferQueue ? &graphicsQueueCriticalSection : nullptr;//if we have a single queue for graphics and transfer rather than two separate queues, then we must criticalSection that one queue
 
     VkPipelineStageFlags transferFinishedPipelineStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
-    VectorSafe<VkBuffer, 32> stagingBuffersGpu;
+    VectorSafe<VkBuffer, 128> stagingBuffersGpu;
 
 	VectorSafe<StreamingUnitRuntime*, kStreamingUnitCommandsNum> streamingUnitsToLoad;
 
@@ -197,6 +201,8 @@ void StreamingCommandsProcess(
                 auto& texturedGeometry = streamingUnit.m_texturedGeometries[texturedGeometryIndex];
                 size_t imageSizeBytes;
                 const VkFormat imageFormat = VK_FORMAT_R8G8B8A8_UNORM;
+                VkMemoryRequirements memoryRequirements;
+                const size_t stagingBuffersGpuIndexOfNextTransfer = stagingBuffersGpu.size();
                 ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
                     &texturedGeometry.textureImage,
                     &deviceLocalMemory,
@@ -207,23 +213,59 @@ void StreamingCommandsProcess(
                     &imageSizeBytes,
                     &stagingBufferGpuOffsetToAllocatedBlock,
                     streamingUnitFile,
+                    &memoryRequirements,
+                    &stagingBuffersGpu,
+                    stagingBufferGpuMemory,
+                    offsetToFirstByteOfStagingBuffer,
                     imageFormat,
                     VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
                     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                    device,
-                    physicalDevice);
+                    physicalDevice,
+                    device);
 
-                stagingBuffersGpu.sizeIncrement();
-                CreateBuffer(
-                    &stagingBuffersGpu.back(),
-                    &stagingBufferGpuOffsetToAllocatedBlock,
-                    stagingBufferGpuMemory,
-                    offsetToFirstByteOfStagingBuffer,
-                    imageSizeBytes,
-                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    device,
-                    physicalDevice);
+                //BEG_HAC
+                //{
+                //    ArraySafe<char, 128> filename;
+                //    filename.Sprintf("E:\\readbackImageMip0.bmp");
+                //    WriteR8G8B8A8ToBmpFile(stagingBufferMemoryMapCpuToGpu.GetMemory(), textureWidth, textureHeight, filename);
+                //}
+                //END_HAC
+
+                int32_t textureWidthCurrentMipLevel = textureWidth;
+                int32_t textureHeightCurrentMipLevel = textureHeight;
+                const size_t bytesPerPixel = 4;
+                for (uint32_t mipLevel = 1; mipLevel < mipLevels; ++mipLevel)
+                {
+                    DivideByTwoIfGreaterThanOne(&textureWidthCurrentMipLevel);
+                    DivideByTwoIfGreaterThanOne(&textureHeightCurrentMipLevel);
+
+                    const size_t imageSizeBytesMipCurrent =
+                        ImageSizeBytesCalculate(textureWidthCurrentMipLevel, textureHeightCurrentMipLevel, bytesPerPixel);
+
+                    ArraySafe<char, 128> filename;
+                    ArraySafeRef<StreamingUnitByte> pixelBufferRuntimeIn;
+
+                    TextureSerializeImagePixels<SerializerRuntimeIn>(
+                        streamingUnitFile,
+                        ConstArraySafeRef<StreamingUnitByte>(),
+                        &stagingBufferMemoryMapCpuToGpu,
+                        memoryRequirements.alignment,
+                        imageSizeBytesMipCurrent,
+                        &stagingBufferGpuOffsetToAllocatedBlock);
+
+                    stagingBuffersGpu.sizeIncrement();
+                    VkBuffer& stagingBuffer = stagingBuffersGpu.back();
+                    CreateBuffer(
+                        &stagingBuffer,
+                        &stagingBufferGpuOffsetToAllocatedBlock,
+                        stagingBufferGpuMemory,
+                        offsetToFirstByteOfStagingBuffer,
+                        CastWithAssert<size_t, VkDeviceSize>(imageSizeBytesMipCurrent),
+                        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                        device,
+                        physicalDevice);
+                }
 
                 TransferImageFromCpuToGpu(
                     texturedGeometry.textureImage,
@@ -231,7 +273,8 @@ void StreamingCommandsProcess(
                     textureHeight,
                     mipLevels,
                     imageFormat,
-                    stagingBuffersGpu.back(),
+                    ConstVectorSafeRef<VkBuffer>(&stagingBuffersGpu[stagingBuffersGpuIndexOfNextTransfer], stagingBuffersGpu.size() - stagingBuffersGpuIndexOfNextTransfer),  ///@todo: refactor as Slice()
+                    stagingBuffersGpu[stagingBuffersGpuIndexOfNextTransfer],
                     commandBufferTransfer,
                     queueFamilyIndices.index[QueueFamilyIndices::Type::kTransferQueue],
                     commandBufferTransitionImage,
@@ -309,6 +352,7 @@ void StreamingCommandsProcess(
                     //printf("ASSET THREAD: CreateBuffer()=%llu at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndex-1], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
                 }
             }
+
             Fclose(streamingUnitFile);
             if (!unifiedGraphicsAndTransferQueue)
             {
@@ -359,7 +403,7 @@ void StreamingCommandsProcess(
                 streamingUnit.m_uniformBuffer,
                 uniformBufferSize,
                 streamingUnit.m_textureImageViews,
-                TODO_REFACTOR_NUM,
+                TODO_REFACTOR_NUM,//#NumberOfRenderablesHack
                 streamingUnit.m_textureSampler,
                 device);
 
@@ -386,7 +430,7 @@ void StreamingCommandsProcess(
                 //printf("Staging buffers cleaned up\n");
             }
 
-            /*  streaming unit is now loaded so tag it renderable -- but don't set state to loaded until it is guaranteed to be rendered at least 
+            /*  streaming unit is now loaded so tag it renderable -- but don't set state to loaded until it is guaranteed to be rendered at least
                 once (provided the app doesn't shut down first) */
             CriticalSectionEnter(&streamingUnitsAddToRenderableCriticalSection);
             streamingUnitsToAddToRenderable.Push(&streamingUnit);

@@ -36,14 +36,6 @@ extern bool g_deviceDiagnosticCheckpointsSupported;
 #define NTF_VK_SUCCESS(expr) (expr == VK_SUCCESS ? true : false)
 
 
-//these bools are static variables in case I want to make validation layers a runtime-settable property
-#if NTF_VALIDATION_LAYERS_ON
-const bool s_enableValidationLayers = true;
-#else
-const bool s_enableValidationLayers = false;
-#endif//#if NTF_VALIDATION_LAYERS_ON
-
-
 #define NTF_VALIDATION_LAYERS_BASE_SIZE 1
 #if NTF_API_DUMP_VALIDATION_LAYER_ON
 #define NTF_VALIDATION_LAYERS_SIZE (NTF_VALIDATION_LAYERS_BASE_SIZE + 1)
@@ -82,10 +74,11 @@ size_t GetVulkanApiCpuBytesAllocatedMax();
 #endif//#if NTF_DEBUG
 void TransferImageFromCpuToGpu(
     const VkImage& image,
-    const uint32_t width,
-    const uint32_t height,
+    const uint32_t widthMip0,
+    const uint32_t heightMip0,
     const uint32_t mipLevels,
     const VkFormat& format,
+    const ConstVectorSafeRef<VkBuffer>& stagingBuffers,
     const VkBuffer& stagingBuffer,
     const VkCommandBuffer commandBufferTransfer,
     const uint32_t transferQueueFamilyIndex,
@@ -97,7 +90,9 @@ void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage
 bool CreateAllocateBindImageIfAllocatorHasSpace(
     VkImage*const imagePtr,
     VulkanPagedStackAllocator*const allocatorPtr,
-    VkDeviceSize*const alignmentPtr,
+    VkMemoryRequirements*const memRequirementsPtr,
+    VkDeviceSize*const memoryOffsetPtr,
+    VkDeviceMemory*const memoryHandlePtr,
     const uint32_t width,
     const uint32_t height,
     const uint32_t mipLevels,
@@ -106,8 +101,9 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
-    const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice);
+    const bool respectNonCoherentAtomAlignment,
+    const VkPhysicalDevice& physicalDevice,
+    const VkDevice& device);
 void CreateBuffer(
     VkBuffer*const vkBufferPtr,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
@@ -123,8 +119,28 @@ void CopyBufferToImage(
     const VkImage& image,
     const uint32_t width,
     const uint32_t height,
+    const uint32_t mipLevel,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
+    const VkInstance instance);
+void CmdPipelineImageBarrier(
+    const VkImageMemoryBarrier*const barrierPtr,
+    const VkCommandBuffer& commandBuffer,
+    const VkPipelineStageFlags& srcStageMask,
+    const VkPipelineStageFlags& dstStageMask);
+void ImageMemoryBarrier(
+    const VkImageLayout& oldLayout,
+    const VkImageLayout& newLayout,
+    const uint32_t srcQueueFamilyIndex,
+    const uint32_t dstQueueFamilyIndex,
+    const VkImageAspectFlagBits& aspectMask,
+    const VkImage& image,
+    const VkAccessFlags& srcAccessMask,
+    const VkAccessFlags& dstAccessMask,
+    const VkPipelineStageFlags& srcStageMask,
+    const VkPipelineStageFlags& dstStageMask,
+    const uint32_t mipLevels,
+    const VkCommandBuffer& commandBuffer,
     const VkInstance instance);
 VkResult SubmitCommandBuffer(
     RTL_CRITICAL_SECTION*const criticalSectionPtr,
@@ -211,11 +227,12 @@ DWORD WINAPI AssetLoadingThread(void* arg);
 
 HANDLE CreateThreadWindows(LPTHREAD_START_ROUTINE lpStartAddress, LPVOID lpParameter);
 
-void GetRequiredExtensions(VectorSafeRef<const char*>*const requiredExtensions);
+void GetRequiredExtensions(VectorSafeRef<const char*>*const requiredExtensions, const bool enableValidationLayers);
 
-VkInstance CreateInstance(const ConstVectorSafeRef<const char*>& validationLayers);
+void ValidationLayersInitialize(VectorSafeRef<const char *> validationLayers);
+VkInstance InstanceCreate(const ConstVectorSafeRef<const char*>& validationLayers);
 
-VkDebugReportCallbackEXT SetupDebugCallback(const VkInstance& instance);
+VkDebugReportCallbackEXT SetupDebugCallback(const VkInstance& instance, const bool enableValidationLayers);
 
 struct SwapChainSupportDetails
 {
@@ -227,11 +244,12 @@ struct SwapChainSupportDetails
 
 void QuerySwapChainSupport(SwapChainSupportDetails*const swapChainSupportDetails, const VkSurfaceKHR& surface, const VkPhysicalDevice& device);
 
+///@todo: convenience accessors for each queue
 struct QueueFamilyIndices
 {
-    typedef int Datatype;
-    enum Type:Datatype {kGraphicsQueue, kComputeQueue, kTransferQueue, kPresentQueue, kTypeSize, kUninitialized = -1};
-    ArraySafe<Datatype, Type::kTypeSize> index;
+    typedef int IndexDataType;
+    enum Type:IndexDataType {kGraphicsQueue, kComputeQueue, kTransferQueue, kPresentQueue, kTypeSize, kUninitialized = -1};
+    ArraySafe<IndexDataType, Type::kTypeSize> index;
 #define NTF_QUEUE_NUM_EXCLUDING_PRESENT Type::kTypeSize - 1
     const ArraySafe<VkQueueFlagBits, NTF_QUEUE_NUM_EXCLUDING_PRESENT> kFamilyIndicesQueueFlags = ArraySafe<VkQueueFlagBits, NTF_QUEUE_NUM_EXCLUDING_PRESENT>(
         {VK_QUEUE_GRAPHICS_BIT, VK_QUEUE_COMPUTE_BIT, VK_QUEUE_TRANSFER_BIT});//mirrors QueueFamily, except present queue, which is unfortunately a special case in Vulkan and has no VK_QUEUE_PRESENT_BIT
@@ -256,7 +274,8 @@ struct QueueFamilyIndices
     }
 };
 
-void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkPhysicalDevice& device, const VkSurfaceKHR& surface);
+void PhysicalDeviceQueueFamilyPropertiesGet(VectorSafeRef<VkQueueFamilyProperties> queueFamilyProperties, const VkPhysicalDevice& device);
+void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkPhysicalDevice& physicalDevice, const VkSurfaceKHR& surface);
 
 VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const ConstVectorSafeRef<VkSurfaceFormatKHR>& availableFormats);
 
@@ -300,6 +319,7 @@ bool IsDeviceSuitable(
     const VkSurfaceKHR& surface,
     const ConstVectorSafeRef<const char*>& deviceExtensions);
 
+bool PhysicalDevicesGet(VectorSafeRef<VkPhysicalDevice> physicalDevices, const VkInstance& instance);
 bool PickPhysicalDevice(
     VkPhysicalDevice*const physicalDevicePtr,
     const VkSurfaceKHR& surface,
@@ -363,8 +383,8 @@ void FillCommandBufferPrimary(
 
 VkDeviceSize AlignToNonCoherentAtomSize(VkDeviceSize i);
 void MapMemory(
-    void** uniformBufferCpuMemoryCPtrPtr,
-    const VkDeviceMemory& uniformBufferGpuMemory,
+    void** cpuMemoryCPtrPtr,
+    const VkDeviceMemory& gpuMemory,
     const VkDeviceSize& offsetToGpuMemory,
     const VkDeviceSize bufferSize,
     const VkDevice& device);
@@ -457,12 +477,16 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     size_t*const imageSizeBytesPtr,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
     FILE*const streamingUnitFile,
+    VkMemoryRequirements*const memoryRequirementsPtr,
+    VectorSafeRef<VkBuffer> stagingBuffersGpu,
+    const VkDeviceMemory stagingBufferGpuMemory,
+    const VkDeviceSize offsetToFirstByteOfStagingBuffer,
     const VkFormat& format,
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
-    const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice);
+    const VkPhysicalDevice& physicalDevice,
+    const VkDevice& device);
 void CreateTextureSampler(VkSampler*const textureSamplerPtr, const VkDevice& device);
 
 void CreateFramebuffers(
@@ -610,7 +634,7 @@ private:
 #if NTF_DEBUG
     bool m_initialized;
 #endif//#if NTF_DEBUG
-    uint32_t m_memoryTypeIndex;
+    uint32_t m_memoryTypeIndex;///<note that this means we maintain one VulkanMemoryHeap per VkMemoryAllocateInfo::memoryTypeIndex, even though typically some of these VkMemoryAllocateInfo::memoryTypeIndex's map to the same heap, and thus can (probably?) be efficiently allocated from the same range of Gpu memory (and thus probably with less fragmentation)
     VkDeviceSize m_pageSizeBytes;
 
     /** we are not concerned with VkPhysicalDeviceLimits::bufferImageGranularity, because linear and optimally accessed resources are suballocated 

@@ -1,5 +1,9 @@
 #pragma once
 
+#if _DEBUG == 1
+#define STD_UTILITY_DEBUG 1
+#endif//#if _DEBUG == 1
+
 #include<algorithm>
 #include<assert.h>
 #include<initializer_list>
@@ -70,7 +74,7 @@ const_iterator cbegin() const noexcept                                          
 {                                                                                                                                                   \
     return begin();                                                                                                                                 \
 }                                                                                                                                                   \
-void Fwrite(FILE*const f, const size_t elementsNum)                                                                                                 \
+void Fwrite(FILE*const f, const size_t elementsNum) const                                                                                           \
 {                                                                                                                                                   \
     AssertValid();                                                                                                                                  \
     assert(f);                                                                                                                                      \
@@ -93,7 +97,7 @@ void AssertSufficient(const size_t elementsNum) const                           
     assert(SizeMax() >= elementsNum);                                                                                                               \
 }
 
-#define STD_ARRAY_UTILITY_ARRAYSAFE_CONSTARRAYSAFE_CONSTVECTORSAFE_SIZE_CONST_METHOD                                                                                                         \
+#define STD_ARRAY_UTILITY_ARRAYSAFE_CONSTARRAYSAFE_CONSTVECTORSAFE_SIZE_CONST_METHOD                                                                \
 size_type size() const noexcept                                                                                                                     \
 {                                                                                                                                                   \
     return m_elementsNumMax;                                                                                                                        \
@@ -111,7 +115,9 @@ size_t Strnlen() const                                                          
 size_t GetLastValidIndex() const                                                                                                                    \
 {                                                                                                                                                   \
     AssertValid();                                                                                                                                  \
-    return size() - 1;                                                                                                                              \
+    const size_t ret = size() - 1;                                                                                                                  \
+    assert(ret >= 0);                                                                                                                               \
+    return ret;                                                                                                                                     \
 }                                                                                                                                                   \
 size_t GetOneAfterLastValidIndex() const                                                                                                            \
 {                                                                                                                                                   \
@@ -340,7 +346,7 @@ void SetArray(T* p, const size_t elementsNumMax)                                
 
 #define STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONSTVECTORSAFE_OPERATOR_EQUIVALENCE                       \
 template<class U>                                                                                                       \
-bool operator==(const U& rhs)                                                                                           \
+bool operator==(const U& rhs) const                                                                                     \
 {                                                                                                                       \
     if (this->size() != rhs.size())                                                                                     \
     {                                                                                                                   \
@@ -353,7 +359,7 @@ bool operator==(const U& rhs)                                                   
     }                                                                                                                   \
 }                                                                                                                       \
 template<class U>                                                                                                       \
-bool operator!=(const U& rhs)                                                                                           \
+bool operator!=(const U& rhs) const                                                                                     \
 {                                                                                                                       \
     return !(*this == rhs);                                                                                             \
 }
@@ -489,6 +495,7 @@ class ConstVectorSafeRef;
 template<class T>
 class ConstArraySafeRef;
 
+///#StdArrayUtilityConstSemantics
 template<class T>
 class VectorSafeRef
 {
@@ -525,7 +532,10 @@ private:
     STD_ARRAY_UTILITY_NONCONST_REF_PRIVATE_METHODS;
 
 public:
-    //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability.  In terms of performance, I'm trusting compilers to simply reference a single class of *this's pointers rather than duplicating them; note that C++ does allow ConstVectorSafe and ConstArraySafe to be passed by const&, leaving no chance of unnecessarily duplicated pointers
+    /** #StdArrayUtilityAmbersand:  allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument 
+                                    writability.  In terms of performance, I'm trusting compilers to simply reference a single class of *this's 
+                                    pointers rather than duplicating them; note that C++ does allow ConstVectorSafe and ConstArraySafe to be passed 
+                                    by const&, leaving no chance of unnecessarily duplicated pointers; also see #StdArrayUtilityConstSemantics */
     VectorSafeRef(VectorSafeRef<T>*const vectorSafeRef)
     {
         assert(vectorSafeRef);
@@ -636,7 +646,7 @@ public:
     }
 };
 
-
+///#StdArrayUtilityConstSemantics
 template<class T>
 class ArraySafeRef
 {
@@ -673,7 +683,7 @@ public:
     //    MemcpyFromStart(initializerList.begin(), initializerList.size()*sizeof(T));
     //    AssertValid();
     //}
-    //allow writable arguments to be preceded by an & (ambersand) -- this is best-practice for documenting argument writability.  In terms of performance, I'm trusting compilers to simply reference a single class of *this's pointers rather than duplicating them; note that C++ does allow ConstVectorSafe and ConstArraySafe to be passed by const&, leaving no chance of unnecessarily duplicated pointers
+    //#StdArrayUtilityAmbersand
     ArraySafeRef(ArraySafeRef<T>*const other)
     {
         assert(other);
@@ -765,8 +775,26 @@ public:
     STD_ARRAY_UTILITY_ARRAYSAFEREF_VECTORSAFEREF_NON_CONST_METHODS;
 };
 
-///can't just use a const ArraySafeRef<>() because I want to encourage the use of & for writable arguments -- and no & for read-only arguments -- as much as possible.  This class allows for the latter with ArraySafe
-///is best passed by const& -- eg const ConstArraySafeRef& -- since that all but ensures that all compilers will not create extraneous size datafields, even in debug builds
+/** #StdArrayUtilityConstSemantics: I can't just use a const ArraySafeRef<>() or const VectorSafeRef<>() because I want to encourage the use of & for 
+                                    writable arguments -- and no & for read-only arguments -- as much as possible.  
+                                    ConstArraySafeRef/ConstVectorSafeRef allows for the latter with ArraySafe/VectorSafe.  
+                                    
+                                    If your intention is not to modify the pointer inside the ConstArraySafeRef/ConstVectorSafeRef 
+                                    (eg a "const-pointer-to-const") then pass it by by const& -- eg const ConstArraySafeRef& or 
+                                    const ConstVectorSafeRef& -- since that all but ensures that all compilers will not create extraneous size 
+                                    datafields, even in debug builds.  
+                                    
+                                    If your intention is instead to modify the pointer inside the 
+                                    ConstArraySafeRef/ConstVectorSafeRef -- but not the data pointed to -- then pass by reference, 
+                                    eg ConstArraySafeRef& or ConstVectorSafeRef&.  
+                                    
+                                    Unfortunately, there is not a symmetric construction for ArraySafeRef/VectorSafeRef: applying the const 
+                                    modifier -- as in const ArraySafeRef/const VectorSafeRef -- should not be done, as it defines a const-pointer to 
+                                    const-data, which overlaps ConstArraySafeRef/ConstVectorSafeRef and violates #StdArrayUtilityAmbersand.  (Using 
+                                    mutable would probably allow const ArraySafeRef/const VectorSafeRef to be considered 
+                                    "const pointer to non-const data", but that would look misleading in function signatures, because it would appear
+                                    as if the whole ArraySafeRef/VectorSafeRef would remain constant when in fact only the instance's internal 
+                                    pointer would be constant -- the data pointed could be -- and should be, by convention -- changed) */
 template<class T>
 class ConstArraySafeRef
 {
@@ -881,13 +909,20 @@ public:
     STD_ARRAY_UTILITY_CONST_METHODS;
 };
 
-inline ConstArraySafeRef<char> ConstStringSafe(const char*const s) 
+#define STD_ARRAY_UTILITY_STRING_SAFE_SHARED_BODY   \
+
+inline ConstArraySafeRef<char> ConstStringSafe(const char*const s)
 {
     assert(s);
     const size_t strlenS = strlen(s) + 1;
     assert(strlenS > 0);
-
     return ConstArraySafeRef<char>(s, strlenS);
+}
+//This function is purposefully not implemented: inline ArraySafeRef<char> StringSafe(char*const s) -- the current size of the string should not shrink the debug-allowed size of the array
+inline void MemcpyStringFromStart(ArraySafeRef<char> a, const char *const s)
+{
+    assert(s);
+    a.MemcpyFromStart(s, strlen(s) + 1);
 }
 
 
@@ -908,8 +943,7 @@ void AlignedFree(VectorSafeRef<T>*const vectorSafeRef)
 }
 
 
-///can't just use a const VectorSafeRef<>() because I want to encourage the use of & for writable arguments -- and no & for read-only arguments -- as much as possible.  This class allows for the latter with VectorSafe
-///is best passed by const& -- eg const ConstVectorSafeRef& -- since that all but ensures that all compilers will not create extraneous pointers from this double-pointer class
+///#StdArrayUtilityConstSemantics
 template<class T>
 class ConstVectorSafeRef
 {
@@ -971,6 +1005,7 @@ public:
     STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONSTVECTORSAFE_OPERATOR_EQUIVALENCE;
 };
 
+///#StdArrayUtilityConstSemantics
 template<class T, size_t kElementsNum>
 class ArraySafe
 {
@@ -1079,6 +1114,7 @@ public:
     STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONSTVECTORSAFE_OPERATOR_EQUIVALENCE;
 };
 
+///#StdArrayUtilityConstSemantics
 template<class T, size_t kElementsMax>
 class VectorSafe
 {
@@ -1211,6 +1247,27 @@ public:
     STD_ARRAY_UTILITY_ARRAYSAFEREF_VECTORSAFEREF_NON_CONST_METHODS;
     STD_ARRAY_UTILITY_ARRAYSAFE_VECTORSAFE_VECTORSAFEREF_CONSTVECTORSAFE_OPERATOR_EQUIVALENCE;
 };
+
+inline void AppendStringNoNullTerminator(VectorSafeRef<char> v, const ConstArraySafeRef<char>& s)
+{
+    assert(v.data() != nullptr);
+    v.AssertValid();
+    const char*const sData = s.data();
+    const size_t sLenBytesNoNullTerminator = strlen(sData);
+#if STD_UTILITY_DEBUG
+    assert(sLenBytesNoNullTerminator < s.size());//string length doesn't count the required null-terminator, and so should be less-than (not less-than-or-equal-to) max size of the string
+#endif//#if STD_UTILITY_DEBUG
+    v.MemcpyFromIndex(sData, v.size(), sLenBytesNoNullTerminator);//do not null-terminate VectorSafe; VectorSafe's know their sizes already
+}
+inline bool VectorSafeIsNullTerminated(const ConstVectorSafeRef<char>&v)
+{
+    return v[v.GetLastValidIndex()] == 0;
+}
+inline void MemcpyStringFromStart(ArraySafeRef<char> a, const ConstVectorSafeRef<char>& sv)
+{
+    assert(VectorSafeIsNullTerminated(sv));
+    a.MemcpyFromStart(sv.data(), sv.SizeInBytes());
+}
 
 #pragma warning(default : 4100)//unreferenced formal parameters should still be warnings outside of this header file
 #pragma warning(default : 4996)//disallow sprintf() outside of this header                                                                                                             \

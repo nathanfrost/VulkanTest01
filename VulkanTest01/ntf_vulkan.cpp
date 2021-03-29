@@ -4,6 +4,8 @@
 #include"StreamingCookAndRuntime.h"
 #include"WindowsUtil.h"
 
+using namespace ntf;
+
 #pragma warning(disable:4800)//forcing value to bool 'true' or 'false' (performance warning) -- seems inconsistently applied, and not generally helpful
 
 //extern LARGE_INTEGER g_queryPerformanceFrequency;
@@ -168,6 +170,7 @@ void CopyBufferToImage(
     const VkImage& image,
     const uint32_t width,
     const uint32_t height,
+    const uint32_t mipLevel,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
     const VkInstance instance)
@@ -177,18 +180,18 @@ void CopyBufferToImage(
     region.bufferRowLength = 0;//extra row padding; 0 indicates tightly packed
     region.bufferImageHeight = 0;//extra height padding; 0 indicates tightly packed
     region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.mipLevel = mipLevel;
     region.imageSubresource.baseArrayLayer = 0;
     region.imageSubresource.layerCount = 1;
     region.imageOffset = { 0, 0, 0 };
-    region.imageExtent = { width,height,1 };
+    region.imageExtent = { width,height,1/*#VkImageRegionZOffset*/ };
 
     CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdCopyBufferToImage_kBefore)], instance);
     vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
     CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdCopyBufferToImage_kAfter)], instance);
 }
 
-static void CmdPipelineImageBarrier(
+void CmdPipelineImageBarrier(
     const VkImageMemoryBarrier*const barrierPtr,
     const VkCommandBuffer& commandBuffer, 
     const VkPipelineStageFlags& srcStageMask, 
@@ -203,8 +206,7 @@ static void CmdPipelineImageBarrier(
         0,
         0, nullptr,
         0, nullptr,
-        1,
-        &barrier);
+        1, &barrier);
 }
 void ImageMemoryBarrier(
     const VkImageLayout& oldLayout,
@@ -314,21 +316,13 @@ VkResult SubmitCommandBuffer(
     return queueSubmitResult;
 }
 
-static void DivideByTwoIfGreaterThanOne(int32_t*const vPtr)
-{
-    NTF_REF(vPtr, v);
-
-    if (v > 1)
-    {
-        v >>= 1;
-    }
-}
 void TransferImageFromCpuToGpu(
     const VkImage& image,
     const uint32_t widthMip0,
     const uint32_t heightMip0,
     const uint32_t mipLevels,
     const VkFormat& format,
+    const ConstVectorSafeRef<VkBuffer>& stagingBuffers,
     const VkBuffer& stagingBuffer,
     const VkCommandBuffer commandBufferTransfer,
     const uint32_t transferQueueFamilyIndex,
@@ -344,7 +338,7 @@ void TransferImageFromCpuToGpu(
     //transition memory to format optimal for copying from CPU->GPU
     ImageMemoryBarrier(
         VK_IMAGE_LAYOUT_UNDEFINED, 
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         transferQueueFamilyIndex, 
         transferQueueFamilyIndex, 
         VK_IMAGE_ASPECT_COLOR_BIT,
@@ -357,9 +351,35 @@ void TransferImageFromCpuToGpu(
         commandBufferTransfer,
         instance);
 
-    CopyBufferToImage(stagingBuffer, image, widthMip0, heightMip0, commandBufferTransfer, device, instance);
+    int32_t widthMipCurrent = widthMip0;
+    int32_t heightMipCurrent = heightMip0;
+    for(uint32_t mipLevel = 0; mipLevel < mipLevels; ++mipLevel)
+    {
+        CopyBufferToImage(stagingBuffers[mipLevel], image, widthMipCurrent, heightMipCurrent, mipLevel, commandBufferTransfer, device, instance);
+        DivideByTwoIfGreaterThanOne(&widthMipCurrent);
+        DivideByTwoIfGreaterThanOne(&heightMipCurrent);
+    }
+
     const VkCommandBuffer commandBufferForBlits = unifiedGraphicsAndTransferQueue ? commandBufferTransfer : commandBufferGraphics;
-    if(!unifiedGraphicsAndTransferQueue)
+    if (unifiedGraphicsAndTransferQueue)
+    {
+            //transferQueue == graphicsQueue, so prepare image for shader reads with no change of queue ownership
+            ImageMemoryBarrier(
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            transferQueueFamilyIndex,
+            transferQueueFamilyIndex,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            image,
+            VK_ACCESS_TRANSFER_WRITE_BIT,
+            VK_ACCESS_SHADER_READ_BIT,//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            mipLevels,
+            commandBufferTransfer,
+            instance);
+    }
+    else
     {
         //start transition resource ownership from transfer queue to graphics queue
         ImageMemoryBarrier(
@@ -380,96 +400,27 @@ void TransferImageFromCpuToGpu(
         //finalize transition resource ownership from transfer queue to graphics queue
         ImageMemoryBarrier(
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             transferQueueFamilyIndex,
             graphicsQueueFamilyIndex,
             VK_IMAGE_ASPECT_COLOR_BIT,
             image,
             0,
-            VK_ACCESS_TRANSFER_READ_BIT,
+            VK_ACCESS_SHADER_READ_BIT,//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,///<for queue ownership transfer, the graphics queue must not wait on anything as a result of this barrier -- the graphics queue instead relies on a subsequent use of a semaphore at command submission time to ensure this barrier executes only after the transfer queue's copy operation above completes
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 
             mipLevels,
             commandBufferGraphics,
             instance);
     }
-
-    VkImageMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.image = image;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-    barrier.subresourceRange.levelCount = 1;
-
-    int32_t mipWidth = widthMip0;
-    int32_t mipHeight = heightMip0;
-
-    for (uint32_t i = 1; i < mipLevels; i++)
-    {
-        //transition previous mip level to read transfer
-        const uint32_t iMinusOne = i - 1;
-        barrier.subresourceRange.baseMipLevel = iMinusOne;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        CmdPipelineImageBarrier(&barrier, commandBufferForBlits, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-
-        VkImageBlit blit{};
-        /*  #VkImageBlitZOffset :   Vulkan considers 2D images to have a depth of 1, so to specify a 2D region of pixels use offset[0].z = 0 and
-                                    offset[1].z = 1 */
-        blit.srcOffsets[0] = { 0, 0, 0 };
-        blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
-
-        blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.srcSubresource.mipLevel = iMinusOne;
-        blit.srcSubresource.baseArrayLayer = 0;
-        blit.srcSubresource.layerCount = 1;
-
-        //#VkImageBlitZOffset
-        DivideByTwoIfGreaterThanOne(&mipWidth);
-        DivideByTwoIfGreaterThanOne(&mipHeight);
-        blit.dstOffsets[0] = { 0, 0, 0 };
-        blit.dstOffsets[1] = { mipWidth, mipHeight, 1 };
-
-        blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        blit.dstSubresource.mipLevel = i;
-        blit.dstSubresource.baseArrayLayer = 0;
-        blit.dstSubresource.layerCount = 1;
-
-        vkCmdBlitImage(
-            commandBufferForBlits,
-            image,
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            image,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            1,
-            &blit,
-            VK_FILTER_LINEAR);
-
-        //now that the current mip level has been blitted/created from the previous mip level, transition the previous mip level to shader-ready
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        CmdPipelineImageBarrier(&barrier, commandBufferForBlits, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-    }
-
-    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    CmdPipelineImageBarrier(&barrier, commandBufferForBlits, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 }
 
 bool CreateAllocateBindImageIfAllocatorHasSpace(
     VkImage*const imagePtr,
     VulkanPagedStackAllocator*const allocatorPtr,
-    VkDeviceSize*const alignmentPtr,
+    VkMemoryRequirements*const memRequirementsPtr,
+    VkDeviceSize*const memoryOffsetPtr,
+    VkDeviceMemory*const memoryHandlePtr,
     const uint32_t width,
     const uint32_t height,
     const uint32_t mipLevels,
@@ -478,8 +429,9 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
-    const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice)
+    const bool respectNonCoherentAtomAlignment,
+    const VkPhysicalDevice& physicalDevice,
+    const VkDevice& device)
 {
     assert(imagePtr);
     auto& image = *imagePtr;
@@ -487,7 +439,9 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     assert(allocatorPtr);
     auto& allocator = *allocatorPtr;
 
-    NTF_REF(alignmentPtr, alignment);
+    NTF_REF(memRequirementsPtr, memRequirements);
+    NTF_REF(memoryOffsetPtr, memoryOffset);
+    NTF_REF(memoryHandlePtr, memoryHandle);
     assert(mipLevels >= 1);
 
     VkImageCreateInfo imageInfo = {};
@@ -513,12 +467,7 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     const VkResult createImageResult = vkCreateImage(device, &imageInfo, GetVulkanAllocationCallbacks(), &image);
     NTF_VK_ASSERT_SUCCESS(createImageResult);
 
-    VkMemoryRequirements memRequirements;
     vkGetImageMemoryRequirements(device, image, &memRequirements);
-    alignment = memRequirements.alignment;
-
-    VkDeviceSize memoryOffset;
-    VkDeviceMemory memoryHandle;
     const bool allocateMemoryResult = allocator.PushAlloc(
         &memoryOffset,
         &memoryHandle,
@@ -527,7 +476,7 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
         memRequirements.size,
         properties,
         tiling == VK_IMAGE_TILING_LINEAR,
-        false,
+        respectNonCoherentAtomAlignment,
         device,
         physicalDevice);
     if (allocateMemoryResult)
@@ -590,11 +539,13 @@ void GetPhysicalDevicePropertiesCached(VkPhysicalDeviceProperties**const physica
 }
 
 /* Heap classification:
-1. vkGetPhysicalDeviceMemoryProperties​() returns memoryHeapCount, memoryTypes (what types of memory are supported by each heap), and the memoryHeaps themselves
-2. vkGetImageMemoryRequirements() or vkGetBufferMemoryRequirements​() return a bitmask for each resource.  If this bitmask shares a bit with the index of a 
-   given memoryTypes::propertyFlags, then the heap indexed by the corresponding memoryTypes::heapIndex supports this resource
-3. of the subset of heaps defined by step 2., you can choose the heap that contains the desired memoryTypes::propertyFlags​(eg 
-   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, etc)​ */
+1.  vkGetPhysicalDeviceMemoryProperties​() returns memoryTypeCount, memoryHeapCount, memoryTypes (what types of memory are supported by each heap), 
+    and the memoryHeaps themselves.  Here we determine what memory type index -- from [0, memoryTypeCount) -- to assign to 
+    VkMemoryAllocateInfo::memoryTypeIndex when we allocate a block to suballocate this memory from with vkAllocateMemory()
+2.  vkGetImageMemoryRequirements() and vkGetBufferMemoryRequirements​() return a bitmask for the desired resource in 
+    VkMemoryRequirements::memoryTypeBits.  If this bitmask shares a bit with (1 << i), then heap i supports this resource
+3.  Of the subset of heaps defined by step 2., you are then limited to heaps that contains all desired memoryTypes::propertyFlags​ bits (eg 
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, etc)​ */
 ///@ret: index of of VkPhysicalDeviceMemoryProperties::memProperties.memoryTypes that maps to the user's arguments
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice)
 {
@@ -879,7 +830,7 @@ void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT
         func(instance, callback, pAllocator);
     }
 }
-
+///@todo: rename CommandBufferBegin()/CommandBufferEnd()
 void BeginCommandBuffer(const VkCommandBuffer& commandBuffer, const VkDevice& device)
 {
     VkCommandBufferBeginInfo beginInfo = {};
@@ -953,6 +904,32 @@ bool IsDeviceSuitable(
     return indices.IsComplete() && extensionsSupported && supportedFeatures.samplerAnisotropy && swapChainAdequate;
 }
 
+void EnumeratePhysicalDevices(uint32_t*const physicalDeviceCountPtr, VectorSafeRef<VkPhysicalDevice> physicalDevices, const VkInstance& instance)
+{
+    NTF_REF(physicalDeviceCountPtr, physicalDeviceCount);
+
+    const VkResult enumeratePhysicalDevicesResult = vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices.data());
+    NTF_VK_ASSERT_SUCCESS(enumeratePhysicalDevicesResult);
+}
+
+bool PhysicalDevicesGet(VectorSafeRef<VkPhysicalDevice> physicalDevices, const VkInstance& instance)
+{
+    uint32_t physicalDeviceCount = 0;
+    EnumeratePhysicalDevices(&physicalDeviceCount, VectorSafeRef<VkPhysicalDevice>(), instance);
+    if (physicalDeviceCount == 0)
+    {
+        //failed to find GPUs with Vulkan support
+        assert(false);
+        return false;
+    }
+
+    physicalDevices.size(physicalDeviceCount);
+    EnumeratePhysicalDevices(&physicalDeviceCount, &physicalDevices, instance);
+    physicalDevices.size(physicalDeviceCount);
+
+    return true;
+}
+
 bool PickPhysicalDevice(
     VkPhysicalDevice*const physicalDevicePtr,
     const VkSurfaceKHR& surface,
@@ -962,20 +939,10 @@ bool PickPhysicalDevice(
     assert(physicalDevicePtr);
     VkPhysicalDevice& physicalDevice = *physicalDevicePtr;
 
-    uint32_t physicalDeviceCount = 0;
-    vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
-    if (physicalDeviceCount == 0)
-    {
-        //failed to find GPUs with Vulkan support
-        assert(false);
-        return false;
-    }
-
-    const uint32_t deviceMax = 8;
-    VectorSafe<VkPhysicalDevice, deviceMax> physicalDevices;
-    physicalDevices.size(physicalDeviceCount);
-    vkEnumeratePhysicalDevices(instance, &physicalDeviceCount, physicalDevices.data());
-    physicalDevices.size(physicalDeviceCount);
+    VectorSafe<VkPhysicalDevice, 8> physicalDevices;
+    PhysicalDevicesGet(&physicalDevices, instance);
+    
+    physicalDevice = VK_NULL_HANDLE;
     for (const VkPhysicalDevice& physicalDeviceCandidate : physicalDevices)
     {
         if (IsDeviceSuitable(physicalDeviceCandidate, surface, deviceExtensions))
@@ -1020,7 +987,7 @@ void CreateLogicalDevice(
     const uint32_t queueFamiliesNum = 3;
     VectorSafe<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos(0);
     VectorSafe<int, queueFamiliesNum> uniqueQueueFamilies({ indices.index[QueueFamilyIndices::Type::kGraphicsQueue], indices.index[QueueFamilyIndices::Type::kPresentQueue], indices.index[QueueFamilyIndices::Type::kTransferQueue] });
-    uniqueQueueFamilies.SortAndRemoveDuplicates();
+    uniqueQueueFamilies.SortAndRemoveDuplicates();  
 
     const float queuePriority = 1.0f;
     for (const int queueFamily : uniqueQueueFamilies)
@@ -1047,9 +1014,10 @@ void CreateLogicalDevice(
     createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());//require swapchain extension
     createInfo.ppEnabledExtensionNames = deviceExtensions.data();//require swapchain extension
 
-    if (s_enableValidationLayers)
+    const uint32_t validationLayersSize = CastWithAssert<size_t, uint32_t>(validationLayers.size());
+    if (validationLayersSize)
     {
-        createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
+        createInfo.enabledLayerCount = validationLayersSize;
         createInfo.ppEnabledLayerNames = validationLayers.data();
     }
     else
@@ -1573,7 +1541,7 @@ void FillCommandBufferPrimary(
         0,
         nullptr);
     CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdBindDescriptorSets_kAfter)], instance);
-    for (size_t objectIndex = 0; objectIndex < objectNum; ++objectIndex)
+    for (size_t objectIndex = 0; objectIndex < objectNum /*#NumberOfRenderablesHack*/; ++objectIndex)
     {
         auto& texturedGeometry = texturedGeometries[objectIndex];
         assert(texturedGeometry.Valid());
@@ -1616,14 +1584,14 @@ VkDeviceSize AlignToNonCoherentAtomSize(VkDeviceSize i)
 }
 
 void MapMemory(
-    void** uniformBufferCpuMemoryCPtrPtr, 
-    const VkDeviceMemory& uniformBufferGpuMemory, 
+    void** cpuMemoryCPtrPtr, ///<TODO_NEXT: take ArraySafeRef<uint8_t>, not void**
+    const VkDeviceMemory& gpuMemory, 
     const VkDeviceSize& offsetToGpuMemory, 
     const VkDeviceSize bufferSize, 
     const VkDevice& device)
 {
-    assert(uniformBufferCpuMemoryCPtrPtr);
-    const VkResult vkMapMemoryResult = vkMapMemory(device, uniformBufferGpuMemory, offsetToGpuMemory, bufferSize, 0, uniformBufferCpuMemoryCPtrPtr);
+    assert(cpuMemoryCPtrPtr);
+    const VkResult vkMapMemoryResult = vkMapMemory(device, gpuMemory, offsetToGpuMemory, bufferSize, 0, cpuMemoryCPtrPtr);
     NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
 }
 
@@ -1958,11 +1926,15 @@ void CreateDepthResources(
 
     VkFormat depthFormat = FindDepthFormat(physicalDevice);
 
-    VkDeviceSize alignment;
+    VkMemoryRequirements memoryRequirements;
+    VkDeviceSize memoryOffset;
+    VkDeviceMemory memoryHandle;
     CreateAllocateBindImageIfAllocatorHasSpace(
         &depthImage,
         &allocator,
-        &alignment,
+        &memoryRequirements,
+        &memoryOffset,
+        &memoryHandle,
         swapChainExtent.width,
         swapChainExtent.height,
         1,
@@ -1971,8 +1943,9 @@ void CreateDepthResources(
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        device,
-        physicalDevice);
+        false,
+        physicalDevice,
+        device);
 
     CreateImageView(&depthImageView, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1, device);
 
@@ -2032,12 +2005,16 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     size_t*const imageSizeBytesPtr,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockPtr,
     FILE*const streamingUnitFile,
+    VkMemoryRequirements*const memoryRequirementsPtr,
+    VectorSafeRef<VkBuffer> stagingBuffersGpu,
+    const VkDeviceMemory stagingBufferGpuMemory,
+    const VkDeviceSize offsetToFirstByteOfStagingBuffer,
     const VkFormat& format,
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
-    const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice)
+    const VkPhysicalDevice& physicalDevice,
+    const VkDevice& device)
 {
     NTF_REF(imagePtr, image);
     NTF_REF(allocatorPtr, allocator);
@@ -2054,36 +2031,54 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
     NTF_REF(stagingBufferMemoryMapCpuToGpuStackPtr, stagingBufferMemoryMapCpuToGpuStack);
     NTF_REF(imageSizeBytesPtr, imageSizeBytes);
     NTF_REF(stagingBufferGpuOffsetToAllocatedBlockPtr, stagingBufferGpuOffsetToAllocatedBlock);
+    NTF_REF(memoryRequirementsPtr, memoryRequirements);
 
     StreamingUnitTextureChannels textureChannels;
-    TextureSerialize0<SerializerRuntimeIn>(streamingUnitFile, &textureWidth, &textureHeight, &textureChannels);
+    TextureSerializeHeader<SerializerRuntimeIn>(streamingUnitFile, &textureWidth, &textureHeight, &textureChannels);
     imageSizeBytes = ImageSizeBytesCalculate(textureWidth, textureHeight, textureChannels);
     mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(textureWidth, textureHeight)))) + 1;//+1 to ensure the original image gets a mip level
     assert(mipLevels >= 1);
 
-    VkDeviceSize alignment;
-    CreateAllocateBindImageIfAllocatorHasSpace(
+    VkDeviceMemory memoryHandle;
+    const bool createAllocateBindImageResult = CreateAllocateBindImageIfAllocatorHasSpace(
         &image,
         &allocator,
-        &alignment,
+        &memoryRequirements,
+        &stagingBufferGpuOffsetToAllocatedBlock,
+        &memoryHandle,
         textureWidth,
         textureHeight,
         mipLevels,
         format,
-        VK_IMAGE_LAYOUT_PREINITIALIZED,
+        VK_IMAGE_LAYOUT_UNDEFINED,
         tiling,
         usage,
         properties,
-        device,
-        physicalDevice);
+        false,
+        physicalDevice,
+        device);
+    assert(createAllocateBindImageResult);
 
-    TextureSerialize1<SerializerRuntimeIn>(
+    TextureSerializeImagePixels<SerializerRuntimeIn>(
         streamingUnitFile,
         ConstArraySafeRef<StreamingUnitByte>(), 
         &stagingBufferMemoryMapCpuToGpuStack, 
-        alignment, 
+        memoryRequirements.alignment, 
         imageSizeBytes,
         &stagingBufferGpuOffsetToAllocatedBlock);
+    
+    //create Gpu buffer for mip level 0
+    stagingBuffersGpu.sizeIncrement();
+    CreateBuffer(
+        &stagingBuffersGpu.back(),
+        &stagingBufferGpuOffsetToAllocatedBlock,
+        stagingBufferGpuMemory,
+        offsetToFirstByteOfStagingBuffer,
+        CastWithAssert<size_t, VkDeviceSize>(imageSizeBytes),
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        device,
+        physicalDevice);
+
     return;
 }
 
@@ -2652,7 +2647,7 @@ void AcquireNextImage(
     ///@todo: handle handle VK_ERROR_SURFACE_LOST_KHR return value
 }
 
-void GetRequiredExtensions(VectorSafeRef<const char*> requiredExtensions)
+void GetRequiredExtensions(VectorSafeRef<const char*> requiredExtensions, const bool enableValidationLayers)
 {
     requiredExtensions.size(0);
     unsigned int glfwExtensionCount = 0;
@@ -2663,13 +2658,24 @@ void GetRequiredExtensions(VectorSafeRef<const char*> requiredExtensions)
         requiredExtensions.Push(glfwExtensions[i]);
     }
 
-    if (s_enableValidationLayers)
+    if (enableValidationLayers)
     {
         requiredExtensions.Push(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);//VulkanSDK\VERSION_NUMBER\Config\vk_layer_settings.txt sets many options about layer strictness (warning,performance,error) and action taken (callback, log, breakpoint, Visual Studio output, nothing), as well as dump behavior (level of detail, output to file vs stdout, I/O flush behavior)
     }
 }
 
-VkInstance CreateInstance(const ConstVectorSafeRef<const char*>& validationLayers)
+void ValidationLayersInitialize(VectorSafeRef<const char *> validationLayers)
+{
+    validationLayers.size(0);
+#if NTF_VALIDATION_LAYERS_ON
+    validationLayers.Push("VK_LAYER_KHRONOS_validation");
+#if NTF_API_DUMP_VALIDATION_LAYER_ON
+    validationLayers.Push("VK_LAYER_LUNARG_api_dump");///<this produces "file not found" after outputting to (I believe) stdout for a short while; seems like it overruns Windows 7's file descriptor or something.  Weirdly, running from Visual Studio 2015 does not seem to have this problem, but then I'm limited to 9999 lines of the command prompt VS2015 uses for output.  Not ideal
+#endif//NTF_API_DUMP_VALIDATION_LAYER_ON
+#endif//#if NTF_VALIDATION_LAYERS_ON
+}
+
+VkInstance InstanceCreate(const ConstVectorSafeRef<const char*>& validationLayers)
 {
     //BEG_#AllocationCallbacks
     s_allocationCallbacks.pfnAllocation = NTF_vkAllocationFunction;
@@ -2684,7 +2690,8 @@ VkInstance CreateInstance(const ConstVectorSafeRef<const char*>& validationLayer
     Fopen(&s_winTimer, "WinTiming.txt", "w+");
 #endif//NTF_WIN_TIMER
 
-    if (s_enableValidationLayers && !CheckValidationLayerSupport(validationLayers))
+    const bool enableValidationLayers = validationLayers.size() > 0;
+    if (enableValidationLayers && !CheckValidationLayerSupport(validationLayers))
     {
         assert(false);//validation layers requested, but not available
     }
@@ -2719,11 +2726,11 @@ VkInstance CreateInstance(const ConstVectorSafeRef<const char*>& validationLayer
 #endif NTF_DEBUG
 
     VectorSafe<const char*, 32> extensions(0);
-    GetRequiredExtensions(&extensions);
+    GetRequiredExtensions(&extensions, enableValidationLayers);
     createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
     createInfo.ppEnabledExtensionNames = extensions.data();
 
-    if (s_enableValidationLayers)
+    if (enableValidationLayers)
     {
         createInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
@@ -2744,9 +2751,9 @@ VkInstance CreateInstance(const ConstVectorSafeRef<const char*>& validationLayer
     return instance;
 }
 
-VkDebugReportCallbackEXT SetupDebugCallback(const VkInstance& instance)
+VkDebugReportCallbackEXT SetupDebugCallback(const VkInstance& instance, const bool enableValidationLayers)
 {
-    if (!s_enableValidationLayers) return static_cast<VkDebugReportCallbackEXT>(0);
+    if (!enableValidationLayers) return static_cast<VkDebugReportCallbackEXT>(0);
 
     VkDebugReportCallbackCreateInfoEXT createInfo = {};
     createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
@@ -2792,12 +2799,12 @@ static void SearchForQueueIndices(
     const ConstVectorSafeRef<VkQueueFamilyProperties>& queueFamilyProperties, 
     const VkPhysicalDevice& device, 
     const VkSurfaceKHR& surface,
-    void(*AssignmentMethod)(QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::Datatype queueFamilyIndex))
+    void(*AssignmentMethod)(QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::IndexDataType queueFamilyIndex))
 {
     NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
     assert(AssignmentMethod);
 
-    for (QueueFamilyIndices::Datatype queueFamilyIndex = 0; queueFamilyIndex < queueFamilyCount; ++queueFamilyIndex)
+    for (QueueFamilyIndices::IndexDataType queueFamilyIndex = 0; queueFamilyIndex < queueFamilyCount; ++queueFamilyIndex)
     {
         const VkQueueFamilyProperties& queueFamilyProperty = queueFamilyProperties[queueFamilyIndex];
         if (queueFamilyProperty.queueCount > 0)
@@ -2809,18 +2816,25 @@ static void SearchForQueueIndices(
     }
 }
 
+void PhysicalDeviceQueueFamilyPropertiesGet(VectorSafeRef<VkQueueFamilyProperties> queueFamilyProperties, const VkPhysicalDevice& physicalDevice)
+{
+    uint32_t queueFamilyCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
+    queueFamilyProperties.size(queueFamilyCount);
+    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilyProperties.data());
+}
+
 ///@todo NTF: cache this function's results?  (they ought to be constant data as long as they user isn't swapping graphics cards, which isn't supported)
-void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkPhysicalDevice& device, const VkSurfaceKHR& surface)
+void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkPhysicalDevice& physicalDevice, const VkSurfaceKHR& surface)
 {
     NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
 
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-    VectorSafe<VkQueueFamilyProperties, 8> queueFamilyProperties(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilyProperties.data());
+    VectorSafe<VkQueueFamilyProperties, 8> queueFamilyProperties;
+    PhysicalDeviceQueueFamilyPropertiesGet(&queueFamilyProperties, physicalDevice);
+    const uint32_t queueFamilyCount = CastWithAssert<size_t, uint32_t>(queueFamilyProperties.size());
 
-    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, device, surface, 
-        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::Datatype queueFamilyIndex) 
+    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, physicalDevice, surface, 
+        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::IndexDataType queueFamilyIndex) 
             { 
                 NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
 
@@ -2874,8 +2888,8 @@ void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkP
         return;
     }
 
-    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, device, surface,
-        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::Datatype queueFamilyIndex)
+    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, physicalDevice, surface,
+        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::IndexDataType queueFamilyIndex)
             {
                 NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
 
@@ -2910,8 +2924,8 @@ void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkP
         return;
     }
 
-    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, device, surface,
-        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::Datatype queueFamilyIndex)
+    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, physicalDevice, surface,
+        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::IndexDataType queueFamilyIndex)
             {
                 NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
 
@@ -2946,8 +2960,8 @@ void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkP
         return;
     }
 
-    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, device, surface,
-        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::Datatype queueFamilyIndex)
+    SearchForQueueIndices(&queueFamilyIndices, CastWithAssert<uint32_t, int>(queueFamilyCount), queueFamilyProperties, physicalDevice, surface,
+        { [](QueueFamilyIndices*const queueFamilyIndicesPtr, const bool presentSupport, const VkQueueFlags queueFlags, const QueueFamilyIndices::IndexDataType queueFamilyIndex)
             {
                 NTF_REF(queueFamilyIndicesPtr, queueFamilyIndices);
 

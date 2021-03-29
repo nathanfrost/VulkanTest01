@@ -31,4 +31,5 @@ namespace std
 
 const char* StreamingUnitFilenameExtensionGet();
 size_t ImageSizeBytesCalculate(uint16_t textureWidth, uint16_t textureHeight, uint8_t textureChannels);
+uint32_t MipsLevelsCalculate(const uint32_t textureWidth, const uint32_t textureHeight);
 const char* CookedFileDirectoryGet();

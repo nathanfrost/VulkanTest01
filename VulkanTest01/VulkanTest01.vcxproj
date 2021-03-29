@@ -343,6 +343,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\volk\volk.c" />
+    <ClCompile Include="bmpImageFormat.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ntf_vulkan.cpp" />
     <ClCompile Include="StackNTF.cpp" />
@@ -354,6 +355,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\volk\volk.h" />
+    <ClInclude Include="bmpImageFormat.h" />
     <ClInclude Include="glmNTF.h" />
     <ClInclude Include="MemoryUtil.h" />
     <ClInclude Include="ntf_compileTimeDefines.h" />

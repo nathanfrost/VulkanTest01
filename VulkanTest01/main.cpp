@@ -4,10 +4,10 @@
 #include"StreamingUnitTest.h"
 #include"WindowsUtil.h"
 
-#define NTF_KEYSTROKE_TO_END_PROCESS 0
+#define NTF_KEYSTROKE_TO_END_PROCESS 1
 
 #if NTF_DEBUG
-bool s_allowedToIssueStreamingCommands=false;
+extern bool s_allowedToIssueStreamingCommands;
 #endif//#if NTF_DEBUG
 
 #if NTF_WIN_TIMER
@@ -16,11 +16,8 @@ extern FILE* s_winTimer;
 
 //LARGE_INTEGER g_queryPerformanceFrequency;
 
-VectorSafe<uint8_t, 8192 * 8192 * 4> s_pixelBufferScratch;
-
 WIN_TIMER_DEF(s_frameTimer);
 glm::vec3 s_cameraTranslation = glm::vec3(0.f,0.f,0.f);
-VectorSafe<const char*, NTF_VALIDATION_LAYERS_SIZE> s_validationLayers;
 
 #define NTF_FRAMES_IN_FLIGHT_NUM 2//#FramesInFlight
 
@@ -57,9 +54,6 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
         }
     }
 }
-
-//don't complain about scanf being unsafe
-#pragma warning(disable : 4996)
 
 static void UnloadStreamingUnitsIfGpuDone(
     VectorSafeRef<StreamingUnitRuntime *> streamingUnitsToUnload, 
@@ -134,7 +128,8 @@ static void UnloadStreamingUnitsIfGpuDone(
     streamingUnitsToUnload.Append(streamingUnitsToUnloadRemaining);
 }
 
-class VulkanRendererNTF 
+
+class VulkanRendererNTF
 {
 public:
 
@@ -163,7 +158,7 @@ public:
 #if NTF_KEYSTROKE_TO_END_PROCESS
         int i;
         printf("Enter a character and press ENTER to exit\n");
-        scanf("%i", &i);
+        scanf_s("%i", &i);
 #endif//#if !NTF_KEYSTROKE_TO_END_PROCESS
     }
 
@@ -403,24 +398,22 @@ private:
 
         //QueryPerformanceFrequency(&g_queryPerformanceFrequency);
 
-        s_validationLayers.size(0);
-        s_validationLayers.Push("VK_LAYER_KHRONOS_validation");
-#if NTF_API_DUMP_VALIDATION_LAYER_ON
-        s_validationLayers.Push("VK_LAYER_LUNARG_api_dump");///<this produces "file not found" after outputting to (I believe) stdout for a short while; seems like it overruns Windows 7's file descriptor or something.  Weirdly, running from Visual Studio 2015 does not seem to have this problem, but then I'm limited to 9999 lines of the command prompt VS2015 uses for output.  Not ideal
-#endif//NTF_API_DUMP_VALIDATION_LAYER_ON
-        m_deviceExtensions = VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM>({VK_KHR_SWAPCHAIN_EXTENSION_NAME});
+        VectorSafe<const char*, NTF_VALIDATION_LAYERS_SIZE> validationLayers;
+        ValidationLayersInitialize(&validationLayers);
+        m_instance = InstanceCreate(validationLayers);
 
-        m_instance = CreateInstance(s_validationLayers);
         volkLoadInstance(m_instance);//load Vulkan function pointers using Vulkan's loader dispatch code (supports multiple devices at the performance cost of additional indirection)
-        m_callback = SetupDebugCallback(m_instance);
+        m_callback = SetupDebugCallback(m_instance, validationLayers.size() > 0);
         CreateSurface(&m_surface, m_window, m_instance);//window surface needs to be created right before physical device creation, because it influences physical device selection
-        PickPhysicalDevice(&m_physicalDevice, m_surface, m_deviceExtensions, m_instance);
+
+        VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM> deviceExtensions({ VK_KHR_SWAPCHAIN_EXTENSION_NAME });
+        PickPhysicalDevice(&m_physicalDevice, m_surface, deviceExtensions, m_instance);
 
         //if this is an Nvidia card, use diagnostic checkpoints in case of VK_ERROR_DEVICE_LOST
         VectorSafe<const char*, 1> deviceDiagnosticCheckpoints({ "VK_NV_device_diagnostic_checkpoints" });
         if (CheckDeviceExtensionSupport(m_physicalDevice, deviceDiagnosticCheckpoints))
         {
-            m_deviceExtensions.Push(deviceDiagnosticCheckpoints[0]);//device diagnostic checkpoints are supported, so use them
+            deviceExtensions.Push(deviceDiagnosticCheckpoints[0]);//device diagnostic checkpoints are supported, so use them
             g_deviceDiagnosticCheckpointsSupported = true;//global variable used to avoid passing another boolean to practically every Vulkan function
         }
 
@@ -438,8 +431,8 @@ private:
             &m_graphicsQueue, 
             &m_presentQueue, 
             &m_transferQueue, 
-            m_deviceExtensions, 
-            s_validationLayers, 
+            deviceExtensions, 
+            validationLayers, 
             m_queueFamilyIndices, 
             m_physicalDevice);
         volkLoadDevice(m_device);//load Vulkan function pointers for the one-and-only Vulkan device for minimal indirection and maximum performance
@@ -860,23 +853,23 @@ private:
             s_allowedToIssueStreamingCommands = true;
 #endif//#if NTF_DEBUG
 
-            //uncomment to load just one streaming unit
-            //StreamingUnitAddToLoadCriticalSection(&m_streamingUnits[1], &m_streamingUnitsToAddToLoad, &m_streamingUnitsAddToLoadCriticalSection);
-            //AssetLoadingThreadExecuteLoad(&m_assetLoadingThreadData.m_threadCommand, m_assetLoadingThreadData.m_handles.wakeEventHandle);
+            //HAC: uncomment to load just one streaming unit
+            StreamingUnitAddToLoadCriticalSection(&m_streamingUnits[2], &m_streamingUnitsToAddToLoad, &m_streamingUnitsAddToLoadCriticalSection);
+            AssetLoadingThreadExecuteLoad(&m_assetLoadingThreadData.m_threadCommand, m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
-            StreamingUnitTestTick(
-                &m_streamingUnits[0],
-                &m_streamingUnits[1],
-                &m_streamingUnits[2],
-                &m_streamingUnitsToAddToLoad,
-                &m_streamingUnitsRenderable,
-                &m_streamingUnitsToUnload,
-                &m_assetLoadingThreadData.m_threadCommand,
-                &m_streamingUnitsAddToLoadCriticalSection,
-                &m_assetLoadingThreadIdle,
-                m_assetLoadingThreadData.m_handles.wakeEventHandle,
-                m_frameNumberCurrentCpu,
-                24);
+            //StreamingUnitTestTick(
+            //    &m_streamingUnits[0],
+            //    &m_streamingUnits[1],
+            //    &m_streamingUnits[2],
+            //    &m_streamingUnitsToAddToLoad,
+            //    &m_streamingUnitsRenderable,
+            //    &m_streamingUnitsToUnload,
+            //    &m_assetLoadingThreadData.m_threadCommand,
+            //    &m_streamingUnitsAddToLoadCriticalSection,
+            //    &m_assetLoadingThreadIdle,
+            //    m_assetLoadingThreadData.m_handles.wakeEventHandle,
+            //    m_frameNumberCurrentCpu,
+            //    24);
 #if NTF_DEBUG
             s_allowedToIssueStreamingCommands = false;
 #endif//#if NTF_DEBUG
@@ -896,12 +889,11 @@ private:
     VkDebugReportCallbackEXT m_callback;
     VkSurfaceKHR m_surface;
     QueueFamilyIndices m_queueFamilyIndices;//needs no synchronization; queried during creation-time and then immutable from that point forward
-    VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE;//doesn't need to be deleted, since physical devices can't be created or destroyed by software.  Needs no synchronization
+    VkPhysicalDevice m_physicalDevice;//doesn't need to be deleted, since physical devices can't be created or destroyed by software.  Needs no synchronization
     VkDevice m_device;//interface to the physical device; must be destroyed before the physical device.  Need not be synchronized until, of course, vkDestroyDevice()
     VkSwapchainKHR m_swapChain;//must be destroyed before the logical device
     VkQueue m_graphicsQueue, m_presentQueue, m_transferQueue;//queues are implicitly cleaned up with the logical device; no need to delete
     RTL_CRITICAL_SECTION m_graphicsQueueCriticalSection;//synchronizes one-and-only graphics queue between asset loading thread (which uses it to load textures) and main thread.  On devices that don't have separate transfer or present queues, this mutex synchronizes these queue accesses as well
-    VectorSafe<const char*, NTF_DEVICE_EXTENSIONS_NUM> m_deviceExtensions;
     enum { kSwapChainImagesNumMax=8 };
     VectorSafe<VkImage, kSwapChainImagesNumMax> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html
     VkFormat m_swapChainImageFormat;

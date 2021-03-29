@@ -127,28 +127,60 @@ void StreamingUnitsAddToUnload(
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsRenderable,
     VectorSafeRef<StreamingUnitRuntime*> streamingUnitsAddToUnload);
 
+#if NTF_DEBUG
+const char*const s_serializerRuntimeDebugDirectory = "Debug";
+inline void SerializerDebugLog(FILE**const debugLogFilePtr, const size_t sizeofData, const char*const fileStr)
+{
+    NTF_REF(debugLogFilePtr, debugLogFile);
+    assert(fileStr);
+    assert(fileStr[0]);
+
+    ArraySafe<char, 256> s;
+    if (!debugLogFile)
+    {
+        s.Sprintf("%s\\%s", s_serializerRuntimeDebugDirectory, fileStr);
+        const errno_t fopenRet = fopen_s(&debugLogFile, s.data(), "w");
+        assert(fopenRet == 0);
+    }
+    s.Sprintf("%zu\n", sizeofData);
+    const char*const sPtr = s.data();
+    fwrite(sPtr, 1, strlen(sPtr), debugLogFile);
+    fflush(debugLogFile);
+}
+#endif//#if NTF_DEBUG
+
 class SerializerCookerOut
 {
+#if NTF_DEBUG
+    static FILE* s_fDebugLog;
+#endif//#if NTF_DEBUG
 public:
     template<class T>
     inline static void Execute(FILE*const file, T*const data)
     {
         assert(file);
         assert(data);
-        Fwrite(file, data, sizeof(*data), 1);
+        const size_t sizeofData = sizeof(*data);
+        Fwrite(file, data, sizeofData, 1);
+#if NTF_DEBUG
+        SerializerDebugLog(&s_fDebugLog, sizeofData, "SerializerRuntimeOutDebug.txt");
+#endif//#if NTF_DEBUG
     }
     template<class T>
-    inline static void Execute(FILE*const file, ConstArraySafeRef<T> arraySafe, const size_t elementsNum)
+    inline static void Execute(FILE*const file, const ConstArraySafeRef<T>& arraySafe, const size_t elementsNum)
     {
         assert(file);
         assert(elementsNum > 0);
         arraySafe.Fwrite(file, elementsNum);
+#if NTF_DEBUG
+        SerializerDebugLog(&s_fDebugLog, sizeof(T)*elementsNum, "SerializerRuntimeOutDebug.txt");
+#endif//#if NTF_DEBUG
     }
     template<class ElementType, class ElementNumType>
     inline static void Execute(
         FILE*const file,
         const ElementNumType arrayNum,
-        ConstArraySafeRef<ElementType> arrayCookerOut,
+        const ConstArraySafeRef<ElementType>& arrayCookerOut,
         ArraySafeRef<StreamingUnitByte>,
         StackCpu<VkDeviceSize>*const,
         const VkDeviceSize,
@@ -159,15 +191,23 @@ public:
         Execute(file, arrayCookerOut, arrayNum);
     }
 };
+
 class SerializerRuntimeIn
 {
+#if NTF_DEBUG
+    static FILE* s_fDebugLog;
+#endif//#if NTF_DEBUG
 public:
     template<class T>
     inline static void Execute(FILE*const file, T*const data)
     {
         assert(file);
         assert(data);
-        Fread(file, data, sizeof(*data), 1);
+        const size_t sizeofData = sizeof(*data);
+        Fread(file, data, sizeofData, 1);
+#if NTF_DEBUG
+        SerializerDebugLog(&s_fDebugLog, sizeofData, "SerializerRuntimeInDebug.txt");
+#endif//#if NTF_DEBUG
     }
     template<class T>
     inline static void Execute(FILE*const file, ArraySafeRef<T> arraySafe, const size_t elementsNum)
@@ -175,12 +215,15 @@ public:
         assert(file);
         assert(elementsNum > 0);
         arraySafe.MemcpyFromFread(file, elementsNum);
+#if NTF_DEBUG
+        SerializerDebugLog(&s_fDebugLog, sizeof(T)*elementsNum, "SerializerRuntimeInDebug.txt");
+#endif//#if NTF_DEBUG
     }
     template<class ElementType, class ElementNumType>
     inline static void Execute(
         FILE*const file, 
         const ElementNumType arrayNum,
-        ConstArraySafeRef<ElementType> arrayCookerOut,
+        const ConstArraySafeRef<ElementType>& arrayCookerOut,
         ArraySafeRef<StreamingUnitByte> bufferRuntimeIn,
         StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
         const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn,
@@ -210,7 +253,7 @@ public:
 };
 
 template<class Serializer>
-inline void TextureSerialize0(
+inline void TextureSerializeHeader(
     FILE*const file,
     StreamingUnitTextureDimension*const textureWidth,
     StreamingUnitTextureDimension*const textureHeight,
@@ -226,9 +269,9 @@ inline void TextureSerialize0(
     Serializer::Execute(file, textureChannels);
 }
 template<class Serializer>
-inline void TextureSerialize1(   
+inline void TextureSerializeImagePixels(   
     FILE*const file,
-    ConstArraySafeRef<StreamingUnitByte> pixelsCookOut,
+    const ConstArraySafeRef<StreamingUnitByte>& pixelsCookOut,
     StackCpu<VkDeviceSize>* stagingBufferMemoryMapCpuToGpuRuntimeIn,
     const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn,
     const size_t bufferSizeBytes,
@@ -252,7 +295,7 @@ inline void VertexBufferSerialize(
     StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeIn,
     StreamingUnitVerticesNum*const verticesNum,
-    ConstArraySafeRef<Vertex> verticesCookerOut,
+    const ConstArraySafeRef<Vertex>& verticesCookerOut,
     ArraySafeRef<StreamingUnitByte> vertexBufferRuntimeIn,
     size_t*const vertexBufferSizeBytesRuntimeIn,
     const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn)
@@ -278,7 +321,7 @@ inline void IndexBufferSerialize(
     StackCpu<VkDeviceSize>*const stagingBufferMemoryMapCpuToGpuRuntimeIn,
     VkDeviceSize*const stagingBufferGpuOffsetToAllocatedBlockRuntimeIn,
     StreamingUnitIndicesNum*const indicesNum,
-    ConstArraySafeRef<IndexBufferValue> indicesCookerOut,
+    const ConstArraySafeRef<IndexBufferValue>& indicesCookerOut,
     ArraySafeRef<StreamingUnitByte> indexBufferRuntimeIn,
     size_t*const indexBufferSizeBytesRuntimeIn,
     const VkDeviceSize stagingBufferGpuAlignmentRuntimeIn)

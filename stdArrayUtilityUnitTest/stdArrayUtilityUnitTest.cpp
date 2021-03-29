@@ -1363,6 +1363,39 @@ int main()
         fclose(f);   
     }
 
+    {
+        ArraySafe<char, 256> a;
+        VectorSafe<char, 256> v;
+        const char*const s = "The test string";
+        AppendStringNoNullTerminator(&v, ConstStringSafe(s));
+        if (VectorSafeIsNullTerminated(v))
+        {
+            ExitOnFail(__LINE__);
+        }
+        v.Push(0);//null-terminate
+        if (!VectorSafeIsNullTerminated(v))
+        {
+            ExitOnFail(__LINE__);
+        }
+        MemcpyStringFromStart(&a, v);
+        if(memcmp(v.data(),a.data(), v.SizeInBytes()) != 0)
+        {
+            ExitOnFail(__LINE__);
+        }
+    }
+    //{
+    //    ArraySafe<char, 256> a;
+    //    VectorSafe<char, 256> v;
+    //    const char*const s = "The test string";
+    //    AppendStringNoNullTerminator(&v, ConstStringSafe(s));
+    //    //v.Push(0);//no null-terminate -- should trigger assert
+    //    MemcpyStringFromStart(&a, v);
+    //    if (memcmp(v.data(), a.data(), v.SizeInBytes()) != 0)
+    //    {
+    //        ExitOnFail(__LINE__);
+    //    }
+    //}
+
     //old tests below are kept because why not -- maybe a little extra coverage hiding in here
     ConstMethodTesting(vectorSafe, actualSize, lastValidValue);
 
