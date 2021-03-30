@@ -169,10 +169,10 @@ void StreamingCommandsProcess(
                 device);
 
             streamingUnit.m_uniformBufferSizeAligned = AlignToNonCoherentAtomSize(streamingUnit.m_uniformBufferSizeUnaligned);
-            BeginCommandBuffer(commandBufferTransfer, device);
+            CommandBufferBegin(commandBufferTransfer, device);
             if (!unifiedGraphicsAndTransferQueue)
             {
-                BeginCommandBuffer(commandBufferTransitionImage, device);
+                CommandBufferBegin(commandBufferTransitionImage, device);
             }
             CreateTextureSampler(&streamingUnit.m_textureSampler, device);
 
@@ -218,7 +218,7 @@ void StreamingCommandsProcess(
                     stagingBufferGpuMemory,
                     offsetToFirstByteOfStagingBuffer,
                     imageFormat,
-                    VK_IMAGE_TILING_OPTIMAL/*could also pass VK_IMAGE_TILING_LINEAR so texels are laid out in row-major order for debugging (less performant)*/,
+                    VK_IMAGE_TILING_OPTIMAL,
                     VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT/*accessible by shader*/,
                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
                     physicalDevice,
@@ -357,7 +357,7 @@ void StreamingCommandsProcess(
                 transferFinishedSemaphores.Push(transferFinishedSemaphore);
             }
 
-            EndCommandBuffer(commandBufferTransfer);
+            CommandBufferEnd(commandBufferTransfer);
             SubmitCommandBuffer(
                 transferQueueCriticalSection,
                 ConstVectorSafeRef<VkSemaphore>(),
@@ -370,7 +370,7 @@ void StreamingCommandsProcess(
 
             if (!unifiedGraphicsAndTransferQueue)
             {
-                EndCommandBuffer(commandBufferTransitionImage);
+                CommandBufferEnd(commandBufferTransitionImage);
                 SubmitCommandBuffer(
                     &graphicsQueueCriticalSection,
                     transferFinishedSemaphores,

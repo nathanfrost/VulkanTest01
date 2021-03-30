@@ -215,7 +215,7 @@ void StreamingUnitCooker::Cook()
             //transition memory to format optimal for copying from CPU->GPU
             const uint32_t graphicsQueueIndex = m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue];
             const VkImageAspectFlagBits colorAspectBit = VK_IMAGE_ASPECT_COLOR_BIT;
-            BeginCommandBuffer(m_commandBufferPrimary, m_device);
+            CommandBufferBegin(m_commandBufferPrimary, m_device);
             ImageMemoryBarrier(
                 VK_IMAGE_LAYOUT_UNDEFINED,
                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -296,7 +296,7 @@ void StreamingUnitCooker::Cook()
             barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
             CmdPipelineImageBarrier(&barrier, m_commandBufferPrimary, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
-            EndCommandBuffer(m_commandBufferPrimary);
+            CommandBufferEnd(m_commandBufferPrimary);
             SubmitCommandBuffer(
                 nullptr,
                 ConstVectorSafeRef<VkSemaphore>(),
@@ -344,7 +344,7 @@ void StreamingUnitCooker::Cook()
                 const ConstArraySafeRef<uint8_t> readbackBufferCpuMemory = 
                     MapMemory(memoryHandleTextureLinear, memoryOffsetTextureLinear, memoryRequirements.size, m_device);
 
-                BeginCommandBuffer(m_commandBufferPrimary, m_device);
+                CommandBufferBegin(m_commandBufferPrimary, m_device);
                 ImageMemoryBarrier(
                     VK_IMAGE_LAYOUT_UNDEFINED,
                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
@@ -389,7 +389,7 @@ void StreamingUnitCooker::Cook()
                     1, 
                     &region);
 
-                EndCommandBuffer(m_commandBufferPrimary);
+                CommandBufferEnd(m_commandBufferPrimary);
                 SubmitCommandBuffer(
                     nullptr,
                     ConstVectorSafeRef<VkSemaphore>(),

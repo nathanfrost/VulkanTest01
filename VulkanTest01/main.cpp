@@ -476,7 +476,7 @@ private:
 
         VkFence initializationDone;
         FenceCreate(&initializationDone, static_cast<VkFenceCreateFlagBits>(0), m_device);
-        BeginCommandBuffer(m_commandBufferTransitionImage, m_device);
+        CommandBufferBegin(m_commandBufferTransitionImage, m_device);
         CreateDepthResources(
             &m_depthImage,
             &m_depthImageView,
@@ -486,7 +486,7 @@ private:
             m_device,
             m_physicalDevice, 
             m_instance);
-        EndCommandBuffer(m_commandBufferTransitionImage);
+        CommandBufferEnd(m_commandBufferTransitionImage);
         SubmitCommandBuffer(
             nullptr,//no need to critical section, since currently only the main thread is running and we guard against launching the asset loading thread until this command buffer completes
             ConstVectorSafeRef<VkSemaphore>(),
@@ -704,7 +704,7 @@ private:
                 commandBufferPrimary = m_commandBuffersPrimary[acquiredImageIndex];
                 swapChainFramebuffer = m_swapChainFramebuffers[acquiredImageIndex];
 
-                BeginCommandBuffer(commandBufferPrimary, m_device);
+                CommandBufferBegin(commandBufferPrimary, m_device);
 
                 VkRenderPassBeginInfo renderPassInfo = {};
                 renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -764,7 +764,7 @@ private:
                 CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdEndRenderPass_kAfter)], m_instance);
                 vkCmdEndRenderPass(commandBufferPrimary);
                 CmdSetCheckpointNV(commandBufferPrimary, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdEndRenderPass_kAfter)], m_instance);
-                EndCommandBuffer(commandBufferPrimary);
+                CommandBufferEnd(commandBufferPrimary);
 
                 //if we're Gpu-bound, wait until the Gpu is ready for another frame
                 if (!drawFrameFinishedFence.m_frameNumberCpuCompletedByGpu)//only check fence that has been submitted to Gpu but has not yet signaled (eg command buffer submitted with this fence has not completed yet)

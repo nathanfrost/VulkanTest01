@@ -173,7 +173,7 @@ void CopyBufferToImage(
     const uint32_t mipLevel,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
-    const VkInstance instance)
+    const VkInstance& instance)
 {
     VkBufferImageCopy region = {};
     region.bufferOffset = 0;
@@ -828,7 +828,7 @@ void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT
     }
 }
 ///@todo: rename CommandBufferBegin()/CommandBufferEnd()
-void BeginCommandBuffer(const VkCommandBuffer& commandBuffer, const VkDevice& device)
+void CommandBufferBegin(const VkCommandBuffer& commandBuffer, const VkDevice& device)
 {
     VkCommandBufferBeginInfo beginInfo = {};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1477,7 +1477,7 @@ void AllocateCommandBuffers(
 //    WaitForMultipleObjects(Cast_size_t_DWORD(threadNum), commandBufferThreadDoneEvents.begin(), TRUE, INFINITE);
 //}
 
-void EndCommandBuffer(const VkCommandBuffer& commandBuffer)
+void CommandBufferEnd(const VkCommandBuffer& commandBuffer)
 {
     const VkResult endCommandBufferResult = vkEndCommandBuffer(commandBuffer);
     NTF_VK_ASSERT_SUCCESS(endCommandBufferResult);

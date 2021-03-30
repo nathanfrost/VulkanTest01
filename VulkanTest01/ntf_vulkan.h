@@ -120,7 +120,7 @@ void CopyBufferToImage(
     const uint32_t mipLevel,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
-    const VkInstance instance);
+    const VkInstance& instance);
 void CmdPipelineImageBarrier(
     const VkImageMemoryBarrier*const barrierPtr,
     const VkCommandBuffer& commandBuffer,
@@ -188,7 +188,7 @@ VkResult CreateDebugReportCallbackEXT(
     const VkAllocationCallbacks* pAllocator,
     VkDebugReportCallbackEXT* pCallback);
 void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT callback, const VkAllocationCallbacks* pAllocator);
-void BeginCommandBuffer(const VkCommandBuffer& commandBuffer, const VkDevice& device);
+void CommandBufferBegin(const VkCommandBuffer& commandBuffer, const VkDevice& device);
 
 struct UniformBufferObject
 {
@@ -450,7 +450,7 @@ void CreateAndCopyToGpuBuffer(
     const VkPhysicalDevice& physicalDevice,
     const VkInstance instance);
 
-void EndCommandBuffer(const VkCommandBuffer& commandBuffer);
+void CommandBufferEnd(const VkCommandBuffer& commandBuffer);
 void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queueFamilyIndex, const VkDevice& device, const VkPhysicalDevice& physicalDevice);
 void CreateDepthResources(
     VkImage*const depthImagePtr,
