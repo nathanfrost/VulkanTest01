@@ -1584,15 +1584,28 @@ VkDeviceSize AlignToNonCoherentAtomSize(VkDeviceSize i)
 }
 
 void MapMemory(
-    void** cpuMemoryCPtrPtr, ///<TODO_NEXT: take ArraySafeRef<uint8_t>, not void**
+    ArraySafeRef<uint8_t>*const cpuMemoryArraySafePtr,
     const VkDeviceMemory& gpuMemory, 
     const VkDeviceSize& offsetToGpuMemory, 
     const VkDeviceSize bufferSize, 
     const VkDevice& device)
 {
-    assert(cpuMemoryCPtrPtr);
-    const VkResult vkMapMemoryResult = vkMapMemory(device, gpuMemory, offsetToGpuMemory, bufferSize, 0, cpuMemoryCPtrPtr);
+    assert(cpuMemoryArraySafePtr);
+
+    void* cpuMemoryPtr;
+    const VkResult vkMapMemoryResult = vkMapMemory(device, gpuMemory, offsetToGpuMemory, bufferSize, 0, &cpuMemoryPtr);
     NTF_VK_ASSERT_SUCCESS(vkMapMemoryResult);
+    *cpuMemoryArraySafePtr = ArraySafeRef<uint8_t>(reinterpret_cast<uint8_t*>(cpuMemoryPtr), CastWithAssert<VkDeviceSize,size_t>(bufferSize));
+}
+ConstArraySafeRef<uint8_t> MapMemory(
+    const VkDeviceMemory& gpuMemory,
+    const VkDeviceSize& offsetToGpuMemory,
+    const VkDeviceSize bufferSize,
+    const VkDevice& device)
+{
+    ArraySafeRef<uint8_t> cpuMemoryArraySafe;
+    MapMemory(&cpuMemoryArraySafe, gpuMemory, offsetToGpuMemory, bufferSize, device);
+    return ConstArraySafeRef<uint8_t>(cpuMemoryArraySafe);
 }
 
 void CreateUniformBuffer(
@@ -1631,9 +1644,7 @@ void CreateUniformBuffer(
         device,
         physicalDevice);
 
-    void* uniformBufferCpuMemoryCPtr;
-    MapMemory(&uniformBufferCpuMemoryCPtr, uniformBufferGpuMemory, offsetToGpuMemory, bufferSize, device);
-    uniformBufferCpuMemory.SetArray(reinterpret_cast<uint8_t*>(uniformBufferCpuMemoryCPtr), Cast_VkDeviceSize_size_t(bufferSize));
+    MapMemory(&uniformBufferCpuMemory, uniformBufferGpuMemory, offsetToGpuMemory, bufferSize, device);
 }
 
 void DestroyUniformBuffer(

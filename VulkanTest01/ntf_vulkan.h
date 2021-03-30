@@ -383,7 +383,12 @@ void FillCommandBufferPrimary(
 
 VkDeviceSize AlignToNonCoherentAtomSize(VkDeviceSize i);
 void MapMemory(
-    void** cpuMemoryCPtrPtr,
+    ArraySafeRef<uint8_t>*const cpuMemoryArraySafePtr,
+    const VkDeviceMemory& gpuMemory,
+    const VkDeviceSize& offsetToGpuMemory,
+    const VkDeviceSize bufferSize,
+    const VkDevice& device);
+ConstArraySafeRef<uint8_t> MapMemory(
     const VkDeviceMemory& gpuMemory,
     const VkDeviceSize& offsetToGpuMemory,
     const VkDeviceSize bufferSize,

@@ -341,9 +341,8 @@ void StreamingUnitCooker::Cook()
                     m_physicalDevice,
                     m_device);
                 assert(createAllocateBindImageResult);
-                void* readbackBufferCpuMemoryCPtr = nullptr;
-                MapMemory(&readbackBufferCpuMemoryCPtr, memoryHandleTextureLinear, memoryOffsetTextureLinear, memoryRequirements.size, m_device);
-                const ConstArraySafeRef<uint8_t> readbackBufferCpuMemory(reinterpret_cast<uint8_t*>(readbackBufferCpuMemoryCPtr), memoryRequirements.size);
+                const ConstArraySafeRef<uint8_t> readbackBufferCpuMemory = 
+                    MapMemory(memoryHandleTextureLinear, memoryOffsetTextureLinear, memoryRequirements.size, m_device);
 
                 BeginCommandBuffer(m_commandBufferPrimary, m_device);
                 ImageMemoryBarrier(
@@ -655,10 +654,7 @@ void VulkanInitialize()
     VkMemoryRequirements memRequirements;
     vkGetBufferMemoryRequirements(m_device, m_stagingBufferGpu, &memRequirements);
     m_stagingBufferGpuAlignmentStandard = memRequirements.alignment;
-
-    void* stagingBufferMemoryMapCpuToGpuPtr;
-    MapMemory(&stagingBufferMemoryMapCpuToGpuPtr, m_stagingBufferGpuMemory, m_offsetToFirstByteOfStagingBuffer, stagingBufferCpuToGpuSizeAligned, m_device);
-    m_stagingBufferMemoryMapCpuToGpu = ArraySafeRef<uint8_t>(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpuPtr), stagingBufferCpuToGpuSizeBytes);
+    MapMemory(&m_stagingBufferMemoryMapCpuToGpu, m_stagingBufferGpuMemory, m_offsetToFirstByteOfStagingBuffer, stagingBufferCpuToGpuSizeAligned, m_device);
 
     FenceCreate(&m_fence, static_cast<VkFenceCreateFlagBits>(0), m_device);
 }

@@ -53,9 +53,9 @@ void AssetLoadingThreadPersistentResourcesCreate(
     vkGetBufferMemoryRequirements(device, stagingBufferGpu, &memRequirements);
     stagingBufferGpuAlignmentStandard = memRequirements.alignment;
 
-    void* stagingBufferMemoryMapCpuToGpuPtr;
-    MapMemory(&stagingBufferMemoryMapCpuToGpuPtr, stagingBufferGpuMemory, offsetToFirstByteOfStagingBuffer, stagingBufferCpuToGpuSizeAligned, device);
-    stagingBufferMemoryMapCpuToGpu.Initialize(reinterpret_cast<uint8_t*>(stagingBufferMemoryMapCpuToGpuPtr), stagingBufferCpuToGpuSizeBytes);
+    ArraySafeRef<uint8_t> stagingBufferMemoryMapCpuToGpuRet;
+    MapMemory(&stagingBufferMemoryMapCpuToGpuRet, stagingBufferGpuMemory, offsetToFirstByteOfStagingBuffer, stagingBufferCpuToGpuSizeAligned, device);
+    stagingBufferMemoryMapCpuToGpu.Initialize(stagingBufferMemoryMapCpuToGpuRet.data(), stagingBufferCpuToGpuSizeBytes);
 
     CreateVulkanSemaphore(&transferFinishedSemaphore, device);
 }
