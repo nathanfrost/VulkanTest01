@@ -321,15 +321,13 @@ void TransferImageFromCpuToGpu(
     const uint32_t widthMip0,
     const uint32_t heightMip0,
     const uint32_t mipLevels,
-    const VkFormat& format,
     const ConstVectorSafeRef<VkBuffer>& stagingBuffers,
-    const VkBuffer& stagingBuffer,
     const VkCommandBuffer commandBufferTransfer,
     const uint32_t transferQueueFamilyIndex,
     const VkCommandBuffer commandBufferGraphics,
     const uint32_t graphicsQueueFamilyIndex,
     const VkDevice& device,
-    const VkInstance instance)
+    const VkInstance& instance)
 {
     assert(mipLevels >= 1);
 
@@ -360,7 +358,6 @@ void TransferImageFromCpuToGpu(
         DivideByTwoIfGreaterThanOne(&heightMipCurrent);
     }
 
-    const VkCommandBuffer commandBufferForBlits = unifiedGraphicsAndTransferQueue ? commandBufferTransfer : commandBufferGraphics;
     if (unifiedGraphicsAndTransferQueue)
     {
             //transferQueue == graphicsQueue, so prepare image for shader reads with no change of queue ownership

@@ -77,15 +77,13 @@ void TransferImageFromCpuToGpu(
     const uint32_t widthMip0,
     const uint32_t heightMip0,
     const uint32_t mipLevels,
-    const VkFormat& format,
     const ConstVectorSafeRef<VkBuffer>& stagingBuffers,
-    const VkBuffer& stagingBuffer,
     const VkCommandBuffer commandBufferTransfer,
     const uint32_t transferQueueFamilyIndex,
     const VkCommandBuffer commandBufferGraphics,
     const uint32_t graphicsQueueFamilyIndex,
-    const VkDevice& device, 
-    const VkInstance instance);
+    const VkDevice& device,
+    const VkInstance& instance);
 void CreateTextureImageView(VkImageView*const textureImageViewPtr, const VkImage& textureImage, const uint32_t mipLevels, const VkDevice& device);
 bool CreateAllocateBindImageIfAllocatorHasSpace(
     VkImage*const imagePtr,

@@ -272,9 +272,7 @@ void StreamingCommandsProcess(
                     textureWidth,
                     textureHeight,
                     mipLevels,
-                    imageFormat,
                     ConstVectorSafeRef<VkBuffer>(&stagingBuffersGpu[stagingBuffersGpuIndexOfNextTransfer], stagingBuffersGpu.size() - stagingBuffersGpuIndexOfNextTransfer),  ///@todo: refactor as Slice()
-                    stagingBuffersGpu[stagingBuffersGpuIndexOfNextTransfer],
                     commandBufferTransfer,
                     queueFamilyIndices.index[QueueFamilyIndices::Type::kTransferQueue],
                     commandBufferTransitionImage,
