@@ -62,7 +62,7 @@ void STBAllocatorDestroy(StackCpu<size_t>**const stbAllocatorPtrPtr)
 {
     NTF_REF(stbAllocatorPtrPtr, stbAllocatorPtr);
 
-    free(stbAllocatorPtr->GetMemory());
+    free(stbAllocatorPtr->GetMemory().data());
     stbAllocatorPtr->Destroy();
     delete stbAllocatorPtr;
     stbAllocatorPtr = nullptr;
