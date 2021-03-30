@@ -449,9 +449,9 @@ private:
         CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
         CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
         
-        CreateCommandPool(&m_commandPoolPrimary, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue], m_device, m_physicalDevice);
-        CreateCommandPool(&m_commandPoolTransitionImage, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue], m_device, m_physicalDevice);
-        CreateCommandPool(&m_commandPoolTransfer, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kTransferQueue], m_device, m_physicalDevice);
+        CreateCommandPool(&m_commandPoolPrimary, m_queueFamilyIndices.GraphicsQueueIndex(), m_device, m_physicalDevice);
+        CreateCommandPool(&m_commandPoolTransitionImage, m_queueFamilyIndices.GraphicsQueueIndex(), m_device, m_physicalDevice);
+        CreateCommandPool(&m_commandPoolTransfer, m_queueFamilyIndices.TransferQueueIndex(), m_device, m_physicalDevice);
 
         m_deviceLocalMemoryPersistent.Initialize(m_device, m_physicalDevice);
         for (auto& vulkanPagedStackAllocator : m_deviceLocalMemoryStreamingUnits)
@@ -522,7 +522,7 @@ private:
         {
             for (auto& commandPoolSecondary : commandPoolSecondaryArray)
             {
-                CreateCommandPool(&commandPoolSecondary, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue], m_device, m_physicalDevice);
+                CreateCommandPool(&commandPoolSecondary, m_queueFamilyIndices.GraphicsQueueIndex(), m_device, m_physicalDevice);
             }
         }
 

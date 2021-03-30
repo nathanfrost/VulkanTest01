@@ -101,7 +101,7 @@ void StreamingCommandsProcess(
     VkDeviceSize stagingBufferGpuOffsetToAllocatedBlock;
 
     const bool unifiedGraphicsAndTransferQueue = graphicsQueue == transferQueue;
-    assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.index[QueueFamilyIndices::Type::kTransferQueue] == queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue]));
+    assert(unifiedGraphicsAndTransferQueue == (queueFamilyIndices.TransferQueueIndex() == queueFamilyIndices.GraphicsQueueIndex()));
     RTL_CRITICAL_SECTION*const transferQueueCriticalSection = unifiedGraphicsAndTransferQueue ? &graphicsQueueCriticalSection : nullptr;//if we have a single queue for graphics and transfer rather than two separate queues, then we must criticalSection that one queue
 
     VkPipelineStageFlags transferFinishedPipelineStageFlags = VK_PIPELINE_STAGE_TRANSFER_BIT;
@@ -276,7 +276,7 @@ void StreamingCommandsProcess(
                     commandBufferTransfer,
                     queueFamilyIndices.index[QueueFamilyIndices::Type::kTransferQueue],
                     commandBufferTransitionImage,
-                    queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue],
+                    queueFamilyIndices.GraphicsQueueIndex(),
                     device,
                     instance);
 

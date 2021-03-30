@@ -242,7 +242,6 @@ struct SwapChainSupportDetails
 
 void QuerySwapChainSupport(SwapChainSupportDetails*const swapChainSupportDetails, const VkSurfaceKHR& surface, const VkPhysicalDevice& device);
 
-///@todo: convenience accessors for each queue
 struct QueueFamilyIndices
 {
     typedef int IndexDataType;
@@ -270,6 +269,10 @@ struct QueueFamilyIndices
         }
         return true;
     }
+
+    inline IndexDataType GraphicsQueueIndex() const { return index[QueueFamilyIndices::Type::kGraphicsQueue]; }
+    inline IndexDataType TransferQueueIndex() const { return index[QueueFamilyIndices::Type::kTransferQueue]; }
+    inline IndexDataType PresentQueueIndex() const { return index[QueueFamilyIndices::Type::kPresentQueue]; }
 };
 
 void PhysicalDeviceQueueFamilyPropertiesGet(VectorSafeRef<VkQueueFamilyProperties> queueFamilyProperties, const VkPhysicalDevice& device);

@@ -213,7 +213,7 @@ void StreamingUnitCooker::Cook()
                 m_physicalDevice);
 
             //transition memory to format optimal for copying from CPU->GPU
-            const uint32_t graphicsQueueIndex = m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue];
+            const uint32_t graphicsQueueIndex = m_queueFamilyIndices.GraphicsQueueIndex();
             const VkImageAspectFlagBits colorAspectBit = VK_IMAGE_ASPECT_COLOR_BIT;
             CommandBufferBegin(m_commandBufferPrimary, m_device);
             ImageMemoryBarrier(
@@ -610,7 +610,7 @@ void VulkanInitialize()
             break;
         }
     }
-    assert(m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue] != -1);
+    assert(m_queueFamilyIndices.GraphicsQueueIndex() != -1);
 
     VkPhysicalDeviceFeatures supportedFeatures;
     vkGetPhysicalDeviceFeatures(m_physicalDevice, &supportedFeatures);
@@ -628,7 +628,7 @@ void VulkanInitialize()
         m_physicalDevice);
     volkLoadDevice(m_device);//load Vulkan function pointers for the one-and-only Vulkan device for minimal indirection and maximum performance
 
-    CreateCommandPool(&m_commandPoolPrimary, m_queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue], m_device, m_physicalDevice);
+    CreateCommandPool(&m_commandPoolPrimary, m_queueFamilyIndices.GraphicsQueueIndex(), m_device, m_physicalDevice);
     m_deviceLocalMemoryTracker.Initialize(m_device, m_physicalDevice);
     AllocateCommandBuffers(
         ArraySafeRef<VkCommandBuffer>(&m_commandBufferPrimary, 1),

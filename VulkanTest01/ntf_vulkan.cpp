@@ -827,7 +827,6 @@ void DestroyDebugReportCallbackEXT(VkInstance instance, VkDebugReportCallbackEXT
         func(instance, callback, pAllocator);
     }
 }
-///@todo: rename CommandBufferBegin()/CommandBufferEnd()
 void CommandBufferBegin(const VkCommandBuffer& commandBuffer, const VkDevice& device)
 {
     VkCommandBufferBeginInfo beginInfo = {};
@@ -983,7 +982,7 @@ void CreateLogicalDevice(
 
     const uint32_t queueFamiliesNum = 3;
     VectorSafe<VkDeviceQueueCreateInfo, queueFamiliesNum> queueCreateInfos(0);
-    VectorSafe<int, queueFamiliesNum> uniqueQueueFamilies({ indices.index[QueueFamilyIndices::Type::kGraphicsQueue], indices.index[QueueFamilyIndices::Type::kPresentQueue], indices.index[QueueFamilyIndices::Type::kTransferQueue] });
+    VectorSafe<int, queueFamiliesNum> uniqueQueueFamilies({ indices.GraphicsQueueIndex(), indices.PresentQueueIndex(), indices.TransferQueueIndex() });
     uniqueQueueFamilies.SortAndRemoveDuplicates();  
 
     const float queuePriority = 1.0f;
@@ -1025,9 +1024,9 @@ void CreateLogicalDevice(
     const VkResult createDeviceResult = vkCreateDevice(physicalDevice, &createInfo, GetVulkanAllocationCallbacks(), &device);
     NTF_VK_ASSERT_SUCCESS(createDeviceResult);
 
-    vkGetDeviceQueue(device, indices.index[QueueFamilyIndices::Type::kGraphicsQueue], 0, &graphicsQueue);
-    vkGetDeviceQueue(device, indices.index[QueueFamilyIndices::Type::kPresentQueue], 0, &presentQueue);
-    vkGetDeviceQueue(device, indices.index[QueueFamilyIndices::Type::kTransferQueue], 0, &transferQueue);
+    vkGetDeviceQueue(device, indices.GraphicsQueueIndex(), 0, &graphicsQueue);
+    vkGetDeviceQueue(device, indices.PresentQueueIndex(), 0, &presentQueue);
+    vkGetDeviceQueue(device, indices.TransferQueueIndex(), 0, &transferQueue);
 }
 
 void DescriptorTypeAssertOnInvalid(const VkDescriptorType descriptorType)
@@ -2994,7 +2993,7 @@ void FindQueueFamilies(QueueFamilyIndices*const queueFamilyIndicesPtr, const VkP
     );
 
     assert(queueFamilyIndices.IsComplete());
-    assert(queueFamilyIndices.index[QueueFamilyIndices::Type::kGraphicsQueue] == queueFamilyIndices.index[QueueFamilyIndices::Type::kPresentQueue]);//we don't support separate graphics and present queues
+    assert(queueFamilyIndices.GraphicsQueueIndex() == queueFamilyIndices.PresentQueueIndex());//we don't support separate graphics and present queues
     return;
 }
 
@@ -3129,8 +3128,8 @@ void CreateSwapChain(
 
     QueueFamilyIndices indices;
     FindQueueFamilies(&indices, physicalDevice, surface);
-    const uint32_t queueFamilyIndices[] = { static_cast<uint32_t>(indices.index[QueueFamilyIndices::Type::kGraphicsQueue]), static_cast<uint32_t>(indices.index[QueueFamilyIndices::Type::kPresentQueue]) };
-    if (indices.index[QueueFamilyIndices::Type::kGraphicsQueue] != indices.index[QueueFamilyIndices::Type::kPresentQueue])
+    const uint32_t queueFamilyIndices[] = { static_cast<uint32_t>(indices.GraphicsQueueIndex()), static_cast<uint32_t>(indices.PresentQueueIndex()) };
+    if (indices.GraphicsQueueIndex() != indices.PresentQueueIndex())
     {
         ///@todo: could remove this block and always execute if we support separate graphics and present queues
         //assert(false);///<@todo: maybe this would require using explicit ownership transfers between graphics and present queues?  Seems crazy
