@@ -1337,6 +1337,18 @@ int main()
         {
             ExitOnFail(__LINE__);
         }
+        const size_t indexNewStart = 1;
+        ConstVectorSafeRef<int> constVectorSafeRefSlice(vectorSafeInitializerList0, indexNewStart);
+        if(constVectorSafeRefSlice.size() != vectorSafeInitializerList0.size() - indexNewStart)
+        {
+            ExitOnFail(__LINE__);
+        }
+        if(memcmp(constVectorSafeRefSlice.data(), &vectorSafeInitializerList0[indexNewStart], constVectorSafeRefSlice.SizeInBytes()) != 0)
+        {
+            ExitOnFail(__LINE__);
+        }
+        ConstVectorSafeRef<int> constVectorSafeRefSlice1(VectorSafeRef<int>(&vectorSafeInitializerList0), indexNewStart);//make sure templates compile as expected
+        ConstVectorSafeRef<int> constVectorSafeRefSlice2(ConstVectorSafeRef<int>(vectorSafeInitializerList0), indexNewStart);//make sure templates compile as expected
 
         ArraySafe<int, kElementsMax> arraySafe1(arraySafeInitializerListRef0, arraySafeInitializerList.size());//not a typo; assume that arraySafeInitializerListRef0 = arraySafeInitializerList
         if (memcmp(arraySafe1.data(), arraySafeInitializerListRef0.data(), arraySafeInitializerList.SizeInBytes()) != 0)//not a typo; assume that arraySafeInitializerListRef0 = arraySafeInitializerList

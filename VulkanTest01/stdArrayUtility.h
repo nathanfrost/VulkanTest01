@@ -978,11 +978,25 @@ public:
         SetArray(pointer);
     }
 
+    ConstVectorSafeRef(const ConstVectorSafeRef<T>& vectorSafe, const size_t indexNewStart = 0)
+    {
+        Initialize(vectorSafe, indexNewStart);
+    }
     template<typename U>
     ConstVectorSafeRef(const U& other)
     {
-        SetElementsNumMax(other.size());
-        SetArray(other.begin());
+        Initialize(other);
+    }
+    /** No parallel constructor for VectorSafeRef() accepts "indexNewStart" because VectorSafeRef maintains only a pointer to the size field of the 
+        VectorSafe it references, and so is unable to "slice" a subset of a VectorSafe without incorrectly modifying that VectorSafe's size field.  
+        This function can't simply be template<typename U> ConstVectorSafeRef(const U& other, const size_t indexNewStart = 0) because adding this 
+        constructor signature would introduce ambiguities with the other constructors and thus fail to compile */
+    template<typename U>
+    void Initialize(const U& other, const size_t indexNewStart = 0)
+    {
+        assert(indexNewStart <= other.size());
+        SetElementsNumMax(other.size() - indexNewStart);
+        SetArray(other.begin() + indexNewStart);
     }
 
     void Reset()
