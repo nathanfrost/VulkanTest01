@@ -320,18 +320,30 @@ static void TestImpl_STD_ARRAY_UTILITY_NON_CONST_METHODS_string(T c)
 {
     {
         //not full
-        c.Sprintf("New %s %i", "string", 37);
+        const size_t charactersPrinted = c.Sprintf("New %s %i", "string", 37);
         const char*const resultantString = &"New string 37"[0];
-        if (strncmp(resultantString, c.data(), strlen(resultantString) + 1) != 0)
+        const size_t strlenResultantString = strlen(resultantString);
+        if(charactersPrinted != strlenResultantString)
+        {
+            ExitOnFail(__LINE__);
+        }
+        if (strncmp(resultantString, c.data(), strlenResultantString + 1) != 0)
         {
             ExitOnFail(__LINE__);
         }
     }
     {
         //full
-        c.Sprintf("New %s %i", "string!!", 37);
+        const size_t charactersPrinted = c.Sprintf("New %s %i", "string!!", 37);
+#if NTF_DEBUG
+        if (charactersPrinted != c.size() - 1)
+        {
+            ExitOnFail(__LINE__);
+        }
+#endif//#if NTF_DEBUG
         const char*const resultantString = &"New string!! 37"[0];
-        if (strncmp(resultantString, c.data(), strlen(resultantString) + 1) != 0)
+        const size_t strlenResultantString = strlen(resultantString);
+        if (strncmp(resultantString, c.data(), strlenResultantString + 1) != 0)
         {
             ExitOnFail(__LINE__);
         }

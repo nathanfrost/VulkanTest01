@@ -1,6 +1,7 @@
 #include"bmpImageFormat.h"
 #include"StreamingCookAndRuntime.h"
 
+
 static unsigned char s_bmpHeader[] = // All values are little-endian
 {
     0x42, 0x4D,             // Signature 'BM'
@@ -69,7 +70,7 @@ void WriteR8G8B8A8ToBmpFile(
 
     const size_t sizeofBmpHeader = sizeof(s_bmpHeader);
     const size_t imageSizeBytes = 
-        ImageSizeBytesCalculate(CastWithAssert<size_t,uint16_t>(textureWidth), CastWithAssert<size_t, uint16_t>(textureHeight), bytesInPixel);
+        ImageSizeBytesCalculate(CastWithAssert<size_t, StreamingUnitTextureDimension>(textureWidth), CastWithAssert<size_t, StreamingUnitTextureDimension>(textureHeight), bytesInPixel);
     *reinterpret_cast<uint32_t*>(&s_bmpHeader[2]) = CastWithAssert<size_t,uint32_t>(imageSizeBytes + sizeofBmpHeader);
     *reinterpret_cast<uint32_t*>(&s_bmpHeader[18]) = CastWithAssert<size_t, uint32_t>(textureWidth);
     *reinterpret_cast<uint32_t*>(&s_bmpHeader[22]) = CastWithAssert<size_t, uint32_t>(textureHeight);

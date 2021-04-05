@@ -12,16 +12,6 @@
 class VulkanPagedStackAllocator;
 class StreamingCommandQueueManager;
 
-typedef uint32_t StreamingUnitVersion;
-typedef uint8_t StreamingUnitByte;
-typedef uint32_t StreamingUnitTexturedGeometryNum;
-typedef uint32_t StreamingUnitVerticesNum;
-typedef uint32_t StreamingUnitIndicesNum;
-typedef uint16_t StreamingUnitTextureDimension;
-typedef uint8_t StreamingUnitTextureChannels;
-
-typedef uint32_t IndexBufferValue;
-
 struct TexturedGeometry
 {
     VkBuffer vertexBuffer;

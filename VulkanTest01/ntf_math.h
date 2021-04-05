@@ -43,7 +43,7 @@ namespace ntf
     }
 
 
-    inline void DivideByTwoIfGreaterThanOne(int32_t*const vPtr)
+    inline void DivideByTwoIfGreaterThanOne(uint32_t*const vPtr)
     {
         NTF_REF(vPtr, v);
 

@@ -19,8 +19,10 @@ const char* StreamingUnitFilenameExtensionGet()
     return ret;
 }
 
-///@todo: uint16_t -> uint32_t across Streaming system and everything
-size_t ImageSizeBytesCalculate(uint16_t textureWidth, uint16_t textureHeight, uint8_t textureChannels)
+size_t ImageSizeBytesCalculate(
+    StreamingUnitTextureDimension textureWidth, 
+    StreamingUnitTextureDimension textureHeight, 
+    StreamingUnitTextureChannels textureChannels)
 {
     assert(textureWidth > 0);
     assert(textureHeight > 0);

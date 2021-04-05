@@ -10,6 +10,15 @@ const char*const g_streamingUnitName_UnitTest2 = "unitTest2";
 const char*const g_streamingUnitName_TriangleCounterClockwise = "triangleCounterClockwise";
 const char*const g_streamingUnitName_TriangleClockwise = "triangleClockwise";
 
+typedef uint32_t StreamingUnitVersion;
+typedef uint8_t StreamingUnitByte;
+typedef uint32_t StreamingUnitTexturedGeometryNum;
+typedef uint32_t StreamingUnitVerticesNum;
+typedef uint32_t StreamingUnitIndicesNum;
+typedef uint32_t StreamingUnitTextureDimension;
+typedef uint8_t StreamingUnitTextureChannels;
+typedef uint32_t IndexBufferValue;
+
 struct Vertex
 {
     glm::vec3 pos;
@@ -30,6 +39,9 @@ namespace std
 }
 
 const char* StreamingUnitFilenameExtensionGet();
-size_t ImageSizeBytesCalculate(uint16_t textureWidth, uint16_t textureHeight, uint8_t textureChannels);
+size_t ImageSizeBytesCalculate(
+    StreamingUnitTextureDimension textureWidth, 
+    StreamingUnitTextureDimension textureHeight, 
+    StreamingUnitTextureChannels textureChannels);
 uint32_t MipsLevelsCalculate(const uint32_t textureWidth, const uint32_t textureHeight);
 const char* CookedFileDirectoryGet();

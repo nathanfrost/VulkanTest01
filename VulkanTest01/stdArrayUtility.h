@@ -211,15 +211,16 @@ void Fread(FILE*const f, const size_t elementsNum)                              
     size(elementsNum);                                                                                                                              \
     AssertValid();                                                                                                                                  \
 }                                                                                                                                                   \
-void Sprintf(const char*const formatString, ...)                                                                                                    \
+size_t Sprintf(const char*const formatString, ...)                                                                                                  \
 {                                                                                                                                                   \
     va_list args;                                                                                                                                   \
     va_start(args, formatString);                                                                                                                   \
-    Sprintf_va_list(formatString, args);                                                                                                            \
+    const size_t charactersPrinted = Sprintf_va_list(formatString, args);                                                                           \
     va_end(args);                                                                                                                                   \
+    return charactersPrinted;                                                                                                                       \
 }
 
-#define STD_ARRAY_UTILITY_SPRINTF_VA_LIST_FUNCTION_SIGNATURE void Sprintf_va_list(const char*const formatString, va_list args)
+#define STD_ARRAY_UTILITY_SPRINTF_VA_LIST_FUNCTION_SIGNATURE size_t Sprintf_va_list(const char*const formatString, va_list args)
 #define STD_ARRAY_UTILITY_SPRINTF_VA_LIST_PREFACE                                                                                                   \
     assert(m_array);                                                                                                                                \
     assert(formatString);                                                                                                                           \
@@ -230,8 +231,10 @@ void Sprintf(const char*const formatString, ...)                                
     const int charactersPrinted = vsprintf(&m_array[0], formatString, args);                                                         
 #define STD_ARRAY_UTILITY_SPRINTF_VA_LIST_POSTFACE                                                                                                  \
     assert(charactersPrinted > 0);                                                                                                                  \
-    size(CastWithAssert<int, size_t>(charactersPrinted + 1));/*include null-terminator in size*/                                                    \
-    AssertValid();
+    const size_t charactersPrintedWithNull = CastWithAssert<int, size_t>(charactersPrinted) + 1;                                                    \
+    size(charactersPrintedWithNull);/*include null-terminator in size*/                                                                             \
+    AssertValid();                                                                                                                                  \
+    return charactersPrinted;
 
 #define STD_ARRAY_UTILITY_ARRAYSAFE_ARRAYSAFEREF_CONSTARRAYSAFEREF_CONSTVECTORSAFEREF_METHODS                                                       \
 size_t SizeMax() const                                                                                                                              \
@@ -1284,4 +1287,3 @@ inline void MemcpyStringFromStart(ArraySafeRef<char> a, const ConstVectorSafeRef
 }
 
 #pragma warning(default : 4100)//unreferenced formal parameters should still be warnings outside of this header file
-#pragma warning(default : 4996)//disallow sprintf() outside of this header                                                                                                             \

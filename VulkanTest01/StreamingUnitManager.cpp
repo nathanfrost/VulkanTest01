@@ -232,8 +232,8 @@ void StreamingCommandsProcess(
                 //}
                 //END_HAC
 
-                int32_t textureWidthCurrentMipLevel = textureWidth;
-                int32_t textureHeightCurrentMipLevel = textureHeight;
+                uint32_t textureWidthCurrentMipLevel = textureWidth;
+                uint32_t textureHeightCurrentMipLevel = textureHeight;
                 const size_t bytesPerPixel = 4;
                 for (uint32_t mipLevel = 1; mipLevel < mipLevels; ++mipLevel)
                 {

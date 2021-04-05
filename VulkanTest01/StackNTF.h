@@ -74,7 +74,7 @@ public:
     bool PushAlloc(void**const memoryRetPtr, SizeT*const memoryOffsetPtr, const SizeT alignment, const SizeT sizeBytes);
     bool PushAlloc(void**const memoryRetPtr, const SizeT alignment, const SizeT sizeBytes);
     inline SizeT GetFirstByteFree(){ assert(m_initialized); return m_stack.GetFirstByteFree(); }
-    inline ArraySafeRef<uint8_t> GetMemory() { return ArraySafeRef<uint8_t>(m_memory, m_stack.GetMaxBytes()); }
+    inline ArraySafeRef<uint8_t> GetMemory() { return ArraySafeRef<uint8_t>(m_memory, CastWithAssert<SizeT,size_t>(m_stack.GetMaxBytes())); }
     inline bool IsEmptyAndAllocated() const { return m_stack.IsEmptyAndAllocated(); }
 
 private:

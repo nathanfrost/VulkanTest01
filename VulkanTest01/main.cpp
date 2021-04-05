@@ -4,7 +4,7 @@
 #include"StreamingUnitTest.h"
 #include"WindowsUtil.h"
 
-#define NTF_KEYSTROKE_TO_END_PROCESS 1
+#define NTF_KEYSTROKE_TO_END_PROCESS 0
 
 #if NTF_DEBUG
 extern bool s_allowedToIssueStreamingCommands;
@@ -854,22 +854,22 @@ private:
 #endif//#if NTF_DEBUG
 
             //HAC: uncomment to load just one streaming unit
-            StreamingUnitAddToLoadCriticalSection(&m_streamingUnits[2], &m_streamingUnitsToAddToLoad, &m_streamingUnitsAddToLoadCriticalSection);
-            AssetLoadingThreadExecuteLoad(&m_assetLoadingThreadData.m_threadCommand, m_assetLoadingThreadData.m_handles.wakeEventHandle);
+            //StreamingUnitAddToLoadCriticalSection(&m_streamingUnits[2], &m_streamingUnitsToAddToLoad, &m_streamingUnitsAddToLoadCriticalSection);
+            //AssetLoadingThreadExecuteLoad(&m_assetLoadingThreadData.m_threadCommand, m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
-            //StreamingUnitTestTick(
-            //    &m_streamingUnits[0],
-            //    &m_streamingUnits[1],
-            //    &m_streamingUnits[2],
-            //    &m_streamingUnitsToAddToLoad,
-            //    &m_streamingUnitsRenderable,
-            //    &m_streamingUnitsToUnload,
-            //    &m_assetLoadingThreadData.m_threadCommand,
-            //    &m_streamingUnitsAddToLoadCriticalSection,
-            //    &m_assetLoadingThreadIdle,
-            //    m_assetLoadingThreadData.m_handles.wakeEventHandle,
-            //    m_frameNumberCurrentCpu,
-            //    24);
+            StreamingUnitTestTick(
+                &m_streamingUnits[0],
+                &m_streamingUnits[1],
+                &m_streamingUnits[2],
+                &m_streamingUnitsToAddToLoad,
+                &m_streamingUnitsRenderable,
+                &m_streamingUnitsToUnload,
+                &m_assetLoadingThreadData.m_threadCommand,
+                &m_streamingUnitsAddToLoadCriticalSection,
+                &m_assetLoadingThreadIdle,
+                m_assetLoadingThreadData.m_handles.wakeEventHandle,
+                m_frameNumberCurrentCpu,
+                24);
 #if NTF_DEBUG
             s_allowedToIssueStreamingCommands = false;
 #endif//#if NTF_DEBUG

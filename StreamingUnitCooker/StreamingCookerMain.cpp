@@ -193,7 +193,8 @@ void StreamingUnitCooker::Cook()
                 m_device);
             assert(createAllocateBindImageResult);
 
-            memcpy(&m_stagingBufferMemoryMapCpuToGpu[stagingBufferGpuOffsetToTextureOptimal], pixels, imageSizeBytes);
+            memcpy( &m_stagingBufferMemoryMapCpuToGpu[CastWithAssert<VkDeviceSize,size_t>(stagingBufferGpuOffsetToTextureOptimal)], 
+                    pixels, imageSizeBytes);
             //{
             //    ArraySafe<char, 128> filename;
             //    filename.Sprintf("E:\\readbackImageMip0.bmp");
@@ -242,8 +243,8 @@ void StreamingUnitCooker::Cook()
             barrier.subresourceRange.layerCount = 1;
             barrier.subresourceRange.levelCount = 1;
 
-            int32_t mipWidth = textureWidth;
-            int32_t mipHeight = textureHeight;
+            uint32_t mipWidth = textureWidth;
+            uint32_t mipHeight = textureHeight;
             for (uint32_t i = 1; i < mipLevels; i++)
             {
                 //transition previous mip level to read transfer
@@ -259,7 +260,7 @@ void StreamingUnitCooker::Cook()
                 /*  #VkImageRegionZOffset:  Vulkan considers 2D images to have a depth of 1, so to specify a 2D region of pixels use offset[0].z = 0 and
                                             offset[1].z = 1 */
                 blit.srcOffsets[0] = { 0, 0, 0 };
-                blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+                blit.srcOffsets[1] = { CastWithAssert<uint32_t,int32_t>(mipWidth), CastWithAssert<uint32_t,int32_t>(mipHeight), 1 };
 
                 blit.srcSubresource.aspectMask = colorAspectBit;
                 blit.srcSubresource.mipLevel = iMinusOne;
@@ -270,7 +271,7 @@ void StreamingUnitCooker::Cook()
                 DivideByTwoIfGreaterThanOne(&mipWidth);
                 DivideByTwoIfGreaterThanOne(&mipHeight);
                 blit.dstOffsets[0] = { 0, 0, 0 };
-                blit.dstOffsets[1] = { mipWidth, mipHeight, 1 };
+                blit.dstOffsets[1] = { CastWithAssert<uint32_t,int32_t>(mipWidth), CastWithAssert<uint32_t,int32_t>(mipHeight), 1 };
 
                 blit.dstSubresource.aspectMask = colorAspectBit;
                 blit.dstSubresource.mipLevel = i;
@@ -311,8 +312,8 @@ void StreamingUnitCooker::Cook()
             FenceReset(m_fence, m_device);
 
             //write out mips
-            int32_t textureWidthCurrentMipLevel = textureWidth;
-            int32_t textureHeightCurrentMipLevel = textureHeight;
+            uint32_t textureWidthCurrentMipLevel = textureWidth;
+            uint32_t textureHeightCurrentMipLevel = textureHeight;
             VkImage readbackImage;
             for (uint32_t mipLevel = 1; mipLevel < mipLevels; ++mipLevel)
             {
@@ -421,7 +422,7 @@ void StreamingUnitCooker::Cook()
 
                 const ConstArraySafeRef<uint8_t> bitmapToWrite(
                     readbackBufferCpuMemory.GetAddressOfUnderlyingArray() + readbackImageSubresourceLayout.offset,
-                    memoryRequirements.size - readbackImageSubresourceLayout.offset);
+                    CastWithAssert<VkDeviceSize,size_t>(memoryRequirements.size - readbackImageSubresourceLayout.offset));
 
                 const size_t bytesInPixel = 4;
                 const size_t textureCurrentMipNumBytesInRowNoPadding = textureWidthCurrentMipLevel*bytesInPixel;
@@ -435,7 +436,7 @@ void StreamingUnitCooker::Cook()
 
                 for (size_t rowIndex = 0; rowIndex < textureHeightCurrentMipLevel; ++rowIndex)
                 {
-                    const size_t rowByteIndex = rowIndex*readbackImageSubresourceLayout.rowPitch;
+                    const size_t rowByteIndex = CastWithAssert<VkDeviceSize,size_t>(rowIndex*readbackImageSubresourceLayout.rowPitch);
                     ConstArraySafeRef<StreamingUnitByte> row(&bitmapToWrite[rowByteIndex], textureCurrentMipNumBytesInRowNoPadding);
 #if NTF_DEBUG
                     bitmapToWrite[rowByteIndex + textureCurrentMipNumBytesInRowNoPadding - 1];//no overrunning the array

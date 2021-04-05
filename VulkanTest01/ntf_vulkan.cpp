@@ -349,8 +349,8 @@ void TransferImageFromCpuToGpu(
         commandBufferTransfer,
         instance);
 
-    int32_t widthMipCurrent = widthMip0;
-    int32_t heightMipCurrent = heightMip0;
+    uint32_t widthMipCurrent = widthMip0;
+    uint32_t heightMipCurrent = heightMip0;
     for(uint32_t mipLevel = 0; mipLevel < mipLevels; ++mipLevel)
     {
         CopyBufferToImage(stagingBuffers[mipLevel], image, widthMipCurrent, heightMipCurrent, mipLevel, commandBufferTransfer, device, instance);

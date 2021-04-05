@@ -4,7 +4,8 @@ import time
 
 stdArrayUtilityUnitTestEnabled = False
 streamingUnitCookerEnabled = False
-vulkanTest01Enabled = True
+vulkanTest01BuildEnabled = True
+vulkanTest01UnitTestEnabled = True
 
 #todo: os.chdir("E:\Code\VulkanTest01\VulkanTest01") -- zero %errorlevel% means success
 
@@ -97,7 +98,7 @@ FunctionCallConditional(streamingUnitCookerEnabled, StreamingUnitCooker_Build, "
 def VulkanTest01_Build():
     VisualStudioBuildSet(r"VulkanTest01\VulkanTest01.vcxproj", visualStudioConfigurationsVulkanTest01)
     #VisualStudioBuildSet(r"VulkanTest01\VulkanTest01.vcxproj", visualStudioConfigurationsVulkanTest01, platform_x86:[visualStudioConfigurationDebug])
-FunctionCallConditional(vulkanTest01Enabled, VulkanTest01_Build, "VulkanTest01_Build")
+FunctionCallConditional(vulkanTest01BuildEnabled, VulkanTest01_Build, "VulkanTest01_Build")
 
 
 def ChdirWorkingPath(workingDirectoryPath):
@@ -142,6 +143,6 @@ def VulkanTest01_Run():
         WaitSeconds(15)
         OsSystem("taskkill /IM VulkanTest01.exe")
         WaitSeconds(2)
-FunctionCallConditional(vulkanTest01Enabled, VulkanTest01_Run, "VulkanTest01_Run")
+FunctionCallConditional(vulkanTest01UnitTestEnabled, VulkanTest01_Run, "VulkanTest01_Run")
 
 Print("SUCCESS!")
