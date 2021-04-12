@@ -45,12 +45,159 @@ extern bool g_deviceDiagnosticCheckpointsSupported;
 
 #define NTF_DEVICE_EXTENSIONS_NUM 2
 
-class VulkanPagedStackAllocator;
-
 static const uint32_t s_kWidth = 1600;
 static const uint32_t s_kHeight = 900;
 
 typedef uint32_t PushConstantBindIndexType;
+
+VkAllocationCallbacks* GetVulkanAllocationCallbacks();
+class VulkanMemoryHeapPage
+{
+public:
+    VulkanMemoryHeapPage() = default;
+    VulkanMemoryHeapPage(const VulkanMemoryHeapPage& other) = default;
+    VulkanMemoryHeapPage& operator=(const VulkanMemoryHeapPage& other) = default;
+    VulkanMemoryHeapPage(VulkanMemoryHeapPage&& other) = default;
+    VulkanMemoryHeapPage& operator=(VulkanMemoryHeapPage&& other) = default;
+    ~VulkanMemoryHeapPage() = default;
+
+    bool Allocate(const VkDeviceSize memoryMaxBytes, const uint32_t memoryTypeIndex, const VkDevice& device);
+    inline void Free(const VkDevice& device)
+    {
+        m_stack.Free();
+        vkFreeMemory(device, m_memoryHandle, GetVulkanAllocationCallbacks());
+    }
+    inline void ClearSuballocations()
+    {
+        m_stack.ClearSuballocations();
+    }
+
+    inline bool SufficientMemory(const VkDeviceSize alignment, const VkDeviceSize size, const bool respectNonCoherentAtomSize) const
+    {
+        assert(m_stack.Allocated());
+        VkDeviceSize dummy0, dummy1;
+        return PushAlloc(&dummy0, &dummy1, alignment, size, respectNonCoherentAtomSize);
+    }
+    bool PushAlloc(VkDeviceSize* memoryOffsetPtr, VkDeviceSize alignment, const VkDeviceSize size, const bool respectNonCoherentAtomSize);
+    inline VkDeviceMemory GetMemoryHandle() const
+    {
+        assert(m_stack.Allocated());
+        return m_memoryHandle;
+    }
+    inline bool Allocated() const { return m_stack.Allocated(); }
+
+    VulkanMemoryHeapPage* m_next;
+private:
+    StackNTF<VkDeviceSize> m_stack;
+    VkDeviceMemory m_memoryHandle;  ///<to its Vulkan allocation
+
+    bool PushAlloc(
+        VkDeviceSize*const firstByteFreePtr,
+        VkDeviceSize*const firstByteReturnedPtr,
+        VkDeviceSize alignment,
+        const VkDeviceSize size,
+        const bool respectNonCoherentAtomSize) const;
+};
+
+///@todo: unit test
+class VulkanMemoryHeap
+{
+public:
+    explicit VulkanMemoryHeap()
+    {
+#if NTF_DEBUG
+        m_initialized = false;
+#endif//#if NTF_DEBUG
+    };
+    void Initialize(const uint32_t memoryTypeIndex, const VkDeviceSize memoryHeapPageSizeBytes);
+    VulkanMemoryHeap(const VulkanMemoryHeap& other) = default;
+    VulkanMemoryHeap& operator=(const VulkanMemoryHeap& other) = default;
+    VulkanMemoryHeap(VulkanMemoryHeap&& other) = default;
+    VulkanMemoryHeap& operator=(VulkanMemoryHeap&& other) = default;
+    ~VulkanMemoryHeap() = default;
+
+
+    void Destroy(const VkDevice device);
+
+    void FreeAllPages(const bool deallocateBackToGpu, const VkDevice device);
+
+    bool PushAlloc(
+        VkDeviceSize* memoryOffsetPtr,
+        VkDeviceMemory* memoryHandlePtr,
+        const VkDeviceSize alignment,
+        const VkDeviceSize size,
+        const VkMemoryPropertyFlags& properties,
+        const bool linearResource,
+        const bool respectNonCoherentAtomSize,
+        const VkDevice& device,
+        const VkPhysicalDevice& physicalDevice);
+
+    inline uint32_t GetMemoryTypeIndex() const { return m_memoryTypeIndex; }
+
+private:
+#if NTF_DEBUG
+    bool m_initialized;
+#endif//#if NTF_DEBUG
+    uint32_t m_memoryTypeIndex;///<note that this means we maintain one VulkanMemoryHeap per VkMemoryAllocateInfo::memoryTypeIndex, even though typically some of these VkMemoryAllocateInfo::memoryTypeIndex's map to the same heap, and thus can (probably?) be efficiently allocated from the same range of Gpu memory (and thus probably with less fragmentation)
+    VkDeviceSize m_pageSizeBytes;
+
+    /** we are not concerned with VkPhysicalDeviceLimits::bufferImageGranularity, because linear and optimally accessed resources are suballocated
+    from different VkDeviceMemory objects, so there's no need to worry about bufferImageGranularity's often-egregious alignment requirements */
+    VulkanMemoryHeapPage* m_pageAllocatedLinearFirst;
+    VulkanMemoryHeapPage* m_pageAllocatedNonlinearFirst;
+    VulkanMemoryHeapPage* m_pageFreeFirst;
+    ArraySafe<VulkanMemoryHeapPage, 32> m_pagePool;
+};
+
+///@todo: unit test
+class VulkanPagedStackAllocator
+{
+public:
+    enum class HeapSize :size_t { SMALL = 0, MEDIUM, LARGE, NUM };
+    static size_t I(const HeapSize hs) { return static_cast<size_t>(hs); }
+
+    explicit VulkanPagedStackAllocator()
+    {
+#if NTF_DEBUG
+        m_initialized = false;
+#endif//#if NTF_DEBUG
+    }
+    VulkanPagedStackAllocator(const VulkanPagedStackAllocator& other) = default;
+    VulkanPagedStackAllocator& operator=(const VulkanPagedStackAllocator& other) = default;
+    VulkanPagedStackAllocator(VulkanPagedStackAllocator&& other) = default;
+    VulkanPagedStackAllocator& operator=(VulkanPagedStackAllocator&& other) = default;
+    ~VulkanPagedStackAllocator() = default;
+
+    void Initialize(const VkDevice& device, const VkPhysicalDevice& physicalDevice);
+    void Destroy(const VkDevice& device);
+
+    void FreeAllPages(const bool deallocateBackToGpu, const VkDevice& device);
+
+    bool PushAlloc(
+        VkDeviceSize* memoryOffsetPtr,
+        VkDeviceMemory* memoryHandlePtr,
+        const uint32_t memRequirementsMemoryTypeBits,
+        const VkDeviceSize alignment,
+        const VkDeviceSize size,
+        const HeapSize heapSize,
+        const VkMemoryPropertyFlags& properties,
+        const bool linearResource,
+        const bool respectNonCoherentAtomSize,
+        const VkDevice& device,
+        const VkPhysicalDevice& physicalDevice);
+
+    ///@todo: memreport function
+
+private:
+#if NTF_DEBUG
+    bool m_initialized;
+#endif//NTF_DEBUG
+
+    ArraySafe<VectorSafe<VulkanMemoryHeap, 16>, static_cast<size_t>(HeapSize::NUM)> m_vulkanMemoryHeaps;
+    VkDevice m_device;
+    VkPhysicalDevice m_physicalDevice;
+    RTL_CRITICAL_SECTION m_criticalSection;
+};
 
 struct DrawFrameFinishedFence
 {
@@ -68,7 +215,6 @@ void NTFVulkanInitialize(const VkPhysicalDevice& physicalDevice);
 void GetPhysicalDeviceMemoryPropertiesCached(VkPhysicalDeviceMemoryProperties**const memPropertiesPtr);
 void GetPhysicalDevicePropertiesCached(VkPhysicalDeviceProperties**const physicalDevicePropertiesPtr);
 
-VkAllocationCallbacks* GetVulkanAllocationCallbacks();
 #if NTF_DEBUG
 size_t GetVulkanApiCpuBytesAllocatedMax();
 #endif//#if NTF_DEBUG
@@ -151,12 +297,15 @@ VkResult SubmitCommandBuffer(
     const VkInstance& instance);
 uint32_t FindMemoryType(const uint32_t typeFilter, const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
 uint32_t FindMemoryHeapIndex(const VkMemoryPropertyFlags& properties, const VkPhysicalDevice& physicalDevice);
+
+
 void CreateBuffer(
     VkBuffer*const bufferPtr,
     VkDeviceMemory*const bufferMemoryPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const offsetToAllocatedBlockPtr,
     VkDeviceSize size,
+    VulkanPagedStackAllocator::HeapSize heapSize,
     const VkBufferUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
     const bool respectNonCoherentAtomSize,
@@ -552,146 +701,3 @@ enum class CmdSetCheckpointValues :size_t
     Num};
 static ArraySafe<CmdSetCheckpointValues, static_cast<size_t>(CmdSetCheckpointValues::Num)> s_cmdSetCheckpointData;
 void CmdSetCheckpointNV(const VkCommandBuffer& commandBuffer, const CmdSetCheckpointValues*const pCheckpointMarker, const VkInstance& instance);
-
-class VulkanMemoryHeapPage
-{
-public:
-    VulkanMemoryHeapPage() = default;
-    VulkanMemoryHeapPage(const VulkanMemoryHeapPage& other) = default;
-    VulkanMemoryHeapPage& operator=(const VulkanMemoryHeapPage& other) = default;
-    VulkanMemoryHeapPage(VulkanMemoryHeapPage&& other) = default;
-    VulkanMemoryHeapPage& operator=(VulkanMemoryHeapPage&& other) = default;
-    ~VulkanMemoryHeapPage() = default;
-
-    bool Allocate(const VkDeviceSize memoryMaxBytes, const uint32_t memoryTypeIndex, const VkDevice& device);
-    inline void Free(const VkDevice& device)
-    {
-        m_stack.Free();
-        vkFreeMemory(device, m_memoryHandle, GetVulkanAllocationCallbacks());
-    }
-    inline void ClearSuballocations()
-    {
-        m_stack.ClearSuballocations();
-    }
-
-    inline bool SufficientMemory(const VkDeviceSize alignment, const VkDeviceSize size, const bool respectNonCoherentAtomSize) const
-    {
-        assert(m_stack.Allocated());
-        VkDeviceSize dummy0, dummy1;
-        return PushAlloc(&dummy0, &dummy1, alignment, size, respectNonCoherentAtomSize);
-    }
-    bool PushAlloc(VkDeviceSize* memoryOffsetPtr, VkDeviceSize alignment, const VkDeviceSize size, const bool respectNonCoherentAtomSize);
-    inline VkDeviceMemory GetMemoryHandle() const 
-    { 
-        assert(m_stack.Allocated()); 
-        return m_memoryHandle; 
-    }
-    inline bool Allocated() const { return m_stack.Allocated(); }
-
-    VulkanMemoryHeapPage* m_next;
-private:
-    StackNTF<VkDeviceSize> m_stack;
-    VkDeviceMemory m_memoryHandle;  ///<to its Vulkan allocation
-
-    bool PushAlloc(
-        VkDeviceSize*const firstByteFreePtr,
-        VkDeviceSize*const firstByteReturnedPtr,
-        VkDeviceSize alignment,
-        const VkDeviceSize size,
-        const bool respectNonCoherentAtomSize) const;
-};
-
-///@todo: unit test
-class VulkanMemoryHeap
-{
-public:
-    explicit VulkanMemoryHeap()
-    {
-#if NTF_DEBUG
-        m_initialized = false;
-#endif//#if NTF_DEBUG
-    };
-    void Initialize(const uint32_t memoryTypeIndex, const VkDeviceSize memoryHeapPageSizeBytes);
-    VulkanMemoryHeap(const VulkanMemoryHeap& other) = default;
-    VulkanMemoryHeap& operator=(const VulkanMemoryHeap& other) = default;
-    VulkanMemoryHeap(VulkanMemoryHeap&& other) = default;
-    VulkanMemoryHeap& operator=(VulkanMemoryHeap&& other) = default;
-    ~VulkanMemoryHeap() = default;
-
-
-    void Destroy(const VkDevice device);
-
-    void FreeAllPages(const bool deallocateBackToGpu, const VkDevice device);
-
-    bool PushAlloc(
-        VkDeviceSize* memoryOffsetPtr,
-        VkDeviceMemory* memoryHandlePtr,
-        const VkDeviceSize alignment,
-        const VkDeviceSize size,
-        const VkMemoryPropertyFlags& properties,
-        const bool linearResource,
-        const bool respectNonCoherentAtomSize,
-        const VkDevice& device,
-        const VkPhysicalDevice& physicalDevice);
-
-    inline uint32_t GetMemoryTypeIndex() const { return m_memoryTypeIndex; }
-
-private:
-#if NTF_DEBUG
-    bool m_initialized;
-#endif//#if NTF_DEBUG
-    uint32_t m_memoryTypeIndex;///<note that this means we maintain one VulkanMemoryHeap per VkMemoryAllocateInfo::memoryTypeIndex, even though typically some of these VkMemoryAllocateInfo::memoryTypeIndex's map to the same heap, and thus can (probably?) be efficiently allocated from the same range of Gpu memory (and thus probably with less fragmentation)
-    VkDeviceSize m_pageSizeBytes;
-
-    /** we are not concerned with VkPhysicalDeviceLimits::bufferImageGranularity, because linear and optimally accessed resources are suballocated 
-        from different VkDeviceMemory objects, so there's no need to worry about bufferImageGranularity's often-egregious alignment requirements */
-    VulkanMemoryHeapPage* m_pageAllocatedLinearFirst;
-    VulkanMemoryHeapPage* m_pageAllocatedNonlinearFirst;
-    VulkanMemoryHeapPage* m_pageFreeFirst;
-    ArraySafe<VulkanMemoryHeapPage, 32> m_pagePool;
-};
-
-///@todo: unit test
-class VulkanPagedStackAllocator
-{
-public:
-    explicit VulkanPagedStackAllocator()
-    {
-#if NTF_DEBUG
-        m_initialized = false;
-#endif//#if NTF_DEBUG
-    }
-    VulkanPagedStackAllocator(const VulkanPagedStackAllocator& other) = default;
-    VulkanPagedStackAllocator& operator=(const VulkanPagedStackAllocator& other) = default;
-    VulkanPagedStackAllocator(VulkanPagedStackAllocator&& other) = default;
-    VulkanPagedStackAllocator& operator=(VulkanPagedStackAllocator&& other) = default;
-    ~VulkanPagedStackAllocator() = default;
-
-    void Initialize(const VkDevice& device, const VkPhysicalDevice& physicalDevice);
-    void Destroy(const VkDevice& device);
-
-    void FreeAllPages(const bool deallocateBackToGpu, const VkDevice& device);
-
-    bool PushAlloc(
-        VkDeviceSize* memoryOffsetPtr,
-        VkDeviceMemory* memoryHandlePtr,
-        const uint32_t memRequirementsMemoryTypeBits,
-        const VkDeviceSize alignment,
-        const VkDeviceSize size,
-        const VkMemoryPropertyFlags& properties,
-        const bool linearResource,
-        const bool respectNonCoherentAtomSize,
-        const VkDevice& device,
-        const VkPhysicalDevice& physicalDevice);
-
-    ///@todo: memreport function
-
-private:
-#if NTF_DEBUG
-    bool m_initialized;
-#endif//NTF_DEBUG
-    VectorSafe<VulkanMemoryHeap, 32> m_vulkanMemoryHeaps;
-    VkDevice m_device;
-    VkPhysicalDevice m_physicalDevice;
-    RTL_CRITICAL_SECTION m_criticalSection;
-};

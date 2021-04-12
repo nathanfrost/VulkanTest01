@@ -255,9 +255,11 @@ iterator end() noexcept                                                         
 {                                                                                                                                                   \
     return const_cast<iterator>(static_cast<const ThisDataType*>(this)->end());                                                                     \
 }                                                                                                                                                   \
+/*@todo: couldn't this be in ArraySafeRef as well?*/                                                                                                \
 template<typename U>                                                                                                                                \
 void MemcpyFromStart(const U& other)                                                                                                                \
 {                                                                                                                                                   \
+    static_assert(std::is_same<T, U::value_type>::value, "value_type's of both containers must be the same");/*write MemcpyFromStartDifferentValueType() and omit this line if needed*/\
     MemcpyFromStart(other.GetAddressOfUnderlyingArray(), other.size()*sizeof(U::value_type));                                                       \
     AssertValid();                                                                                                                                  \
 }                                                                                                                                                   \

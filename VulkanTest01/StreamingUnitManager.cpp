@@ -44,6 +44,7 @@ void AssetLoadingThreadPersistentResourcesCreate(
         &deviceLocalMemoryPersistent,
         &offsetToFirstByteOfStagingBuffer,
         stagingBufferCpuToGpuSizeAligned,
+        VulkanPagedStackAllocator::HeapSize::LARGE,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
         true,///<this buffer will be memory mapped, so respect alignment

@@ -471,6 +471,7 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
         memRequirements.memoryTypeBits,
         memRequirements.alignment,
         memRequirements.size,
+        VulkanPagedStackAllocator::HeapSize::LARGE,
         properties,
         tiling == VK_IMAGE_TILING_LINEAR,
         respectNonCoherentAtomAlignment,
@@ -621,6 +622,7 @@ void CreateBuffer(
     VulkanPagedStackAllocator*const allocatorPtr,
     VkDeviceSize*const offsetToAllocatedBlockPtr,
     VkDeviceSize size,
+    VulkanPagedStackAllocator::HeapSize heapSize,
     const VkBufferUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
     const bool respectNonCoherentAtomSize,
@@ -638,6 +640,8 @@ void CreateBuffer(
 
     assert(offsetToAllocatedBlockPtr);
     auto& offsetToAllocatedBlock = *offsetToAllocatedBlockPtr;
+    
+    assert(heapSize < VulkanPagedStackAllocator::HeapSize::NUM);
 
     if (respectNonCoherentAtomSize)
     {
@@ -654,6 +658,7 @@ void CreateBuffer(
         memRequirements.memoryTypeBits,
         memRequirements.alignment,
         size,
+        heapSize,
         properties,
         true,
         respectNonCoherentAtomSize,
@@ -1634,6 +1639,7 @@ void CreateUniformBuffer(
         &allocator,
         &offsetToGpuMemory,
         bufferSize,
+        VulkanPagedStackAllocator::HeapSize::SMALL,
         VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
         true,///<uniform buffers are always memory mapped, so make sure memory mapping is aligned correctly
@@ -1889,6 +1895,7 @@ void CreateAndCopyToGpuBuffer(
         &allocator,
         &dummy,
         bufferSize,
+        VulkanPagedStackAllocator::HeapSize::MEDIUM,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | flags,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,//most optimal graphics memory
         false,
@@ -3221,7 +3228,24 @@ void CreateImageViews(
     }
 }
 
-void VulkanPagedStackAllocator::Initialize(const VkDevice& device,const VkPhysicalDevice& physicalDevice)
+
+void VulkanMemoryHeapsInitialize(
+    VectorSafeRef<VulkanMemoryHeap> vulkanMemoryHeaps, 
+    const VkPhysicalDevice& physicalDevice, 
+    const VkDeviceSize pageSizeBytes)
+{
+    assert(pageSizeBytes > 1024);
+
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+    vulkanMemoryHeaps.size(memProperties.memoryTypeCount);
+    for (size_t memoryTypeIndex = 0; memoryTypeIndex < memProperties.memoryTypeCount; ++memoryTypeIndex)
+    {
+        vulkanMemoryHeaps[memoryTypeIndex].Initialize(CastWithAssert<size_t, uint32_t>(memoryTypeIndex), pageSizeBytes);
+    }
+}
+
+void VulkanPagedStackAllocator::Initialize(const VkDevice& device, const VkPhysicalDevice& physicalDevice)
 {
     CriticalSectionCreate(&m_criticalSection);
     CriticalSectionEnter(&m_criticalSection);
@@ -3234,13 +3258,9 @@ void VulkanPagedStackAllocator::Initialize(const VkDevice& device,const VkPhysic
     m_device = device; 
     m_physicalDevice = physicalDevice;
 
-    VkPhysicalDeviceMemoryProperties memProperties;
-    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-    m_vulkanMemoryHeaps.size(memProperties.memoryTypeCount);
-    for (size_t memoryTypeIndex = 0; memoryTypeIndex < memProperties.memoryTypeCount; ++memoryTypeIndex)
-    {
-        m_vulkanMemoryHeaps[memoryTypeIndex].Initialize(CastWithAssert<size_t, uint32_t>(memoryTypeIndex), 128 * 1024 * 1024);
-    }
+    VulkanMemoryHeapsInitialize(&m_vulkanMemoryHeaps[I(HeapSize::LARGE)], physicalDevice, 128 * 1024 * 1024);
+    VulkanMemoryHeapsInitialize(&m_vulkanMemoryHeaps[I(HeapSize::MEDIUM)],physicalDevice,  16 * 1024 * 1024);
+    VulkanMemoryHeapsInitialize(&m_vulkanMemoryHeaps[I(HeapSize::SMALL)], physicalDevice,       1024 * 1024);
 
     CriticalSectionLeave(&m_criticalSection);
 }
@@ -3253,9 +3273,13 @@ void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
     m_initialized = false;
 #endif//#if NTF_DEBUG
 
-    for (auto& heap : m_vulkanMemoryHeaps)
-    {
-        heap.Destroy(m_device);
+    for (auto& heapContainer:m_vulkanMemoryHeaps)
+    { 
+        for (auto& heap : heapContainer)
+        {
+            heap.Destroy(m_device);
+        }
+
     }
 
     CriticalSectionLeave(&m_criticalSection);
@@ -3265,9 +3289,12 @@ void VulkanPagedStackAllocator::Destroy(const VkDevice& device)
 void VulkanPagedStackAllocator::FreeAllPages(const bool deallocateBackToGpu, const VkDevice& device)
 {
     CriticalSectionEnter(&m_criticalSection);
-    for (auto& vulkanMemoryHeap : m_vulkanMemoryHeaps)
+    for (auto& heapContainer : m_vulkanMemoryHeaps)
     {
-        vulkanMemoryHeap.FreeAllPages(deallocateBackToGpu, device);
+        for (auto& vulkanMemoryHeap : heapContainer)
+        {
+            vulkanMemoryHeap.FreeAllPages(deallocateBackToGpu, device);
+        }
     }
     CriticalSectionLeave(&m_criticalSection);
 }
@@ -3279,6 +3306,7 @@ bool VulkanPagedStackAllocator::PushAlloc(
     const uint32_t memRequirementsMemoryTypeBits,
     const VkDeviceSize alignment,
     const VkDeviceSize size,
+    const VulkanPagedStackAllocator::HeapSize heapSize,
     const VkMemoryPropertyFlags& properties,
     const bool linearResource,
     const bool respectNonCoherentAtomSize,
@@ -3297,8 +3325,9 @@ bool VulkanPagedStackAllocator::PushAlloc(
     assert(alignment > 0);
     assert(alignment % 2 == 0);
     assert(size > 0);
+    assert(heapSize < HeapSize::NUM);
 
-    auto& heap = m_vulkanMemoryHeaps[FindMemoryType(memRequirementsMemoryTypeBits, properties, physicalDevice)];
+    auto& heap = m_vulkanMemoryHeaps[I(heapSize)][FindMemoryType(memRequirementsMemoryTypeBits, properties, physicalDevice)];
     const bool allocResult = heap.PushAlloc(
         &memoryOffset, 
         &memoryHandle, 
@@ -3462,7 +3491,7 @@ bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMaxBytes, const uin
     VkResult allocateMemoryResult;
     do
     {
-        allocateMemoryResult = vkAllocateMemory(device, &allocInfo, GetVulkanAllocationCallbacks(), &m_memoryHandle);
+            allocateMemoryResult = vkAllocateMemory(device, &allocInfo, GetVulkanAllocationCallbacks(), &m_memoryHandle);
         //printf("vkAllocateMemory(memoryTypeIndex=%u, memoryMaxBytes=%u)=%i; m_memoryHandle=%p\n", 
         //    memoryTypeIndex, Cast_VkDeviceSize_uint32_t(memoryMaxBytes), allocateMemoryResult, (void*)m_memoryHandle);
 
@@ -3470,7 +3499,6 @@ bool VulkanMemoryHeapPage::Allocate(const VkDeviceSize memoryMaxBytes, const uin
         //QueryPerformanceCounter(&perfCount);
         //printf("vkAllocateMemory(memoryTypeIndex=%u, memoryMaxBytes=%u)=%i; m_memoryHandle=%p at time %f\n", 
         //    memoryTypeIndex, Cast_VkDeviceSize_uint32_t(memoryMaxBytes), allocateMemoryResult, (void*)m_memoryHandle, static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
-
     } while(allocateMemoryResult != VK_SUCCESS);
     NTF_VK_ASSERT_SUCCESS(allocateMemoryResult);
     return NTF_VK_SUCCESS(allocateMemoryResult);
