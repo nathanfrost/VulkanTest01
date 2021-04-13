@@ -342,8 +342,17 @@ void StreamingUnitCooker::Cook()
                     m_physicalDevice,
                     m_device);
                 assert(createAllocateBindImageResult);
+
+                VkSubresourceLayout readbackImageSubresourceLayout;
+                VkImageSubresource readbackImageSubresource;
+                readbackImageSubresource.aspectMask = colorAspectBit;
+                readbackImageSubresource.mipLevel = 0;
+                readbackImageSubresource.arrayLayer = 0;
+                vkGetImageSubresourceLayout(m_device, readbackImage, &readbackImageSubresource, &readbackImageSubresourceLayout);
+                //assert(readbackImageSubresourceLayout.size == memoryRequirements.size);//this may not be true, probably because of alignment causing VkMemoryRequirements::size > VkSubresourceLayout::size
+
                 const ConstArraySafeRef<uint8_t> readbackBufferCpuMemory = 
-                    MapMemory(memoryHandleTextureLinear, memoryOffsetTextureLinear, memoryRequirements.size, m_device);
+                    MapMemory(memoryHandleTextureLinear, memoryOffsetTextureLinear, readbackImageSubresourceLayout.size, m_device);
 
                 CommandBufferBegin(m_commandBufferPrimary, m_device);
                 ImageMemoryBarrier(
@@ -409,20 +418,12 @@ void StreamingUnitCooker::Cook()
                 mappedMemoryRange.pNext = nullptr;
                 mappedMemoryRange.memory = memoryHandleTextureLinear;
                 mappedMemoryRange.offset = memoryOffsetTextureLinear;
-                mappedMemoryRange.size = memoryRequirements.size;
+                mappedMemoryRange.size = readbackImageSubresourceLayout.size;
                 vkFlushMappedMemoryRanges(m_device, 1, &mappedMemoryRange);
-
-                VkSubresourceLayout readbackImageSubresourceLayout;
-                VkImageSubresource readbackImageSubresource;
-                readbackImageSubresource.aspectMask = colorAspectBit;
-                readbackImageSubresource.mipLevel = 0;
-                readbackImageSubresource.arrayLayer = 0;
-                vkGetImageSubresourceLayout(m_device, readbackImage, &readbackImageSubresource, &readbackImageSubresourceLayout);
-                assert(readbackImageSubresourceLayout.size == memoryRequirements.size);
 
                 const ConstArraySafeRef<uint8_t> bitmapToWrite(
                     readbackBufferCpuMemory.GetAddressOfUnderlyingArray() + readbackImageSubresourceLayout.offset,
-                    CastWithAssert<VkDeviceSize,size_t>(memoryRequirements.size - readbackImageSubresourceLayout.offset));
+                    CastWithAssert<VkDeviceSize,size_t>(readbackImageSubresourceLayout.size - readbackImageSubresourceLayout.offset));
 
                 const size_t bytesInPixel = 4;
                 const size_t textureCurrentMipNumBytesInRowNoPadding = textureWidthCurrentMipLevel*bytesInPixel;
