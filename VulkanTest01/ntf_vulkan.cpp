@@ -199,6 +199,8 @@ void CmdPipelineImageBarrier(
 {
     NTF_REF(barrierPtr, barrier);
 
+    /*  #VulkanSynchronization: For execution barriers, the srcStageMask is expanded to include logically earlier stages. Likewise, the dstStageMask 
+        is expanded to include logically later stages. https://www.khronos.org/blog/understanding-vulkan-synchronization */
     vkCmdPipelineBarrier(
         commandBuffer,
         srcStageMask,///<all work currently submitted to these pipeline stages must complete...
@@ -241,6 +243,8 @@ void ImageMemoryBarrier(
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
 
+    /*  #VulkanSynchronization: Access masks only apply to the precise stages set in the stage masks, and are not extended to logically earlier and 
+                                later stages.  https://www.khronos.org/blog/understanding-vulkan-synchronization */
     barrier.srcAccessMask = srcAccessMask;//types of memory accesses that are made available and visible to stages specified in srcStageMask
     barrier.dstAccessMask = dstAccessMask;//types of memory accesses that are made available and visible to stages specified in dstStageMask
 
@@ -1365,6 +1369,8 @@ void CreateRenderPass(
     depthAttachmentRef.attachment = 1;
     depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+    /*  #VulkanSynchronization: Subpasses can only make forward progress, meaning a subpass can wait on earlier stages or the same stage, but cannot 
+                                depend on later stages in the same render pass.  https://www.khronos.org/blog/understanding-vulkan-synchronization */
     VkSubpassDescription subpass = {};
     subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;//graphics subpass, not compute subpass
     subpass.colorAttachmentCount = 1;

@@ -4,7 +4,7 @@
 #include"StreamingUnitTest.h"
 #include"WindowsUtil.h"
 
-#define NTF_KEYSTROKE_TO_END_PROCESS 1
+#define NTF_KEYSTROKE_TO_END_PROCESS 0
 
 #if NTF_DEBUG
 extern bool s_allowedToIssueStreamingCommands;
