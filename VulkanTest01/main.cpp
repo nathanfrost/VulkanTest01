@@ -4,7 +4,7 @@
 #include"StreamingUnitTest.h"
 #include"WindowsUtil.h"
 
-#define NTF_KEYSTROKE_TO_END_PROCESS 0
+#define NTF_KEYSTROKE_TO_END_PROCESS 1
 
 #if NTF_DEBUG
 extern bool s_allowedToIssueStreamingCommands;
@@ -214,7 +214,7 @@ public:
     //        1,
     //        m_device);
     //    AllocateCommandBuffers(
-    //        ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
+    //        ArraySafeRef<VkCommandBuffer>(&m_commandBufferGraphics, 1),
     //        m_commandPoolPrimary,
     //        VK_COMMAND_BUFFER_LEVEL_PRIMARY,
     //        1,
@@ -225,7 +225,7 @@ public:
     //        &m_depthImageView,
     //        &m_deviceLocalMemory,
     //        m_swapChainExtent,
-    //        m_commandBufferTransitionImage,
+    //        m_commandBufferGraphics,
     //        m_graphicsQueue,
     //        m_device,
     //        m_physicalDevice);
@@ -342,7 +342,7 @@ private:
             vkDestroyFence(m_device, m_drawFrameFinishedFences[frameIndex].m_fence, GetVulkanAllocationCallbacks());
         }
 
-        vkFreeCommandBuffers(m_device, m_commandPoolTransitionImage, 1, &m_commandBufferTransitionImage);
+        vkFreeCommandBuffers(m_device, m_commandPoolTransitionImage, 1, &m_commandBufferGraphics);
         vkDestroyCommandPool(m_device, m_commandPoolTransitionImage, GetVulkanAllocationCallbacks());
 
         vkFreeCommandBuffers(m_device, m_commandPoolTransfer, 1, &m_commandBufferTransfer);
@@ -468,7 +468,7 @@ private:
             1,
             m_device);
         AllocateCommandBuffers(
-			ArraySafeRef<VkCommandBuffer>(&m_commandBufferTransitionImage, 1),
+			ArraySafeRef<VkCommandBuffer>(&m_commandBufferGraphics, 1),
             m_commandPoolTransitionImage,
             VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             1,
@@ -476,23 +476,23 @@ private:
 
         VkFence initializationDone;
         FenceCreate(&initializationDone, static_cast<VkFenceCreateFlagBits>(0), m_device);
-        CommandBufferBegin(m_commandBufferTransitionImage, m_device);
+        CommandBufferBegin(m_commandBufferGraphics, m_device);
         CreateDepthResources(
             &m_depthImage,
             &m_depthImageView,
             &m_deviceLocalMemoryPersistent,
             m_swapChainExtent,
-            m_commandBufferTransitionImage,
+            m_commandBufferGraphics,
             m_device,
             m_physicalDevice, 
             m_instance);
-        CommandBufferEnd(m_commandBufferTransitionImage);
+        CommandBufferEnd(m_commandBufferGraphics);
         SubmitCommandBuffer(
             nullptr,//no need to critical section, since currently only the main thread is running and we guard against launching the asset loading thread until this command buffer completes
             ConstVectorSafeRef<VkSemaphore>(),
             ConstVectorSafeRef<VkSemaphore>(),
             ConstArraySafeRef<VkPipelineStageFlags>(),
-            m_commandBufferTransitionImage,
+            m_commandBufferGraphics,
             m_graphicsQueue,
             initializationDone,
             m_instance);
@@ -540,7 +540,7 @@ private:
 		m_assetLoadingArguments.m_threadCommand = &m_assetLoadingThreadData.m_threadCommand;
 
         m_assetLoadingArguments.m_commandBufferTransfer = &m_commandBufferTransfer;
-        m_assetLoadingArguments.m_commandBufferTransitionImage = &m_commandBufferTransitionImage;
+        m_assetLoadingArguments.m_commandBufferGraphics = &m_commandBufferGraphics;
         m_assetLoadingArguments.m_device = &m_device;
         m_assetLoadingArguments.m_deviceLocalMemoryCriticalSection = &m_deviceLocalMemoryCriticalSection;
         m_assetLoadingArguments.m_graphicsQueue = &m_graphicsQueue;
@@ -923,7 +923,7 @@ private:
     VectorSafe<VkCommandBuffer, kSwapChainImagesNumMax> m_commandBuffersPrimary;//automatically freed when VkCommandPool is destroyed
         
     VkCommandBuffer m_commandBufferTransfer;//automatically freed when VkCommandPool is destroyed
-    VkCommandBuffer m_commandBufferTransitionImage;//automatically freed when VkCommandPool is destroyed
+    VkCommandBuffer m_commandBufferGraphics;//automatically freed when VkCommandPool is destroyed
 
     /*  fences are mainly designed to synchronize your application itself with rendering operation, whereas semaphores are 
         used to synchronize operations within or across command queues */

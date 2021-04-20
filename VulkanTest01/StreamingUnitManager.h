@@ -44,7 +44,7 @@ public:
     AssetLoadingArgumentsThreadCommand *m_threadCommand;
 
     const VkCommandBuffer* m_commandBufferTransfer;
-    const VkCommandBuffer* m_commandBufferTransitionImage;
+    const VkCommandBuffer* m_commandBufferGraphics;
     const VkDevice* m_device;
     const VkQueue* m_graphicsQueue;
     const VkInstance* m_instance;
@@ -70,7 +70,7 @@ public:
         assert(m_streamingUnitsToAddToRenderableCriticalSection);
 
         assert(m_commandBufferTransfer);
-        assert(m_commandBufferTransitionImage);
+        assert(m_commandBufferGraphics);
         assert(m_device);
         assert(m_graphicsQueue);
         assert(m_instance);

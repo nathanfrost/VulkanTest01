@@ -73,7 +73,7 @@ void StreamingCommandsProcess(
 	NTF_REF(&threadArguments.m_streamingUnitsToAddToRenderable, streamingUnitsToAddToRenderable);
 
     NTF_REF(threadArguments.m_commandBufferTransfer, commandBufferTransfer);
-    NTF_REF(threadArguments.m_commandBufferTransitionImage, commandBufferTransitionImage);
+    NTF_REF(threadArguments.m_commandBufferGraphics, commandBufferGraphics);
     NTF_REF(threadArguments.m_device, device);
     NTF_REF(threadArguments.m_deviceLocalMemoryCriticalSection, deviceLocalMemoryCriticalSection);
     NTF_REF(threadArguments.m_graphicsQueue, graphicsQueue);
@@ -173,7 +173,7 @@ void StreamingCommandsProcess(
             CommandBufferBegin(commandBufferTransfer, device);
             if (!unifiedGraphicsAndTransferQueue)
             {
-                CommandBufferBegin(commandBufferTransitionImage, device);
+                CommandBufferBegin(commandBufferGraphics, device);
             }
             CreateTextureSampler(&streamingUnit.m_textureSampler, device);
 
@@ -275,8 +275,8 @@ void StreamingCommandsProcess(
                     mipLevels,
                     ConstVectorSafeRef<VkBuffer>(stagingBuffersGpu, stagingBuffersGpuIndexOfNextTransfer),
                     commandBufferTransfer,
-                    queueFamilyIndices.index[QueueFamilyIndices::Type::kTransferQueue],
-                    commandBufferTransitionImage,
+                    queueFamilyIndices.TransferQueueIndex(),
+                    commandBufferGraphics,
                     queueFamilyIndices.GraphicsQueueIndex(),
                     device,
                     instance);
@@ -313,6 +313,9 @@ void StreamingCommandsProcess(
                     vertexBufferSizeBytes,
                     VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,/*specifies that the buffer is suitable for passing as an element of the pBuffers array to vkCmdBindVertexBuffers*/
                     commandBufferTransfer,
+                    queueFamilyIndices.TransferQueueIndex(),
+                    commandBufferGraphics,
+                    queueFamilyIndices.GraphicsQueueIndex(),
                     device,
                     physicalDevice,
                     instance);
@@ -342,6 +345,9 @@ void StreamingCommandsProcess(
                     indexBufferSizeBytes,
                     VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
                     commandBufferTransfer,
+                    queueFamilyIndices.TransferQueueIndex(),
+                    commandBufferGraphics,
+                    queueFamilyIndices.GraphicsQueueIndex(),
                     device,
                     physicalDevice,
                     instance);
@@ -350,8 +356,9 @@ void StreamingCommandsProcess(
                     //QueryPerformanceCounter(&perfCount);
                     //printf("ASSET THREAD: CreateBuffer()=%llu at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndex-1], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
                 }
+                ///TODO_NEXT: try flushing entire staging buffer's contents -- imageOptimal, index/vertex buffer, everything
+                //FlushMemoryMappedRange(stagingBufferGpuMemory, stagingBufferGpuOffsetToAllocatedBlock, AlignToNonCoherentAtomSize());
             }
-
             Fclose(streamingUnitFile);
             if (!unifiedGraphicsAndTransferQueue)
             {
@@ -371,13 +378,13 @@ void StreamingCommandsProcess(
 
             if (!unifiedGraphicsAndTransferQueue)
             {
-                CommandBufferEnd(commandBufferTransitionImage);
+                CommandBufferEnd(commandBufferGraphics);
                 SubmitCommandBuffer(
                     &graphicsQueueCriticalSection,
                     transferFinishedSemaphores,
                     ConstVectorSafeRef<VkSemaphore>(),
                     ConstArraySafeRef<VkPipelineStageFlags>(&transferFinishedPipelineStageFlags, 1),
-                    commandBufferTransitionImage,
+                    commandBufferGraphics,
                     graphicsQueue,
                     streamingUnit.m_graphicsQueueFinishedFence,
                     instance);

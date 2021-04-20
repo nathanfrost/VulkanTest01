@@ -335,8 +335,6 @@ void TransferImageFromCpuToGpu(
 {
     assert(mipLevels >= 1);
 
-    const bool unifiedGraphicsAndTransferQueue = (transferQueueFamilyIndex == graphicsQueueFamilyIndex);
-
     //transition memory to format optimal for copying from CPU->GPU
     ImageMemoryBarrier(
         VK_IMAGE_LAYOUT_UNDEFINED, 
@@ -362,30 +360,30 @@ void TransferImageFromCpuToGpu(
         DivideByTwoIfGreaterThanOne(&heightMipCurrent);
     }
 
-    if (unifiedGraphicsAndTransferQueue)
+    if (transferQueueFamilyIndex == graphicsQueueFamilyIndex)
     {
             //transferQueue == graphicsQueue, so prepare image for shader reads with no change of queue ownership
             ImageMemoryBarrier(
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            transferQueueFamilyIndex,
-            transferQueueFamilyIndex,
-            VK_IMAGE_ASPECT_COLOR_BIT,
-            image,
-            VK_ACCESS_TRANSFER_WRITE_BIT,
-            VK_ACCESS_SHADER_READ_BIT,//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
-            VK_PIPELINE_STAGE_TRANSFER_BIT,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            mipLevels,
-            commandBufferTransfer,
-            instance);
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                transferQueueFamilyIndex,
+                transferQueueFamilyIndex,
+                VK_IMAGE_ASPECT_COLOR_BIT,
+                image,
+                VK_ACCESS_TRANSFER_WRITE_BIT,
+                VK_ACCESS_SHADER_READ_BIT,//specifies read access to a storage buffer, uniform texel buffer, storage texel buffer, sampled image, or storage image.
+                VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                mipLevels,
+                commandBufferTransfer,
+                instance);
     }
     else
     {
-        //start transition resource ownership from transfer queue to graphics queue
+        //release: start transition resource ownership from transfer queue to graphics queue
         ImageMemoryBarrier(
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             transferQueueFamilyIndex,
             graphicsQueueFamilyIndex,
             VK_IMAGE_ASPECT_COLOR_BIT,
@@ -398,7 +396,7 @@ void TransferImageFromCpuToGpu(
             commandBufferTransfer,
             instance);
 
-        //finalize transition resource ownership from transfer queue to graphics queue
+        //acquire: finalize transition resource ownership from transfer queue to graphics queue
         ImageMemoryBarrier(
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -675,6 +673,12 @@ void CreateBuffer(
 
 void BindBufferMemory(const VkBuffer& buffer, const VkDeviceMemory& bufferMemory, const VkDeviceSize& offsetToAllocatedBlock, const VkDevice& device)
 {
+#if NTF_DEBUG
+    VkMemoryRequirements memRequirements;
+    vkGetBufferMemoryRequirements(device, buffer, &memRequirements);
+
+    assert(offsetToAllocatedBlock % memRequirements.alignment == 0);
+#endif//NTF_DEBUG
     const VkResult bindBufferResult = vkBindBufferMemory(device, buffer, bufferMemory, offsetToAllocatedBlock);
     NTF_VK_ASSERT_SUCCESS(bindBufferResult);
 }
@@ -1830,7 +1834,10 @@ void CopyBufferToGpuPrepare(
     const VkDeviceSize offsetToFirstByteOfStagingBuffer,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags& memoryPropertyFlags,
-    const VkCommandBuffer& commandBuffer,
+    const VkCommandBuffer commandBufferTransfer,
+    const uint32_t transferQueueFamilyIndex,
+    const VkCommandBuffer commandBufferGraphics,
+    const uint32_t graphicsQueueFamilyIndex,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice,
     const VkInstance instance)
@@ -1865,10 +1872,13 @@ void CopyBufferToGpuPrepare(
         stagingBufferGpu,
         bufferSize,
         memoryPropertyFlags,
-        commandBuffer,
+        commandBufferTransfer,
         device,
         physicalDevice,
         instance);
+
+    ///TODO_NEXT: need barriers to ensure correctness
+    //const bool unifiedGraphicsAndTransferQueue = ;
 }
 
 void CreateAndCopyToGpuBuffer(
@@ -2578,6 +2588,28 @@ void RotationMatrixCalculate(glm::mat4x4*const cameraToClipPtr, const glm::vec3&
         translation.x,  translation.y,  translation.z,  1.0f);
 }
 
+void FlushMemoryMappedRange(
+    const VkDeviceMemory& gpuMemory, 
+    const VkDeviceSize offsetIntoGpuMemoryToFlush, 
+    const VkDeviceSize sizeBytesToFlush, 
+    const VkDevice& device)
+{
+    assert(sizeBytesToFlush > 0);
+    assert(sizeBytesToFlush == AlignToNonCoherentAtomSize(sizeBytesToFlush));//must respect alignment
+    assert(offsetIntoGpuMemoryToFlush < sizeBytesToFlush);
+    assert(offsetIntoGpuMemoryToFlush == AlignToNonCoherentAtomSize(offsetIntoGpuMemoryToFlush));//must respect alignment
+
+    VkMappedMemoryRange mappedMemoryRange;
+    mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+    mappedMemoryRange.pNext = nullptr;
+    mappedMemoryRange.memory = gpuMemory;
+    mappedMemoryRange.offset = offsetIntoGpuMemoryToFlush;
+    mappedMemoryRange.size = sizeBytesToFlush;
+
+    const VkResult flushMappedMemoryRanges = vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange);///If pMemoryRanges includes sets of nonCoherentAtomSize bytes where no bytes have been written by the host, those bytes must not be flushed
+    NTF_VK_ASSERT_SUCCESS(flushMappedMemoryRanges);
+}
+
 //push constants can be more efficient than uniform buffers, but are typically much more size-limited
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
@@ -2634,13 +2666,9 @@ void UpdateUniformBuffer(
     assert(AlignToNonCoherentAtomSize(uniformBufferSize) == uniformBufferSize);
 #endif//#if NTF_DEBUG
 
-    VkMappedMemoryRange mappedMemoryRange;
-    mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-    mappedMemoryRange.pNext = nullptr;
-    mappedMemoryRange.memory = uniformBufferGpuMemory;
-    mappedMemoryRange.offset = offsetToGpuMemory;
-    mappedMemoryRange.size = uniformBufferSize;
-    vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange);///If pMemoryRanges includes sets of nonCoherentAtomSize bytes where no bytes have been written by the host, those bytes must not be flushed -- here the entire uniform buffer is written to every frame
+    /*  If pMemoryRanges includes sets of nonCoherentAtomSize bytes where no bytes have been written by the host, those bytes must not be flushed --
+        here the entire uniform buffer is written to every frame */
+    FlushMemoryMappedRange(uniformBufferGpuMemory, offsetToGpuMemory, uniformBufferSize, device);
 }
 
 void AcquireNextImage(

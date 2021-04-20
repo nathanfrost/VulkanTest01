@@ -586,7 +586,10 @@ void CopyBufferToGpuPrepare(
     const VkDeviceSize offsetToFirstByteOfStagingBuffer,
     const VkDeviceSize bufferSize,
     const VkMemoryPropertyFlags& memoryPropertyFlags,
-    const VkCommandBuffer& commandBuffer,
+    const VkCommandBuffer commandBufferTransfer,
+    const uint32_t transferQueueFamilyIndex,
+    const VkCommandBuffer commandBufferGraphics,
+    const uint32_t graphicsQueueFamilyIndex,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice,
     const VkInstance instance);
@@ -664,6 +667,11 @@ void FenceCreate(VkFence*const fencePtr, const VkFenceCreateFlagBits flags, cons
 void FenceWaitUntilSignalled(const VkFence& fence, const VkDevice& device);
 void FenceReset(const VkFence& fence, const VkDevice& device);
 
+void FlushMemoryMappedRange(
+    const VkDeviceMemory& gpuMemory,
+    const VkDeviceSize offsetIntoGpuMemoryToFlush,
+    const VkDeviceSize sizeBytesToFlush,
+    const VkDevice& device);
 void UpdateUniformBuffer(
     ArraySafeRef<uint8_t> uniformBufferCpuMemory,
     const glm::vec3 cameraTranslation,

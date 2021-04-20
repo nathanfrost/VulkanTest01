@@ -193,13 +193,17 @@ void StreamingUnitCooker::Cook()
                 m_device);
             assert(createAllocateBindImageResult);
 
-            memcpy( &m_stagingBufferMemoryMapCpuToGpu[CastWithAssert<VkDeviceSize,size_t>(stagingBufferGpuOffsetToTextureOptimal)], 
-                    pixels, imageSizeBytes);
+            m_stagingBufferMemoryMapCpuToGpu.MemcpyFromIndex(
+                pixels,
+                CastWithAssert<VkDeviceSize, size_t>(stagingBufferGpuOffsetToTextureOptimal),
+                imageSizeBytes);
             //{
             //    ArraySafe<char, 128> filename;
             //    filename.Sprintf("E:\\readbackImageMip0.bmp");
             //    WriteR8G8B8A8ToBmpFile(pixels, textureWidth, textureHeight, filename);
             //}
+
+            FlushMemoryMappedRange(memoryHandleTextureOptimal, stagingBufferGpuOffsetToTextureOptimal, memoryRequirements.size, m_device);
 
             //generate and write mips
             VkBuffer stagingBuffer;
@@ -413,14 +417,7 @@ void StreamingUnitCooker::Cook()
                 FenceWaitUntilSignalled(m_fence, m_device);
                 FenceReset(m_fence, m_device);
                 vkResetCommandBuffer(m_commandBufferPrimary, 0);
-                VkMappedMemoryRange mappedMemoryRange;
-                mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-                mappedMemoryRange.pNext = nullptr;
-                mappedMemoryRange.memory = memoryHandleTextureLinear;
-                mappedMemoryRange.offset = memoryOffsetTextureLinear;
-                mappedMemoryRange.size = readbackImageSubresourceLayout.size;
-                vkFlushMappedMemoryRanges(m_device, 1, &mappedMemoryRange);
-
+                
                 const ConstArraySafeRef<uint8_t> bitmapToWrite(
                     readbackBufferCpuMemory.GetAddressOfUnderlyingArray() + readbackImageSubresourceLayout.offset,
                     CastWithAssert<VkDeviceSize,size_t>(readbackImageSubresourceLayout.size - readbackImageSubresourceLayout.offset));
@@ -460,6 +457,13 @@ void StreamingUnitCooker::Cook()
                 //    readbackImageSubresourceLayout.rowPitch,
                 //    readbackImageSubresourceLayout.size,
                 //    filename);
+
+                VkMappedMemoryRange mappedMemoryRange;
+                mappedMemoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+                mappedMemoryRange.pNext = nullptr;
+                mappedMemoryRange.memory = memoryHandleTextureLinear;
+                mappedMemoryRange.offset = memoryOffsetTextureLinear;
+                mappedMemoryRange.size = readbackImageSubresourceLayout.size;
                 vkInvalidateMappedMemoryRanges(m_device, 1, &mappedMemoryRange);
                 vkUnmapMemory(m_device, memoryHandleTextureLinear);
                 vkDestroyImage(m_device, readbackImage, GetVulkanAllocationCallbacks());
