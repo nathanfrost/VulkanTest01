@@ -301,7 +301,7 @@ void StreamingCommandsProcess(
                     stagingBufferCpuToGpuVertices,
                     &vertexBufferSizeBytes,
                     stagingBufferGpuAlignmentStandard);
-                CopyBufferToGpuPrepare(
+                CopyVertexOrIndexBufferToGpu(
                     &deviceLocalMemory,
                     &texturedGeometry.vertexBuffer,
                     &texturedGeometry.vertexBufferMemory,
@@ -333,7 +333,7 @@ void StreamingCommandsProcess(
                     &indexBufferSizeBytes,
                     stagingBufferGpuAlignmentStandard);
                 texturedGeometry.indicesSize = CastWithAssert<size_t, uint32_t>(indicesNum);
-                CopyBufferToGpuPrepare(
+                CopyVertexOrIndexBufferToGpu(
                     &deviceLocalMemory,
                     &texturedGeometry.indexBuffer,
                     &texturedGeometry.indexBufferMemory,
@@ -356,14 +356,18 @@ void StreamingCommandsProcess(
                     //QueryPerformanceCounter(&perfCount);
                     //printf("ASSET THREAD: CreateBuffer()=%llu at time %f\n", (uint64_t)stagingBuffersGpu[stagingBufferGpuAllocateIndex-1], static_cast<double>(perfCount.QuadPart)/ static_cast<double>(g_queryPerformanceFrequency.QuadPart));
                 }
-                ///TODO_NEXT: try flushing entire staging buffer's contents -- imageOptimal, index/vertex buffer, everything
-                //FlushMemoryMappedRange(stagingBufferGpuMemory, stagingBufferGpuOffsetToAllocatedBlock, AlignToNonCoherentAtomSize());
+                FlushMemoryMappedRange(
+                    stagingBufferGpuMemory, 
+                    offsetToFirstByteOfStagingBuffer, 
+                    AlignToNonCoherentAtomSize(stagingBufferGpuOffsetToAllocatedBlock),
+                    device);
             }
             Fclose(streamingUnitFile);
             if (!unifiedGraphicsAndTransferQueue)
             {
                 transferFinishedSemaphores.Push(transferFinishedSemaphore);
             }
+            //else//unifiedGraphicsAndTransferQueue -- don't need this pipeline barrier, because we wait on the transfer finished fence below before using these vertex/index buffers
 
             CommandBufferEnd(commandBufferTransfer);
             SubmitCommandBuffer(

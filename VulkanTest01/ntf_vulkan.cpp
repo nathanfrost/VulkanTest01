@@ -200,11 +200,11 @@ void CmdPipelineImageBarrier(
     NTF_REF(barrierPtr, barrier);
 
     /*  #VulkanSynchronization: For execution barriers, the srcStageMask is expanded to include logically earlier stages. Likewise, the dstStageMask 
-        is expanded to include logically later stages. https://www.khronos.org/blog/understanding-vulkan-synchronization */
+                                is expanded to include logically later stages. https://www.khronos.org/blog/understanding-vulkan-synchronization */
     vkCmdPipelineBarrier(
         commandBuffer,
-        srcStageMask,///<all work currently submitted to these pipeline stages must complete...
-        dstStageMask,///<...before any work subsequently submitted to these pipeline stages is allowed to begin executing.  Work submitted in pipeline stages not specified in dstStageMask is unaffected by this barrier and may execute in any order
+        srcStageMask,///<#VulkanSynchronizationPipelineBarrierStageFlags: all work currently submitted to these pipeline stages must complete...
+        dstStageMask,///<#VulkanSynchronizationPipelineBarrierStageFlags:...before any work subsequently submitted to these pipeline stages is allowed to begin executing.  Work submitted in pipeline stages not specified in dstStageMask is unaffected by this barrier and may execute in any order
         0,
         0, nullptr,
         0, nullptr,
@@ -213,12 +213,12 @@ void CmdPipelineImageBarrier(
 void ImageMemoryBarrier(
     const VkImageLayout& oldLayout,
     const VkImageLayout& newLayout,
-    const uint32_t srcQueueFamilyIndex, 
+    const uint32_t srcQueueFamilyIndex,
     const uint32_t dstQueueFamilyIndex,
     const VkImageAspectFlagBits& aspectMask,
     const VkImage& image,
-    const VkAccessFlags& srcAccessMask, 
-    const VkAccessFlags& dstAccessMask, 
+    const VkAccessFlags& srcAccessMask,
+    const VkAccessFlags& dstAccessMask,
     const VkPipelineStageFlags& srcStageMask,
     const VkPipelineStageFlags& dstStageMask,
     const uint32_t mipLevels,
@@ -243,7 +243,7 @@ void ImageMemoryBarrier(
     barrier.subresourceRange.baseArrayLayer = 0;
     barrier.subresourceRange.layerCount = 1;
 
-    /*  #VulkanSynchronization: Access masks only apply to the precise stages set in the stage masks, and are not extended to logically earlier and 
+    /*  #VulkanSynchronization: Access masks only apply to the precise stages set in the stage masks, and are not extended to logically earlier and
                                 later stages.  https://www.khronos.org/blog/understanding-vulkan-synchronization */
     barrier.srcAccessMask = srcAccessMask;//types of memory accesses that are made available and visible to stages specified in srcStageMask
     barrier.dstAccessMask = dstAccessMask;//types of memory accesses that are made available and visible to stages specified in dstStageMask
@@ -252,7 +252,48 @@ void ImageMemoryBarrier(
     CmdPipelineImageBarrier(&barrier, commandBuffer, srcStageMask, dstStageMask);
     CmdSetCheckpointNV(commandBuffer, &s_cmdSetCheckpointData[static_cast<size_t>(CmdSetCheckpointValues::vkCmdPipelineBarrier_kAfter)], instance);
 }
+void BufferMemoryBarrier(
+    const uint32_t srcQueueFamilyIndex, 
+    const uint32_t dstQueueFamilyIndex,
+    const VkBuffer& buffer,
+    const VkDeviceSize bufferSize,
+    const VkDeviceSize offsetToBuffer,
+    const VkAccessFlags& srcAccessMask, 
+    const VkAccessFlags& dstAccessMask, 
+    const VkPipelineStageFlags& srcStageMask,
+    const VkPipelineStageFlags& dstStageMask,
+    const VkCommandBuffer& commandBuffer)
+{
+    VkBufferMemoryBarrier bufferMemoryBarrier;
+    bufferMemoryBarrier.srcQueueFamilyIndex = srcQueueFamilyIndex;
+    bufferMemoryBarrier.dstQueueFamilyIndex = dstQueueFamilyIndex;
+    bufferMemoryBarrier.srcAccessMask = srcAccessMask;
+    bufferMemoryBarrier.dstAccessMask = dstAccessMask;
+    bufferMemoryBarrier.buffer = buffer;
+    bufferMemoryBarrier.size = bufferSize;
+    bufferMemoryBarrier.offset = offsetToBuffer;
+    bufferMemoryBarrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
+    bufferMemoryBarrier.pNext = NULL;
+    CmdPipelineBufferBarrier(&bufferMemoryBarrier, commandBuffer, srcStageMask, dstStageMask);
+}
+void CmdPipelineBufferBarrier(
+    const VkBufferMemoryBarrier*const barrierPtr,
+    const VkCommandBuffer& commandBuffer,
+    const VkPipelineStageFlags& srcStageMask,
+    const VkPipelineStageFlags& dstStageMask)
+{
+    NTF_REF(barrierPtr, barrier);
 
+    //#VulkanSynchronization
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        srcStageMask,///<#VulkanSynchronizationPipelineBarrierStageFlags
+        dstStageMask,///<#VulkanSynchronizationPipelineBarrierStageFlags
+        0,
+        0, nullptr,
+        1, &barrier,
+        0, nullptr);
+}
 VkResult SubmitCommandBuffer(
     RTL_CRITICAL_SECTION*const queueCriticalSectionPtr,
     const ConstVectorSafeRef<VkSemaphore>& waitSemaphores,
@@ -1823,7 +1864,7 @@ void CreateDescriptorSet(
         0, /*copy descriptor sets from one to another*/
         nullptr);
 }
-void CopyBufferToGpuPrepare(
+void CopyVertexOrIndexBufferToGpu(
     VulkanPagedStackAllocator*const deviceLocalMemoryPtr,
     VkBuffer*const gpuBufferPtr,
     VkDeviceMemory*const gpuBufferMemoryPtr,
@@ -1846,6 +1887,7 @@ void CopyBufferToGpuPrepare(
     NTF_REF(gpuBufferPtr, gpuBuffer);
     NTF_REF(gpuBufferMemoryPtr, gpuBufferMemory);
     NTF_REF(stagingBufferGpuOffsetToAllocatedBlockPtr, stagingBufferGpuOffsetToAllocatedBlock);
+    assert(memoryPropertyFlags == VK_BUFFER_USAGE_VERTEX_BUFFER_BIT || memoryPropertyFlags == VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 
     stagingBuffersGpu.sizeIncrement();
     auto& stagingBufferGpu = stagingBuffersGpu.back();
@@ -1877,8 +1919,35 @@ void CopyBufferToGpuPrepare(
         physicalDevice,
         instance);
 
-    ///TODO_NEXT: need barriers to ensure correctness
-    //const bool unifiedGraphicsAndTransferQueue = ;
+    //for unified queues, no barrier is necessary, as a fence is employed to ensure all copy commands complete before rendering is attempted
+    if (transferQueueFamilyIndex != graphicsQueueFamilyIndex)
+    {
+        //"release": Pipeline barrier to start a queue ownership transfer after the copy
+        BufferMemoryBarrier(
+            transferQueueFamilyIndex,
+            graphicsQueueFamilyIndex,
+            gpuBuffer,
+            bufferSize,
+            0,///<no offset into the gpuBuffer; block on the entire buffer
+            VK_ACCESS_TRANSFER_WRITE_BIT,
+            0,
+            VK_PIPELINE_STAGE_TRANSFER_BIT,
+            VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+            commandBufferTransfer);
+
+        //"acquire": Pipeline barrier before using the vertex buffer, after finalizing the ownership transfer
+        BufferMemoryBarrier(
+            transferQueueFamilyIndex,
+            graphicsQueueFamilyIndex,
+            gpuBuffer,
+            bufferSize,
+            0,///<no offset into the gpuBuffer; block on the entire buffer
+            0,
+            memoryPropertyFlags == VK_BUFFER_USAGE_VERTEX_BUFFER_BIT ? VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT : VK_ACCESS_INDEX_READ_BIT,
+            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            VK_PIPELINE_STAGE_VERTEX_INPUT_BIT,
+            commandBufferGraphics);
+    }
 }
 
 void CreateAndCopyToGpuBuffer(

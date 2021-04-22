@@ -286,6 +286,12 @@ void ImageMemoryBarrier(
     const uint32_t mipLevels,
     const VkCommandBuffer& commandBuffer,
     const VkInstance instance);
+void CmdPipelineBufferBarrier(
+    const VkBufferMemoryBarrier*const barrierPtr,
+    const VkCommandBuffer& commandBuffer,
+    const VkPipelineStageFlags& srcStageMask,
+    const VkPipelineStageFlags& dstStageMask);
+
 VkResult SubmitCommandBuffer(
     RTL_CRITICAL_SECTION*const criticalSectionPtr,
     const ConstVectorSafeRef<VkSemaphore>& waitSemaphores,
@@ -575,7 +581,7 @@ void CreateDescriptorSet(
     const VkSampler textureSampler,
     const VkDevice& device);
 
-void CopyBufferToGpuPrepare(
+void CopyVertexOrIndexBufferToGpu(
     VulkanPagedStackAllocator*const deviceLocalMemoryPtr,
     VkBuffer*const gpuBufferPtr,
     VkDeviceMemory*const gpuBufferMemoryPtr,
