@@ -85,6 +85,7 @@ void StreamingCommandsProcess(
 	NTF_REF(threadArguments.m_streamingUnitsToAddToLoadCriticalSection, streamingUnitsAddToLoadCriticalSection);
 	NTF_REF(threadArguments.m_streamingUnitsToAddToRenderableCriticalSection, streamingUnitsAddToRenderableCriticalSection);
 	NTF_REF(threadArguments.m_swapChainExtent, swapChainExtent);
+    NTF_REF(threadArguments.m_sampleCountFlagBitMsaa, sampleCountFlagBitMsaa);
     NTF_REF(threadArguments.m_transferQueue, transferQueue);
 
 
@@ -167,6 +168,7 @@ void StreamingCommandsProcess(
                 renderPass,
                 streamingUnit.m_descriptorSetLayout,
                 swapChainExtent,
+                sampleCountFlagBitMsaa,
                 device);
 
             streamingUnit.m_uniformBufferSizeAligned = AlignToNonCoherentAtomSize(streamingUnit.m_uniformBufferSizeUnaligned);

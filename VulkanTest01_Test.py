@@ -2,8 +2,8 @@ import os
 import subprocess
 import time
 
-stdArrayUtilityUnitTestEnabled = False
-streamingUnitCookerEnabled = False
+stdArrayUtilityUnitTestEnabled = True
+streamingUnitCookerEnabled = True
 vulkanTest01BuildEnabled = True
 vulkanTest01UnitTestEnabled = True
 

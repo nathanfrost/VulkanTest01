@@ -52,5 +52,8 @@ namespace ntf
             v >>= 1;
         }
     }
-}
-
+    inline bool OneBitSetOnly(const size_t i)///@todo: unit tests
+    {
+        return i && !(i & (i - 1));
+    }
+}//namespace ntf

@@ -1,4 +1,5 @@
 #pragma once
+#include"ntf_math.h"
 #include"ntf_vulkan.h"
 #include"QueueCircular.h"
 
@@ -52,6 +53,7 @@ public:
     const QueueFamilyIndices* m_queueFamilyIndices;
     const VkRenderPass* m_renderPass;
     const VkExtent2D* m_swapChainExtent;
+    const VkSampleCountFlagBits* m_sampleCountFlagBitMsaa;
     const HANDLE* m_threadDone;
     const HANDLE* m_threadWake;
     const VkQueue* m_transferQueue;
@@ -78,6 +80,7 @@ public:
         assert(m_queueFamilyIndices);
         assert(m_renderPass);
         assert(m_swapChainExtent);
+        assert(m_sampleCountFlagBitMsaa && ntf::OneBitSetOnly(*m_sampleCountFlagBitMsaa));
 		assert(m_threadDone);
 		assert(m_threadWake);
 		assert(m_transferQueue);

@@ -171,7 +171,7 @@ void StreamingUnitRuntime::Free(
 
     for (auto& texturedGeometry : m_texturedGeometries)
     {
-        vkDestroyImage(device, texturedGeometry.textureImage, GetVulkanAllocationCallbacks());
+        DestroyImage(texturedGeometry.textureImage, device);
         vkDestroyBuffer(device, texturedGeometry.indexBuffer, GetVulkanAllocationCallbacks());
         vkDestroyBuffer(device, texturedGeometry.vertexBuffer, GetVulkanAllocationCallbacks());
     }

@@ -465,7 +465,7 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     const uint32_t height,
     const uint32_t mipLevels,
     const VkFormat& format,
-    const VkImageLayout& initialLayout,
+    const VkSampleCountFlagBits& sampleCountFlagBits,
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
@@ -494,9 +494,9 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     imageInfo.arrayLayers = 1;
     imageInfo.format = format;
     imageInfo.tiling = tiling;
-    imageInfo.initialLayout = initialLayout;
+    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     imageInfo.usage = usage;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageInfo.samples = sampleCountFlagBits;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;//used by only one queue family at a time
 
     if (imageInfo.mipLevels > 1)
@@ -526,7 +526,7 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     }
     else
     {
-        vkDestroyImage(device, image, GetVulkanAllocationCallbacks());
+        DestroyImage(image, device);
     }
 
     return allocateMemoryResult;
@@ -1143,6 +1143,7 @@ void CreateGraphicsPipeline(
     const VkRenderPass& renderPass,
     const VkDescriptorSetLayout& descriptorSetLayout,
     const VkExtent2D& swapChainExtent,
+    const VkSampleCountFlagBits& sampleCountFlagBitMsaa,
     const VkDevice& device)
 {
     assert(pipelineLayoutPtr);
@@ -1256,7 +1257,7 @@ void CreateGraphicsPipeline(
     VkPipelineMultisampleStateCreateInfo multisampling = {};
     multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampling.sampleShadingEnable = VK_FALSE;
-    multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampling.rasterizationSamples = sampleCountFlagBitMsaa;
     multisampling.minSampleShading = 1.0f; // Optional
     multisampling.pSampleMask = nullptr; /// Optional
     multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
@@ -1375,30 +1376,27 @@ void CreateGraphicsPipeline(
 
 void CreateRenderPass(
     VkRenderPass*const renderPassPtr,
+    const VkSampleCountFlagBits& sampleCountFlagBitMsaa,
     const VkFormat& swapChainImageFormat,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice)
 {
-    assert(renderPassPtr);
-    VkRenderPass& renderPass = *renderPassPtr;
+    NTF_REF(renderPassPtr, renderPass);
+    assert(OneBitSetOnly(CastWithAssert<VkSampleCountFlagBits,size_t>(sampleCountFlagBitMsaa)));
 
     VkAttachmentDescription colorAttachment = {};
     colorAttachment.format = swapChainImageFormat;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;                    //no MSAA
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;               //clear to a constant value defined in VkRenderPassBeginInfo; other options are VK_ATTACHMENT_LOAD_OP_LOAD: Preserve the existing contents of the attachment (least efficient; often involves hitting system memory) and VK_ATTACHMENT_LOAD_OP_DONT_CARE: Existing contents are undefined; we don't care about them (most efficient)
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;             //store buffer in memory for later; other option is VK_ATTACHMENT_STORE_OP_DONT_CARE: Contents of the framebuffer will be undefined after the rendering operation
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;    //not doing anything with stencil buffer
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;  //not doing anything with stencil buffer
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;          //don't care about what layout the buffer was when we begin the renderpass
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;      //when the renderpass is complete the layout will be ready for presentation in the swap chain
-                                                                        /*  other layouts:
-                                                                        * VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: Images used as color attachment
-                                                                        * VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: Images to be presented in the swap chain
-                                                                        * VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : Images to be used as destination for a memory copy operation */
+    colorAttachment.samples = sampleCountFlagBitMsaa;
+    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;                   //clear to a constant value defined in VkRenderPassBeginInfo; other options are VK_ATTACHMENT_LOAD_OP_LOAD: Preserve the existing contents of the attachment (least efficient; often involves hitting system memory) and VK_ATTACHMENT_LOAD_OP_DONT_CARE: Existing contents are undefined; we don't care about them (most efficient)
+    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;             //contents of the framebuffer will be undefined after the rendering operation -- on tiling Gpu's this means you don't pay for a potentially expensive write-to-main-memory
+    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;        //not doing anything with stencil buffer
+    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;      //not doing anything with stencil buffer
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;              //don't care about what layout the buffer was when we begin the renderpass
+    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; //needs to be resolved
 
     VkAttachmentDescription depthAttachment = {};
     depthAttachment.format = FindDepthFormat(physicalDevice);
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.samples = sampleCountFlagBitMsaa;
     depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
     depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1406,6 +1404,19 @@ void CreateRenderPass(
     depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+    VkAttachmentDescription colorAttachmentResolve{};
+    colorAttachmentResolve.format = swapChainImageFormat;
+    colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+    colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;          
+    colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;      //when the renderpass is complete the layout will be ready for presentation in the swap chain
+                                                                               /*  other layouts:
+                                                                               * VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: Images used as color attachment
+                                                                               * VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: Images to be presented in the swap chain
+                                                                               * VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : Images to be used as destination for a memory copy operation */
     VkAttachmentReference colorAttachmentRef = {};
     colorAttachmentRef.attachment = 0;
     colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -1414,6 +1425,10 @@ void CreateRenderPass(
     depthAttachmentRef.attachment = 1;
     depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+    VkAttachmentReference colorAttachmentResolveRef{};
+    colorAttachmentResolveRef.attachment = 2;
+    colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
     /*  #VulkanSynchronization: Subpasses can only make forward progress, meaning a subpass can wait on earlier stages or the same stage, but cannot 
                                 depend on later stages in the same render pass.  https://www.khronos.org/blog/understanding-vulkan-synchronization */
     VkSubpassDescription subpass = {};
@@ -1421,6 +1436,7 @@ void CreateRenderPass(
     subpass.colorAttachmentCount = 1;
     subpass.pColorAttachments = &colorAttachmentRef;
     subpass.pDepthStencilAttachment = &depthAttachmentRef;
+    subpass.pResolveAttachments = &colorAttachmentResolveRef;
 
     /*  The operations right before and right after this subpass also count as implicit "subpasses".  There are two
         built-in dependencies that take care of the transition at the start of the render pass and at the end of
@@ -1442,7 +1458,7 @@ void CreateRenderPass(
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;//specific memory accesses that are made available and visible to stages specified in dstStageMask
     dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;//dependencies are frame-local -- eg on tiled architectures, restrict shaders to tiled memory, providing no ordering guarantees between tiles (eg no full-screen effect type processing)
 
-    VectorSafe<VkAttachmentDescription, 2> attachments({ colorAttachment,depthAttachment });
+    VectorSafe<VkAttachmentDescription, 3> attachments({ colorAttachment,depthAttachment,colorAttachmentResolve });
     VkRenderPassCreateInfo renderPassInfo = {};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -2004,32 +2020,29 @@ void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queue
     NTF_VK_ASSERT_SUCCESS(createCommandPoolResult);
 }
 
-void CreateDepthResources(
-    VkImage*const depthImagePtr,
-    VkImageView*const depthImageViewPtr,
+void CreateImageViewResources(
+    VkImage*const imagePtr,
+    VkImageView*const imageViewPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
+    const VkFormat& format,
+    const VkSampleCountFlagBits& sampleCountFlagBits,
+    const VkImageUsageFlags& imageUsageFlags,
+    const VkImageAspectFlags& imageAspectFlags,
     const VkExtent2D& swapChainExtent,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
     const VkPhysicalDevice& physicalDevice,
     const VkInstance instance)
 {
-    assert(depthImagePtr);
-    auto& depthImage = *depthImagePtr;
-
-    assert(depthImageViewPtr);
-    auto& depthImageView = *depthImageViewPtr;
-
-    assert(allocatorPtr);
-    auto& allocator = *allocatorPtr;
-
-    VkFormat depthFormat = FindDepthFormat(physicalDevice);
+    NTF_REF(imagePtr, image);
+    NTF_REF(imageViewPtr, imageView);
+    NTF_REF(allocatorPtr, allocator);
 
     VkMemoryRequirements memoryRequirements;
     VkDeviceSize memoryOffset;
     VkDeviceMemory memoryHandle;
     CreateAllocateBindImageIfAllocatorHasSpace(
-        &depthImage,
+        &image,
         &allocator,
         &memoryRequirements,
         &memoryOffset,
@@ -2037,31 +2050,16 @@ void CreateDepthResources(
         swapChainExtent.width,
         swapChainExtent.height,
         1,
-        depthFormat,
-        VK_IMAGE_LAYOUT_UNDEFINED, 
+        format,
+        sampleCountFlagBits,
         VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        imageUsageFlags,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         false,
         physicalDevice,
         device);
 
-    CreateImageView(&depthImageView, depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1, device);
-
-    ImageMemoryBarrier(
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,//  | HasStencilComponent(format)) ? VK_IMAGE_ASPECT_STENCIL_BIT : 0
-        VK_QUEUE_FAMILY_IGNORED,
-        VK_QUEUE_FAMILY_IGNORED,
-        VK_IMAGE_ASPECT_DEPTH_BIT,
-        depthImage,
-        0,
-        VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-        1,
-        commandBuffer,
-        instance);
+    CreateImageView(&imageView, image, format, imageAspectFlags, 1, device);
 }
 
 VkFormat FindSupportedFormat(
@@ -2149,7 +2147,7 @@ void ReadTextureAndCreateImageAndCopyPixelsIfStagingBufferHasSpace(
         textureHeight,
         mipLevels,
         format,
-        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_SAMPLE_COUNT_1_BIT,
         tiling,
         usage,
         properties,
@@ -2221,6 +2219,7 @@ void CreateFramebuffers(
     const ConstVectorSafeRef<VkImageView>& swapChainImageViews,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
+    const VkImageView& framebufferColorImageView,
     const VkImageView& depthImageView,
     const VkDevice& device)
 {
@@ -2229,10 +2228,12 @@ void CreateFramebuffers(
 
     for (size_t i = 0; i < swapChainImageViewsSize; i++)
     {
-        VectorSafe<VkImageView, 2> attachments =
+        VectorSafe<VkImageView, 3> attachments =
         {
+            //only need one color buffer and one depth buffer, since there's only one frame being actively rendered to at any given time
+            framebufferColorImageView,
+            depthImageView,
             swapChainImageViews[i],
-            depthImageView    //only need one depth buffer, since there's only one frame being actively rendered to at any given time
         };
 
         VkFramebufferCreateInfo framebufferInfo = {};
@@ -2665,7 +2666,6 @@ void FlushMemoryMappedRange(
 {
     assert(sizeBytesToFlush > 0);
     assert(sizeBytesToFlush == AlignToNonCoherentAtomSize(sizeBytesToFlush));//must respect alignment
-    assert(offsetIntoGpuMemoryToFlush < sizeBytesToFlush);
     assert(offsetIntoGpuMemoryToFlush == AlignToNonCoherentAtomSize(offsetIntoGpuMemoryToFlush));//must respect alignment
 
     VkMappedMemoryRange mappedMemoryRange;
@@ -3279,9 +3279,20 @@ void FreeCommandBuffers(const ConstArraySafeRef<VkCommandBuffer>& commandBuffers
     vkFreeCommandBuffers(device, commandPool, commandBuffersNum, commandBuffers.data());
 }
 
+void DestroyImageView(const VkImageView& colorImageView, const VkDevice& device)
+{
+    vkDestroyImageView(device, colorImageView, GetVulkanAllocationCallbacks());
+}
+void DestroyImage(const VkImage& colorImage, const VkDevice& device)
+{
+    vkDestroyImage(device, colorImage, GetVulkanAllocationCallbacks());
+}
+
 void CleanupSwapChain(
     const ConstVectorSafeRef<VkCommandBuffer>& commandBuffersPrimary,
     const VkDevice& device,
+    const VkImageView& framebufferColorImageView,
+    const VkImage& framebufferColorImage,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
     const ConstVectorSafeRef<VkFramebuffer>& swapChainFramebuffers,
@@ -3293,9 +3304,12 @@ void CleanupSwapChain(
 {
     assert(commandBuffersPrimary.size() == swapChainFramebuffers.size());
     assert(swapChainFramebuffers.size() == swapChainImageViews.size());
-    
-    vkDestroyImageView(device, depthImageView, GetVulkanAllocationCallbacks());
-    vkDestroyImage(device, depthImage, GetVulkanAllocationCallbacks());
+
+    DestroyImageView(framebufferColorImageView, device);
+    DestroyImage(framebufferColorImage, device);
+
+    DestroyImageView(depthImageView, device);
+    DestroyImage(depthImage, device);
 
     for (const VkFramebuffer vkFramebuffer : swapChainFramebuffers)
     {
@@ -3310,7 +3324,7 @@ void CleanupSwapChain(
 
     for (const VkImageView vkImageView : swapChainImageViews)
     {
-        vkDestroyImageView(device, vkImageView, GetVulkanAllocationCallbacks());
+        DestroyImageView(vkImageView, device);
     }
 
     vkDestroySwapchainKHR(device, swapChain, GetVulkanAllocationCallbacks());

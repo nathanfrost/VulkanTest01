@@ -184,7 +184,7 @@ void StreamingUnitCooker::Cook()
                 textureHeight,
                 mipLevels,
                 imageFormat,
-                VK_IMAGE_LAYOUT_UNDEFINED,
+                VK_SAMPLE_COUNT_1_BIT,
                 VK_IMAGE_TILING_OPTIMAL,
                 VK_IMAGE_USAGE_TRANSFER_DST_BIT,
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -197,13 +197,12 @@ void StreamingUnitCooker::Cook()
                 pixels,
                 CastWithAssert<VkDeviceSize, size_t>(stagingBufferGpuOffsetToTextureOptimal),
                 imageSizeBytes);
+            FlushMemoryMappedRange(m_stagingBufferGpuMemory, stagingBufferGpuOffsetToTextureOptimal, imageSizeBytes, m_device);
             //{
             //    ArraySafe<char, 128> filename;
             //    filename.Sprintf("E:\\readbackImageMip0.bmp");
             //    WriteR8G8B8A8ToBmpFile(pixels, textureWidth, textureHeight, filename);
             //}
-
-            FlushMemoryMappedRange(memoryHandleTextureOptimal, stagingBufferGpuOffsetToTextureOptimal, memoryRequirements.size, m_device);
 
             //generate and write mips
             VkBuffer stagingBuffer;
@@ -338,7 +337,7 @@ void StreamingUnitCooker::Cook()
                     static_cast<uint32_t>(textureHeightCurrentMipLevel),
                     1,
                     imageFormat,
-                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_SAMPLE_COUNT_1_BIT,
                     VK_IMAGE_TILING_LINEAR,
                     VK_IMAGE_USAGE_TRANSFER_DST_BIT,
                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
@@ -466,12 +465,12 @@ void StreamingUnitCooker::Cook()
                 mappedMemoryRange.size = readbackImageSubresourceLayout.size;
                 vkInvalidateMappedMemoryRanges(m_device, 1, &mappedMemoryRange);
                 vkUnmapMemory(m_device, memoryHandleTextureLinear);
-                vkDestroyImage(m_device, readbackImage, GetVulkanAllocationCallbacks());
+                DestroyImage(readbackImage, m_device);
             }
 
             STBIImageFree(pixels, g_stbAllocator);
             vkDestroyBuffer(m_device, stagingBuffer, GetVulkanAllocationCallbacks());
-            vkDestroyImage(m_device, textureImage, GetVulkanAllocationCallbacks());
+            DestroyImage(textureImage, m_device);
         }
 
         //cook and write vertex and index buffers

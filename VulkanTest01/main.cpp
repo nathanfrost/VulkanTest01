@@ -4,7 +4,7 @@
 #include"StreamingUnitTest.h"
 #include"WindowsUtil.h"
 
-#define NTF_KEYSTROKE_TO_END_PROCESS 1
+#define NTF_KEYSTROKE_TO_END_PROCESS 0
 
 #if NTF_DEBUG
 extern bool s_allowedToIssueStreamingCommands;
@@ -326,6 +326,8 @@ private:
         CleanupSwapChain(
             m_commandBuffersPrimary,
             m_device,
+            m_framebufferColorImageView,
+            m_framebufferColorImage,
             m_depthImageView,
             m_depthImage,
             m_swapChainFramebuffers,
@@ -447,7 +449,30 @@ private:
             m_surface, 
             m_device);
         CreateImageViews(&m_swapChainImageViews, m_swapChainImages, m_swapChainImageFormat, m_device);
-        CreateRenderPass(&m_renderPass, m_swapChainImageFormat, m_device, m_physicalDevice);
+
+        //set to highest MSAA level available        
+        VkPhysicalDeviceProperties* physicalDeviceProperties;
+        GetPhysicalDevicePropertiesCached(&physicalDeviceProperties);
+        const size_t framebufferColorSampleCounts = 
+            CastWithAssert<size_t, VkSampleCountFlags>(physicalDeviceProperties->limits.framebufferColorSampleCounts);
+
+        size_t sampleCountFlagBit = 0;
+        for (size_t bitIndex = 0; bitIndex < 32; ++bitIndex)
+        {
+            const size_t bitIndexValue = (size_t)1 << bitIndex;
+            if (framebufferColorSampleCounts & bitIndexValue)
+            {
+                sampleCountFlagBit = bitIndexValue;
+            }
+        }
+        assert(sampleCountFlagBit > 0);
+        m_sampleCountFlagBitMsaa = CastWithAssert<size_t, VkSampleCountFlagBits>(sampleCountFlagBit);
+        CreateRenderPass(
+            &m_renderPass, 
+            m_sampleCountFlagBitMsaa, 
+            m_swapChainImageFormat, 
+            m_device, 
+            m_physicalDevice);
         
         CreateCommandPool(&m_commandPoolPrimary, m_queueFamilyIndices.GraphicsQueueIndex(), m_device, m_physicalDevice);
         CreateCommandPool(&m_commandPoolTransitionImage, m_queueFamilyIndices.GraphicsQueueIndex(), m_device, m_physicalDevice);
@@ -477,10 +502,45 @@ private:
         VkFence initializationDone;
         FenceCreate(&initializationDone, static_cast<VkFenceCreateFlagBits>(0), m_device);
         CommandBufferBegin(m_commandBufferGraphics, m_device);
-        CreateDepthResources(
+        /*
+            MSAA maintains an N-times larger color and depth buffer (where N=number of subsamples, eg 2x,4x,etc).
+            
+            For each pixel, for each draw call, the fragment shader is invoked once at an implementation-defined location in the pixel (possibly the 
+            center of the pixel, a subsample location, an location overridden by the fragment shader author, or something else), and that output 
+            color is written to however many subsamples it happens to cover in both the color and depth buffer.
+
+            This results in vastly fewer fragment shader invocations than naive super-sampled anti-aliasing, as the only pixels that get multiple
+            fragment shader invocations are pixels where two or more triangles cover at least one subsample -- many/most pixels will be covered by 
+            only one triangle, and each such pixel needs just one fragment shader invocation)
+            
+            Once finished issuing all draw calls (eg the last subpass rendering to the multisampled color/depth buffers, potentially stomping 
+            previous color/depth values as dictated by the depth buffer as usual), then the last subpass's resolve attachment (which is often 
+            preferable to manually resolving for many tiled architectures) uses some kind of signal reconstruction algorithm (for example, the box 
+            filter or mean filter simply equally weights each subsample) to blend the subsamples into a final color value.
+
+            For more, see: https://mynameismjp.wordpress.com/2012/10/24/msaa-overview/
+        */
+        CreateImageViewResources(
+            &m_framebufferColorImage,
+            &m_framebufferColorImageView,
+            &m_deviceLocalMemoryPersistent,
+            m_swapChainImageFormat,
+            m_sampleCountFlagBitMsaa,
+            VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            m_swapChainExtent,
+            m_commandBufferGraphics,
+            m_device,
+            m_physicalDevice,
+            m_instance);
+        CreateImageViewResources(
             &m_depthImage,
             &m_depthImageView,
             &m_deviceLocalMemoryPersistent,
+            FindDepthFormat(m_physicalDevice),
+            m_sampleCountFlagBitMsaa,
+            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            VK_IMAGE_ASPECT_DEPTH_BIT,
             m_swapChainExtent,
             m_commandBufferGraphics,
             m_device,
@@ -514,7 +574,14 @@ private:
         m_streamingUnits[1].m_filenameNoExtension = ConstStringSafe(g_streamingUnitName_UnitTest1);
         m_streamingUnits[2].m_filenameNoExtension = ConstStringSafe(g_streamingUnitName_UnitTest2);
 
-        CreateFramebuffers(&m_swapChainFramebuffers, m_swapChainImageViews, m_renderPass, m_swapChainExtent, m_depthImageView, m_device);
+        CreateFramebuffers(
+            &m_swapChainFramebuffers, 
+            m_swapChainImageViews, 
+            m_renderPass, 
+            m_swapChainExtent, 
+            m_framebufferColorImageView, 
+            m_depthImageView, 
+            m_device);
         
         const uint32_t swapChainFramebuffersSize = CastWithAssert<size_t,uint32_t>(m_swapChainFramebuffers.size());
         m_commandPoolsSecondary.size(swapChainFramebuffersSize);
@@ -552,6 +619,7 @@ private:
 		m_assetLoadingArguments.m_streamingUnitsToAddToLoadCriticalSection = &m_streamingUnitsAddToLoadCriticalSection;
 		m_assetLoadingArguments.m_streamingUnitsToAddToRenderableCriticalSection = &m_streamingUnitsAddToRenderableCriticalSection;
         m_assetLoadingArguments.m_swapChainExtent = &m_swapChainExtent;
+        m_assetLoadingArguments.m_sampleCountFlagBitMsaa = &m_sampleCountFlagBitMsaa;
 		m_assetLoadingArguments.m_threadDone = &m_assetLoadingThreadData.m_handles.doneEventHandle;
 		m_assetLoadingArguments.m_threadWake = &m_assetLoadingThreadData.m_handles.wakeEventHandle;
 		m_assetLoadingArguments.m_transferQueue = &m_transferQueue;
@@ -854,7 +922,7 @@ private:
 #endif//#if NTF_DEBUG
 
             //HAC: uncomment to load just one streaming unit
-            //StreamingUnitAddToLoadCriticalSection(&m_streamingUnits[2], &m_streamingUnitsToAddToLoad, &m_streamingUnitsAddToLoadCriticalSection);
+            //StreamingUnitAddToLoadCriticalSection(&m_streamingUnits[1], &m_streamingUnitsToAddToLoad, &m_streamingUnitsAddToLoadCriticalSection);
             //AssetLoadingThreadExecuteLoad(&m_assetLoadingThreadData.m_threadCommand, m_assetLoadingThreadData.m_handles.wakeEventHandle);
 
             StreamingUnitTestTick(
@@ -898,12 +966,13 @@ private:
     VectorSafe<VkImage, kSwapChainImagesNumMax> m_swapChainImages;//handles to images, which are created by the swapchain and will be destroyed by the swapchain.  Images are "multidimensional - up to 3 - arrays of data which can be used for various purposes (e.g. attachments, textures), by binding them to a graphics or compute pipeline via descriptor sets, or by directly specifying them as parameters to certain commands" -- https://www.khronos.org/registry/vulkan/specs/1.0/man/html/VkImage.html
     VkFormat m_swapChainImageFormat;
     VkExtent2D m_swapChainExtent;//needs no synchronization; queried during creation-time and then immutable from that point forward
+    VkSampleCountFlagBits m_sampleCountFlagBitMsaa;
     VectorSafe<VkImageView, kSwapChainImagesNumMax> m_swapChainImageViews;//defines type of image (eg color buffer with mipmaps, depth buffer, and so on)
     VectorSafe<VkFramebuffer, kSwapChainImagesNumMax> m_swapChainFramebuffers;
     VkRenderPass m_renderPass;//needs no synchronization
     VectorSafe<ArraySafe<VkCommandPool, NTF_OBJECTS_NUM>, kSwapChainImagesNumMax> m_commandPoolsSecondary;
-    VkImage m_depthImage;
-    VkImageView m_depthImageView;
+    VkImage m_framebufferColorImage, m_depthImage;
+    VkImageView m_framebufferColorImageView, m_depthImageView;
 
     glm::vec3 m_cameraTranslation;
 

@@ -241,7 +241,7 @@ bool CreateAllocateBindImageIfAllocatorHasSpace(
     const uint32_t height,
     const uint32_t mipLevels,
     const VkFormat& format,
-    const VkImageLayout& initialLayout,
+    const VkSampleCountFlagBits& sampleCountFlagBits,
     const VkImageTiling& tiling,
     const VkImageUsageFlags& usage,
     const VkMemoryPropertyFlags& properties,
@@ -450,9 +450,13 @@ void CreateSwapChain(
     const VkSurfaceKHR& surface,
     const VkDevice& device);
 
+void DestroyImageView(const VkImageView& framebufferColorImageView, const VkDevice& device);
+void DestroyImage(const VkImage& framebufferColorImage, const VkDevice& device);
 void CleanupSwapChain(
     const ConstVectorSafeRef<VkCommandBuffer>& commandBuffersPrimary,
     const VkDevice& device,
+    const VkImageView& framebufferColorImageView,
+    const VkImage& framebufferColorImage,
     const VkImageView& depthImageView,
     const VkImage& depthImage,
     const ConstVectorSafeRef<VkFramebuffer>& swapChainFramebuffers,
@@ -504,13 +508,14 @@ void CreateGraphicsPipeline(
     const VkRenderPass& renderPass,
     const VkDescriptorSetLayout& descriptorSetLayout,
     const VkExtent2D& swapChainExtent,
+    const VkSampleCountFlagBits& sampleCountFlagBitMsaa,
     const VkDevice& device);
 void CreateRenderPass(
     VkRenderPass*const renderPassPtr,
+    const VkSampleCountFlagBits& msaaSamples,
     const VkFormat& swapChainImageFormat,
     const VkDevice& device,
-    const VkPhysicalDevice& physicalDevice
-    );
+    const VkPhysicalDevice& physicalDevice);
 
 void AllocateCommandBuffers(
     ArraySafeRef<VkCommandBuffer> commandBuffers,
@@ -613,10 +618,14 @@ void CreateAndCopyToGpuBuffer(
 
 void CommandBufferEnd(const VkCommandBuffer& commandBuffer);
 void CreateCommandPool(VkCommandPool*const commandPoolPtr, const uint32_t& queueFamilyIndex, const VkDevice& device, const VkPhysicalDevice& physicalDevice);
-void CreateDepthResources(
+void CreateImageViewResources(
     VkImage*const depthImagePtr,
     VkImageView*const depthImageViewPtr,
     VulkanPagedStackAllocator*const allocatorPtr,
+    const VkFormat& format,
+    const VkSampleCountFlagBits& sampleCountFlagBits,
+    const VkImageUsageFlags& imageUsageFlags,
+    const VkImageAspectFlags& imageAspectFlags,
     const VkExtent2D& swapChainExtent,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
@@ -658,6 +667,7 @@ void CreateFramebuffers(
     const ConstVectorSafeRef<VkImageView>& swapChainImageViews,
     const VkRenderPass& renderPass,
     const VkExtent2D& swapChainExtent,
+    const VkImageView& framebufferColorImageView,
     const VkImageView& depthImageView,
     const VkDevice& device);
 void CreateSurface(VkSurfaceKHR*const surfacePtr, GLFWwindow*const window, const VkInstance& instance);
