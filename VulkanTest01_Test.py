@@ -3,7 +3,7 @@ import subprocess
 import time
 
 stdArrayUtilityUnitTestEnabled = True
-streamingUnitCookerEnabled = True
+streamingUnitCookerEnabled = False
 vulkanTest01BuildEnabled = True
 vulkanTest01UnitTestEnabled = True
 

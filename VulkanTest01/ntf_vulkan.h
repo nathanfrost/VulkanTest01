@@ -626,6 +626,7 @@ void CreateImageViewResources(
     const VkSampleCountFlagBits& sampleCountFlagBits,
     const VkImageUsageFlags& imageUsageFlags,
     const VkImageAspectFlags& imageAspectFlags,
+    const VkMemoryPropertyFlags& memoryPropertyFlags,
     const VkExtent2D& swapChainExtent,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,

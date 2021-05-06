@@ -2028,6 +2028,7 @@ void CreateImageViewResources(
     const VkSampleCountFlagBits& sampleCountFlagBits,
     const VkImageUsageFlags& imageUsageFlags,
     const VkImageAspectFlags& imageAspectFlags,
+    const VkMemoryPropertyFlags& memoryPropertyFlags,
     const VkExtent2D& swapChainExtent,
     const VkCommandBuffer& commandBuffer,
     const VkDevice& device,
@@ -2054,7 +2055,7 @@ void CreateImageViewResources(
         sampleCountFlagBits,
         VK_IMAGE_TILING_OPTIMAL,
         imageUsageFlags,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        memoryPropertyFlags,
         false,
         physicalDevice,
         device);

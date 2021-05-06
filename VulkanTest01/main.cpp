@@ -528,6 +528,7 @@ private:
             m_sampleCountFlagBitMsaa,
             VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
             m_swapChainExtent,
             m_commandBufferGraphics,
             m_device,
@@ -539,8 +540,9 @@ private:
             &m_deviceLocalMemoryPersistent,
             FindDepthFormat(m_physicalDevice),
             m_sampleCountFlagBitMsaa,
-            VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+            VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
             VK_IMAGE_ASPECT_DEPTH_BIT,
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,///<on devices (like tiled-renderers) that support VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT (see FindMemoryType()) we could lazily allocate the depth buffer, meaning we'd never allocate memory for the depth buffer *and* the we might save on needlessly copying the depth buffer from tiled memory to main memory when it could just be ignored, having served its purpose at the end of the renderpass
             m_swapChainExtent,
             m_commandBufferGraphics,
             m_device,
